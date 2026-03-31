@@ -33,7 +33,7 @@ fn version_flag() {
     let out = lsofrs().arg("-V").output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("1.0.0"));
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
 }
 
 // ── Basic output ────────────────────────────────────────────────────
