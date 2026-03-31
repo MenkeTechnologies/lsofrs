@@ -130,6 +130,18 @@ lsofrs --top -u root             # top FD consumers for root
 | `?`/`h` | Toggle help overlay |
 | `q`/`Esc`/`Ctrl-C` | Quit |
 
+### File Watch (`--watch FILE`)
+
+Monitor who opens and closes a specific file over time. Prints timestamped `+OPEN`/`-CLOSE` events as they happen — like a lightweight `inotifywait` / `fs_usage` for a single path.
+
+```bash
+lsofrs --watch /var/log/syslog          # watch syslog
+lsofrs --watch /tmp/myapp.sock          # watch a socket file
+lsofrs --watch /dev/null -r 2           # poll every 2 seconds
+```
+
+Each event shows timestamp, open/close tag, PID, user, FD, and command. When piped, prints a single snapshot and exits.
+
 ### Process Tree (`--tree`)
 
 Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
@@ -244,7 +256,8 @@ src/
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
-└── top.rs       # Live top-N FD dashboard with delta tracking
+├── top.rs       # Live top-N FD dashboard with delta tracking
+└── watch.rs     # File watch — monitor opens/closes over time
 completions/
 └── _lsofrs      # Zsh completion function
 ```

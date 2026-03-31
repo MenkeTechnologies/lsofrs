@@ -13,6 +13,7 @@ mod summary;
 mod top;
 mod tree;
 mod types;
+mod watch;
 
 use std::io::{self, IsTerminal};
 use std::thread;
@@ -36,6 +37,12 @@ fn main() {
     let theme = Theme::new(is_tty);
     let filter = Filter::from_args(&args);
     let interval = args.repeat.unwrap_or(1);
+
+    // Watch mode
+    if let Some(ref path) = args.watch {
+        watch::run_watch(path, interval, &theme);
+        return;
+    }
 
     // Follow mode
     if let Some(pid) = args.follow {

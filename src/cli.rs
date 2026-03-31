@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsofrs",
-    version = "1.3.0",
+    version = "1.4.0",
     about = "List System Open Files — modern Rust implementation",
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
@@ -108,6 +108,10 @@ pub struct Args {
     #[arg(long = "tree")]
     pub tree: bool,
 
+    /// Watch who opens/closes a specific file over time
+    #[arg(long = "watch")]
+    pub watch: Option<String>,
+
     /// Live top-N processes by FD count
     #[arg(long = "top")]
     pub top: Option<Option<usize>>,
@@ -148,7 +152,7 @@ impl Args {
 {dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
 {dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
-{cyan}  >> FILE DESCRIPTOR SCANNER v1.3 << {reset}
+{cyan}  >> FILE DESCRIPTOR SCANNER v1.4 << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}
 
 {yellow}  USAGE:{reset} lsofrs [OPTION]... [FILE]...
@@ -191,6 +195,7 @@ impl Args {
 {green}   --follow PID      {reset}watch a single process's FDs, highlight opens/closes
 {green}   --tree            {reset}process tree view with FD counts {magenta}(like pstree + lsof){reset}
 {green}   --top [N]         {reset}live top-N processes by FD count {magenta}(default: 20){reset}
+{green}   --watch FILE      {reset}watch who opens/closes a file over time
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
@@ -202,7 +207,7 @@ impl Args {
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 
 {cyan}  ── INFO ──────────────────────────────────────────{reset}
-{magenta}  v1.3.0 {reset}// {yellow}(c) lsof contributors{reset}
+{magenta}  v1.4.0 {reset}// {yellow}(c) lsof contributors{reset}
 Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );

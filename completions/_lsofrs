@@ -31,6 +31,7 @@ _arguments -C -s -S \
   '--follow[follow a single process FDs in real-time]:process ID:_pids' \
   '--tree[process tree view with FD counts]' \
   '--top=-[live top-N processes by FD count]::count' \
+  '--watch[watch who opens/closes a file over time]:file:_files' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 
