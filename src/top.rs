@@ -40,14 +40,7 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
         let _ = terminal::enable_raw_mode();
     }
 
-    // Handle Ctrl-C (only in interactive mode)
     let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-    if use_alt {
-        let r = running.clone();
-        ctrlc_handler(move || {
-            r.store(false, std::sync::atomic::Ordering::SeqCst);
-        });
-    }
 
     while running.load(std::sync::atomic::Ordering::SeqCst) {
         iteration += 1;
@@ -118,16 +111,27 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
             break;
         }
 
-        // TTY: check for 'q' key during interval
+        // TTY: check for q/Esc/Ctrl-C during interval
         let deadline = std::time::Instant::now() + Duration::from_secs(interval);
         while std::time::Instant::now() < deadline {
             if crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read()
-                && (key.code == crossterm::event::KeyCode::Char('q')
-                    || key.code == crossterm::event::KeyCode::Esc)
             {
-                running.store(false, std::sync::atomic::Ordering::SeqCst);
-                break;
+                let quit = match key.code {
+                    crossterm::event::KeyCode::Char('q') | crossterm::event::KeyCode::Esc => true,
+                    crossterm::event::KeyCode::Char('c')
+                        if key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
+                if quit {
+                    running.store(false, std::sync::atomic::Ordering::SeqCst);
+                    break;
+                }
             }
         }
     }
@@ -136,15 +140,6 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
         let _ = terminal::disable_raw_mode();
         let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
     }
-}
-
-fn ctrlc_handler<F: Fn() + Send + 'static>(f: F) {
-    let _ = std::thread::spawn(move || {
-        let set = nix::sys::signal::SigSet::from(nix::sys::signal::Signal::SIGINT);
-        let _ = set.thread_block();
-        let _ = set.wait();
-        f();
-    });
 }
 
 fn render(
