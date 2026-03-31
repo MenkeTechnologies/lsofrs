@@ -290,6 +290,115 @@ pub fn print_processes(
     }
 }
 
+/// Print processes in terse mode (PIDs only)
+pub fn print_terse(procs: &[Process]) {
+    let out = io::stdout();
+    let mut out = out.lock();
+    for p in procs {
+        let _ = writeln!(out, "{}", p.pid);
+    }
+}
+
+/// Print field output (-F format)
+pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
+    let out = io::stdout();
+    let mut out = out.lock();
+
+    let field_chars: Vec<char> = if fields.is_empty() {
+        vec!['p', 'f', 'n'] // default fields
+    } else {
+        fields.chars().collect()
+    };
+
+    for p in procs {
+        // Process-level fields
+        for &fc in &field_chars {
+            match fc {
+                'p' => {
+                    let _ = write!(out, "p{}{}", p.pid, terminator);
+                }
+                'c' => {
+                    let _ = write!(out, "c{}{}", p.command, terminator);
+                }
+                'g' => {
+                    let _ = write!(out, "g{}{}", p.pgid, terminator);
+                }
+                'R' => {
+                    let _ = write!(out, "R{}{}", p.ppid, terminator);
+                }
+                'u' => {
+                    let _ = write!(out, "u{}{}", p.uid, terminator);
+                }
+                'L' => {
+                    let _ = write!(out, "L{}{}", p.username(), terminator);
+                }
+                _ => {}
+            }
+        }
+
+        // File-level fields
+        for f in &p.files {
+            for &fc in &field_chars {
+                match fc {
+                    'f' => {
+                        let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator);
+                    }
+                    'a' => {
+                        if f.access != Access::None {
+                            let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
+                        }
+                    }
+                    't' => {
+                        let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator);
+                    }
+                    'D' => {
+                        if let Some((maj, min)) = f.device {
+                            let _ = write!(out, "D0x{:x}{:02x}{}", maj, min, terminator);
+                        }
+                    }
+                    's' => {
+                        if let Some(sz) = f.size {
+                            let _ = write!(out, "s{}{}", sz, terminator);
+                        }
+                    }
+                    'o' => {
+                        if let Some(off) = f.offset {
+                            let _ = write!(out, "o0t{}{}", off, terminator);
+                        }
+                    }
+                    'i' => {
+                        if let Some(ino) = f.inode {
+                            let _ = write!(out, "i{}{}", ino, terminator);
+                        }
+                    }
+                    'n' => {
+                        let _ = write!(out, "n{}{}", f.full_name(), terminator);
+                    }
+                    'P' => {
+                        if let Some(ref si) = f.socket_info
+                            && !si.protocol.is_empty()
+                        {
+                            let _ = write!(out, "P{}{}", si.protocol, terminator);
+                        }
+                    }
+                    'T' => {
+                        if let Some(ref si) = f.socket_info
+                            && let Some(ref state) = si.tcp_state
+                        {
+                            let _ = write!(out, "TST={}{}", state, terminator);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if terminator == '\0' {
+            let _ = writeln!(out);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,8 +524,8 @@ mod tests {
     #[test]
     fn col_widths_pgid_only_with_flag() {
         let p = make_proc(1, "test", vec![]);
-        let w_no = ColWidths::compute(&[p.clone()], false, false);
-        let w_yes = ColWidths::compute(&[p], true, false);
+        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w_yes = ColWidths::compute(std::slice::from_ref(&p), true, false);
         // pgid width should only grow when show_pgid is true
         assert_eq!(w_no.pgid, 4); // default
         assert!(w_yes.pgid >= 1);
@@ -505,114 +614,5 @@ mod tests {
         });
         let procs = vec![make_proc(42, "test", vec![f])];
         print_field_output(&procs, "pcfntaDsoiPTguRL", '\n');
-    }
-}
-
-/// Print processes in terse mode (PIDs only)
-pub fn print_terse(procs: &[Process]) {
-    let out = io::stdout();
-    let mut out = out.lock();
-    for p in procs {
-        let _ = writeln!(out, "{}", p.pid);
-    }
-}
-
-/// Print field output (-F format)
-pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
-    let out = io::stdout();
-    let mut out = out.lock();
-
-    let field_chars: Vec<char> = if fields.is_empty() {
-        vec!['p', 'f', 'n'] // default fields
-    } else {
-        fields.chars().collect()
-    };
-
-    for p in procs {
-        // Process-level fields
-        for &fc in &field_chars {
-            match fc {
-                'p' => {
-                    let _ = write!(out, "p{}{}", p.pid, terminator);
-                }
-                'c' => {
-                    let _ = write!(out, "c{}{}", p.command, terminator);
-                }
-                'g' => {
-                    let _ = write!(out, "g{}{}", p.pgid, terminator);
-                }
-                'R' => {
-                    let _ = write!(out, "R{}{}", p.ppid, terminator);
-                }
-                'u' => {
-                    let _ = write!(out, "u{}{}", p.uid, terminator);
-                }
-                'L' => {
-                    let _ = write!(out, "L{}{}", p.username(), terminator);
-                }
-                _ => {}
-            }
-        }
-
-        // File-level fields
-        for f in &p.files {
-            for &fc in &field_chars {
-                match fc {
-                    'f' => {
-                        let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator);
-                    }
-                    'a' => {
-                        if f.access != Access::None {
-                            let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
-                        }
-                    }
-                    't' => {
-                        let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator);
-                    }
-                    'D' => {
-                        if let Some((maj, min)) = f.device {
-                            let _ = write!(out, "D0x{:x}{:02x}{}", maj, min, terminator);
-                        }
-                    }
-                    's' => {
-                        if let Some(sz) = f.size {
-                            let _ = write!(out, "s{}{}", sz, terminator);
-                        }
-                    }
-                    'o' => {
-                        if let Some(off) = f.offset {
-                            let _ = write!(out, "o0t{}{}", off, terminator);
-                        }
-                    }
-                    'i' => {
-                        if let Some(ino) = f.inode {
-                            let _ = write!(out, "i{}{}", ino, terminator);
-                        }
-                    }
-                    'n' => {
-                        let _ = write!(out, "n{}{}", f.full_name(), terminator);
-                    }
-                    'P' => {
-                        if let Some(ref si) = f.socket_info
-                            && !si.protocol.is_empty()
-                        {
-                            let _ = write!(out, "P{}{}", si.protocol, terminator);
-                        }
-                    }
-                    'T' => {
-                        if let Some(ref si) = f.socket_info
-                            && let Some(ref state) = si.tcp_state
-                        {
-                            let _ = write!(out, "TST={}{}", state, terminator);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if terminator == '\0' {
-            let _ = writeln!(out);
-        }
     }
 }
