@@ -41,10 +41,10 @@ pub fn print_tree(procs: &[Process], theme: &Theme, json: bool) {
     let pids: Vec<i32> = nodes.keys().copied().collect();
     for &pid in &pids {
         let ppid = nodes[&pid].ppid;
-        if ppid != pid {
-            if let Some(parent) = nodes.get_mut(&ppid) {
-                parent.children.push(pid);
-            }
+        if ppid != pid
+            && let Some(parent) = nodes.get_mut(&ppid)
+        {
+            parent.children.push(pid);
         }
     }
 
@@ -194,19 +194,13 @@ fn print_node(
         })
         .collect();
 
-    let file_prefix = if node.children.is_empty() {
-        &child_prefix
-    } else {
-        &child_prefix
-    };
-
     for f in notable.iter().take(5) {
         let fd_str = f.fd.with_access(f.access);
         let pipe_connector = if node.children.is_empty() { " " } else { "│" };
         let _ = writeln!(
             out,
             "{file_prefix}{pipe}{dim}    {fd:<5} {type_:<5} {name}{reset}",
-            file_prefix = file_prefix,
+            file_prefix = child_prefix,
             pipe = pipe_connector,
             dim = theme.dim(),
             fd = fd_str,
@@ -221,7 +215,7 @@ fn print_node(
             out,
             "{file_prefix}{pipe}{dim}    ... +{} more{reset}",
             notable.len() - 5,
-            file_prefix = file_prefix,
+            file_prefix = child_prefix,
             pipe = pipe_connector,
             dim = theme.dim(),
             reset = theme.reset(),
@@ -258,7 +252,10 @@ fn print_tree_json(procs: &[Process]) {
             .iter()
             .filter(|f| matches!(f.file_type, FileType::IPv4 | FileType::IPv6))
             .count();
-        nodes.insert(p.pid, (p.ppid, p.command.clone(), p.uid, p.files.len(), net));
+        nodes.insert(
+            p.pid,
+            (p.ppid, p.command.clone(), p.uid, p.files.len(), net),
+        );
         children_map.entry(p.ppid).or_default().push(p.pid);
     }
 
@@ -299,7 +296,10 @@ fn print_tree_json(procs: &[Process]) {
         .collect();
 
     let tree: Vec<JsonTreeNode> = {
-        let mut r: Vec<_> = roots.iter().map(|&pid| build(pid, &nodes, &children_map)).collect();
+        let mut r: Vec<_> = roots
+            .iter()
+            .map(|&pid| build(pid, &nodes, &children_map))
+            .collect();
         r.sort_by_key(|n| n.pid);
         r
     };
@@ -380,17 +380,13 @@ mod tests {
 
     #[test]
     fn tree_json_output() {
-        let procs = vec![
-            make_proc(1, 0, "init", 2),
-            make_proc(100, 1, "bash", 5),
-        ];
+        let procs = vec![make_proc(1, 0, "init", 2), make_proc(100, 1, "bash", 5)];
         // Should not panic
         print_tree_json(&procs);
     }
 
     #[test]
     fn tree_json_valid() {
-        use std::process::Command;
         // Just verify the function doesn't panic with empty input
         print_tree_json(&[]);
     }
