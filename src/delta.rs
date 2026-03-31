@@ -117,3 +117,131 @@ impl DeltaTracker {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_proc(pid: i32, cmd: &str, files: Vec<(&str, &str)>) -> Process {
+        Process {
+            pid, ppid: 1, pgid: 1, uid: 501,
+            command: cmd.to_string(),
+            files: files.into_iter().map(|(fd, name)| OpenFile {
+                fd: FdName::Number(fd.parse().unwrap()),
+                access: Access::ReadWrite,
+                file_type: FileType::Reg,
+                name: name.to_string(),
+                ..Default::default()
+            }).collect(),
+            sel_flags: 0, sel_state: 0,
+        }
+    }
+
+    #[test]
+    fn new_tracker_starts_empty() {
+        let dt = DeltaTracker::new();
+        assert_eq!(dt.new_count, 0);
+        assert_eq!(dt.gone_count, 0);
+    }
+
+    #[test]
+    fn first_iteration_all_new() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        let p = make_proc(100, "test", vec![("3", "/tmp/a"), ("4", "/tmp/b")]);
+        dt.record(&p);
+        dt.count_gone();
+        assert_eq!(dt.new_count, 2);
+        assert_eq!(dt.gone_count, 0);
+    }
+
+    #[test]
+    fn unchanged_files_not_counted() {
+        let mut dt = DeltaTracker::new();
+
+        // Iteration 1
+        dt.begin_iteration();
+        let p = make_proc(100, "test", vec![("3", "/tmp/a")]);
+        dt.record(&p);
+        dt.count_gone();
+
+        // Iteration 2 - same files
+        dt.begin_iteration();
+        dt.record(&p);
+        dt.count_gone();
+        assert_eq!(dt.new_count, 0);
+        assert_eq!(dt.gone_count, 0);
+    }
+
+    #[test]
+    fn gone_files_detected() {
+        let mut dt = DeltaTracker::new();
+
+        // Iteration 1
+        dt.begin_iteration();
+        let p = make_proc(100, "test", vec![("3", "/tmp/a"), ("4", "/tmp/b")]);
+        dt.record(&p);
+        dt.count_gone();
+
+        // Iteration 2 - one file removed
+        dt.begin_iteration();
+        let p2 = make_proc(100, "test", vec![("3", "/tmp/a")]);
+        dt.record(&p2);
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 0);
+    }
+
+    #[test]
+    fn new_files_detected() {
+        let mut dt = DeltaTracker::new();
+
+        // Iteration 1
+        dt.begin_iteration();
+        let p = make_proc(100, "test", vec![("3", "/tmp/a")]);
+        dt.record(&p);
+        dt.count_gone();
+
+        // Iteration 2 - new file added
+        dt.begin_iteration();
+        let p2 = make_proc(100, "test", vec![("3", "/tmp/a"), ("5", "/tmp/c")]);
+        dt.record(&p2);
+        dt.count_gone();
+        assert_eq!(dt.new_count, 1);
+        assert_eq!(dt.gone_count, 0);
+    }
+
+    #[test]
+    fn classify_new_vs_unchanged() {
+        let mut dt = DeltaTracker::new();
+
+        dt.begin_iteration();
+        let p = make_proc(100, "test", vec![("3", "/tmp/a")]);
+        dt.record(&p);
+        dt.count_gone();
+
+        dt.begin_iteration();
+        let p2 = make_proc(100, "test", vec![("3", "/tmp/a"), ("5", "/tmp/new")]);
+        dt.record(&p2);
+
+        assert_eq!(dt.classify(100, "3u", "/tmp/a"), DeltaStatus::Unchanged);
+        assert_eq!(dt.classify(100, "5u", "/tmp/new"), DeltaStatus::New);
+    }
+
+    #[test]
+    fn multiple_processes_tracked() {
+        let mut dt = DeltaTracker::new();
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "a", vec![("3", "/tmp/a")]));
+        dt.record(&make_proc(200, "b", vec![("4", "/tmp/b")]));
+        dt.count_gone();
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "a", vec![("3", "/tmp/a")]));
+        // pid 200 gone
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 0);
+    }
+}

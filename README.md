@@ -16,13 +16,20 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v6.3.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v1.0.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
 If a process has a file descriptor, `lsofrs` sees it.
 
 ---
+
+## // SCREENSHOT
+
+![lsofrs --help](screenshot.png)
+
+---
+
 
 ## // JACK IN — BUILD FROM SOURCE
 
@@ -165,7 +172,7 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 ```
 src/
 ├── main.rs      # CLI entry point, dispatch, repeat/leak-detect loops
-├── cli.rs       # clap argument definitions
+├── cli.rs       # clap argument definitions + custom help display
 ├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
 ├── darwin.rs    # macOS libproc FFI — process/FD enumeration
 ├── filter.rs    # Selection & filtering (PID, user, command, FD, network)
@@ -176,6 +183,20 @@ src/
 ├── leak.rs      # Circular-buffer leak detector
 ├── delta.rs     # Iteration-diff engine for change highlighting
 └── summary.rs   # Aggregate statistics with bar charts
+completions/
+└── _lsofrs      # Zsh completion function
+```
+
+### Shell Completions
+
+Zsh completions are provided in `completions/_lsofrs`. To install:
+
+```bash
+cp completions/_lsofrs /usr/local/share/zsh/site-functions/
+# or symlink into your fpath
+ln -sf "$PWD/completions/_lsofrs" /usr/local/share/zsh/site-functions/_lsofrs
+# then reload
+autoload -Uz compinit && compinit
 ```
 
 ### Platform Support

@@ -184,3 +184,121 @@ impl LeakDetector {
         let _ = writeln!(out);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_proc(pid: i32, cmd: &str, n_files: usize) -> Process {
+        Process {
+            pid, ppid: 1, pgid: 1, uid: 501,
+            command: cmd.to_string(),
+            files: (0..n_files).map(|i| OpenFile {
+                fd: FdName::Number(i as i32),
+                access: Access::Read,
+                file_type: FileType::Reg,
+                name: format!("/tmp/file{i}"),
+                ..Default::default()
+            }).collect(),
+            sel_flags: 0, sel_state: 0,
+        }
+    }
+
+    #[test]
+    fn no_leak_on_stable_fd_count() {
+        let mut ld = LeakDetector::new(3);
+        for _ in 0..10 {
+            ld.update(&[make_proc(100, "stable", 5)]);
+        }
+        let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();
+        assert!(flagged.is_empty());
+    }
+
+    #[test]
+    fn leak_detected_on_monotonic_increase() {
+        let mut ld = LeakDetector::new(3);
+        for i in 0..5 {
+            ld.update(&[make_proc(100, "leaky", 10 + i)]);
+        }
+        let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();
+        assert_eq!(flagged.len(), 1);
+        assert_eq!(flagged[0].pid, 100);
+    }
+
+    #[test]
+    fn leak_not_flagged_below_threshold() {
+        let mut ld = LeakDetector::new(5);
+        // Only 3 increases
+        for i in 0..3 {
+            ld.update(&[make_proc(100, "test", 10 + i)]);
+        }
+        let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();
+        assert!(flagged.is_empty());
+    }
+
+    #[test]
+    fn decrease_resets_consecutive_count() {
+        let mut ld = LeakDetector::new(3);
+        // Increase 2x, decrease, increase 2x — never hits threshold
+        ld.update(&[make_proc(100, "test", 10)]);
+        ld.update(&[make_proc(100, "test", 11)]);
+        ld.update(&[make_proc(100, "test", 12)]);
+        ld.update(&[make_proc(100, "test", 8)]);  // decrease resets
+        ld.update(&[make_proc(100, "test", 9)]);
+        ld.update(&[make_proc(100, "test", 10)]);
+        let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();
+        assert!(flagged.is_empty());
+    }
+
+    #[test]
+    fn pid_reuse_resets_tracking() {
+        let mut ld = LeakDetector::new(3);
+        ld.update(&[make_proc(100, "old_cmd", 10)]);
+        ld.update(&[make_proc(100, "old_cmd", 11)]);
+        // PID reused with different command
+        ld.update(&[make_proc(100, "new_cmd", 12)]);
+        ld.update(&[make_proc(100, "new_cmd", 13)]);
+        // Only 1 increase since reset (12->13), not enough
+        let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();
+        assert!(flagged.is_empty());
+    }
+
+    #[test]
+    fn iteration_counter() {
+        let mut ld = LeakDetector::new(3);
+        assert_eq!(ld.iteration, 0);
+        ld.update(&[make_proc(1, "a", 5)]);
+        assert_eq!(ld.iteration, 1);
+        ld.update(&[make_proc(1, "a", 5)]);
+        assert_eq!(ld.iteration, 2);
+    }
+
+    #[test]
+    fn gone_unflagged_processes_removed() {
+        let mut ld = LeakDetector::new(3);
+        ld.update(&[make_proc(100, "temp", 5)]);
+        assert!(ld.table.contains_key(&100));
+        ld.update(&[]); // process gone
+        assert!(!ld.table.contains_key(&100));
+    }
+
+    #[test]
+    fn flagged_processes_retained_after_gone() {
+        let mut ld = LeakDetector::new(2);
+        for i in 0..4 {
+            ld.update(&[make_proc(100, "leaky", 10 + i)]);
+        }
+        assert!(ld.table[&100].flagged);
+        ld.update(&[]); // gone but flagged
+        assert!(ld.table.contains_key(&100));
+    }
+
+    #[test]
+    fn history_capped_at_history_size() {
+        let mut ld = LeakDetector::new(100); // high threshold so never flagged
+        for i in 0..50 {
+            ld.update(&[make_proc(100, "test", 10 + i)]);
+        }
+        assert!(ld.table[&100].history.len() <= HISTORY_SIZE);
+    }
+}

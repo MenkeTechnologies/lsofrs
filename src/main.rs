@@ -24,6 +24,12 @@ use output::Theme;
 
 fn main() {
     let args = Args::parse();
+
+    if args.help {
+        Args::print_help();
+        return;
+    }
+
     let is_tty = io::stdout().is_terminal();
     let theme = Theme::new(is_tty);
     let filter = Filter::from_args(&args);

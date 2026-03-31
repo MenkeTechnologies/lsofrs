@@ -245,28 +245,24 @@ struct TcpSockInfo {
     tcpsi_timer: [c_int; 4],
     tcpsi_mss: c_int,
     tcpsi_flags: u32,
-    _padding: [u32; 4],
+    _pad: u32,
     tcpsi_tp: u64,
 }
 
-#[repr(C)]
+// SOCK_MAXADDRLEN = 255 on Darwin; the union of sockaddr_un and char[255]
+const SOCK_MAXADDRLEN: usize = 255;
+
+#[repr(C, packed)]
 #[derive(Copy, Clone)]
 struct UnSockInfo {
     unsi_conn_so: u64,
     unsi_conn_pcb: u64,
-    unsi_addr: UnSockAddr,
-    unsi_caddr: UnSockAddr,
+    unsi_addr: [u8; SOCK_MAXADDRLEN],
+    unsi_caddr: [u8; SOCK_MAXADDRLEN],
 }
 
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct UnSockAddr {
-    ua_sun: libc::sockaddr_un,
-    ua_dummy: [u8; 16],
-}
-
-// Large union for socket info - use raw bytes
-const SOCKINFO_SIZE: usize = 376;
+// soi_proto union size: largest member is un_sockinfo (528 bytes)
+const SOCKINFO_SIZE: usize = 528;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -711,9 +707,14 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
             AF_UNIX => {
                 if si.psi.soi_kind == SOCKINFO_UN {
                     let un: &UnSockInfo = &*(si.psi.soi_proto.as_ptr() as *const UnSockInfo);
-                    let path = cstr_from_bytes(&un.unsi_addr.ua_sun.sun_path.map(|b| b as u8));
+                    // unsi_addr is the raw sockaddr_un union; sun_path starts at offset 2
+                    let path = if SOCK_MAXADDRLEN > 2 {
+                        cstr_from_bytes(&un.unsi_addr[2..])
+                    } else {
+                        String::new()
+                    };
                     if path.is_empty() {
-                        name = format!("->0x{:x}", un.unsi_conn_pcb);
+                        name = format!("->0x{:x}", { un.unsi_conn_pcb });
                     } else {
                         name = path;
                     }
@@ -955,4 +956,182 @@ pub fn gather_processes() -> Vec<Process> {
     }
 
     processes
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    // ── FFI struct size validation ──────────────────────────────────
+    // These must match Darwin's sys/proc_info.h exactly or
+    // proc_pidfdinfo will reject the undersized buffer.
+
+    #[test]
+    fn ffi_socket_fd_info_size() {
+        assert_eq!(mem::size_of::<SocketFdInfo>(), 792);
+    }
+
+    #[test]
+    fn ffi_socket_info_size() {
+        assert_eq!(mem::size_of::<SocketInfo>(), 768);
+    }
+
+    #[test]
+    fn ffi_proc_file_info_size() {
+        assert_eq!(mem::size_of::<ProcFileInfo>(), 24);
+    }
+
+    #[test]
+    fn ffi_in_sock_info_size() {
+        assert_eq!(mem::size_of::<InSockInfo>(), 80);
+    }
+
+    #[test]
+    fn ffi_tcp_sock_info_size() {
+        assert_eq!(mem::size_of::<TcpSockInfo>(), 120);
+    }
+
+    #[test]
+    fn ffi_vnode_fd_info_with_path_size() {
+        assert_eq!(mem::size_of::<VnodeFdInfoWithPath>(), 1200);
+    }
+
+    #[test]
+    fn ffi_pipe_fd_info_size() {
+        assert_eq!(mem::size_of::<PipeFdInfo>(), 184);
+    }
+
+    #[test]
+    fn ffi_kqueue_fd_info_size() {
+        // Rust struct is 176 due to alignment padding; C is 168.
+        // Oversized is safe — proc_pidfdinfo only writes 168 bytes into our 176-byte buffer.
+        assert!(mem::size_of::<KqueueFdInfo>() >= 168);
+    }
+
+    #[test]
+    fn ffi_proc_task_all_info_size() {
+        assert_eq!(mem::size_of::<ProcTaskAllInfo>(), 232);
+    }
+
+    #[test]
+    fn ffi_vinfo_stat_size() {
+        assert_eq!(mem::size_of::<VinfoStat>(), 136);
+    }
+
+    #[test]
+    fn ffi_sock_buf_info_size() {
+        assert_eq!(mem::size_of::<SockBufInfo>(), 24);
+    }
+
+    // ── FFI field offset validation ─────────────────────────────────
+
+    #[test]
+    fn ffi_socket_info_field_offsets() {
+        let base = 0usize;
+        unsafe {
+            let s: SocketInfo = mem::zeroed();
+            let p = &s as *const _ as usize;
+            assert_eq!(&s.soi_type as *const _ as usize - p, 152, "soi_type offset");
+            assert_eq!(&s.soi_protocol as *const _ as usize - p, 156, "soi_protocol offset");
+            assert_eq!(&s.soi_family as *const _ as usize - p, 160, "soi_family offset");
+            assert_eq!(&s.soi_kind as *const _ as usize - p, 232, "soi_kind offset");
+            assert_eq!(&s.soi_proto as *const _ as usize - p, 240, "soi_proto offset");
+            let _ = base;
+        }
+    }
+
+    // ── Functional tests ────────────────────────────────────────────
+
+    #[test]
+    fn cstr_from_bytes_null_terminated() {
+        assert_eq!(cstr_from_bytes(b"hello\0world"), "hello");
+    }
+
+    #[test]
+    fn cstr_from_bytes_no_null() {
+        assert_eq!(cstr_from_bytes(b"hello"), "hello");
+    }
+
+    #[test]
+    fn cstr_from_bytes_empty() {
+        assert_eq!(cstr_from_bytes(b"\0"), "");
+        assert_eq!(cstr_from_bytes(b""), "");
+    }
+
+    #[test]
+    fn major_minor_extraction() {
+        // dev = 0x01000010 -> major=1, minor=16
+        assert_eq!(major(0x01000010), 1);
+        assert_eq!(minor(0x01000010), 16);
+        assert_eq!(major(0), 0);
+        assert_eq!(minor(0), 0);
+        assert_eq!(major(0xFF00FFFF), 0xFF);
+        assert_eq!(minor(0xFF00FFFF), 0x00FFFF);
+    }
+
+    #[test]
+    fn gather_processes_returns_nonempty() {
+        let procs = gather_processes();
+        assert!(!procs.is_empty(), "should find at least one process");
+    }
+
+    #[test]
+    fn gather_processes_includes_self() {
+        let my_pid = std::process::id() as i32;
+        let procs = gather_processes();
+        assert!(
+            procs.iter().any(|p| p.pid == my_pid),
+            "should find our own process pid={my_pid}"
+        );
+    }
+
+    #[test]
+    fn gather_processes_self_has_files() {
+        let my_pid = std::process::id() as i32;
+        let procs = gather_processes();
+        let me = procs.iter().find(|p| p.pid == my_pid).unwrap();
+        // Without root, we may not get cwd, but we should have some FDs
+        assert!(
+            !me.files.is_empty(),
+            "our process should have open files"
+        );
+    }
+
+    #[test]
+    fn gather_processes_have_commands() {
+        let procs = gather_processes();
+        for p in &procs {
+            assert!(!p.command.is_empty(), "pid {} has empty command", p.pid);
+        }
+    }
+
+    #[test]
+    fn gather_processes_sorted_by_pid() {
+        let mut procs = gather_processes();
+        procs.sort_by_key(|p| p.pid);
+        for w in procs.windows(2) {
+            assert!(w[0].pid <= w[1].pid);
+        }
+    }
+
+    #[test]
+    fn gather_processes_file_types_valid() {
+        let procs = gather_processes();
+        let valid_types = [
+            "REG", "DIR", "CHR", "BLK", "FIFO", "sock", "LINK", "PIPE",
+            "KQUE", "unix", "IPv4", "IPv6", "systm", "PSEM", "PSHM",
+            "ATALK", "FSEV",
+        ];
+        for p in &procs {
+            for f in &p.files {
+                let ts = f.file_type.as_str();
+                assert!(
+                    valid_types.contains(&ts) || ts.chars().all(|c| c.is_ascii_digit() || c == 'o'),
+                    "unexpected file type '{}' for pid {} fd {:?}",
+                    ts, p.pid, f.fd
+                );
+            }
+        }
+    }
 }

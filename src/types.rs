@@ -354,3 +354,204 @@ pub enum DeltaStatus {
     New,
     Gone,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── FileType ────────────────────────────────────────────────────
+
+    #[test]
+    fn file_type_as_str_all_variants() {
+        assert_eq!(FileType::Reg.as_str(), "REG");
+        assert_eq!(FileType::Dir.as_str(), "DIR");
+        assert_eq!(FileType::Chr.as_str(), "CHR");
+        assert_eq!(FileType::Blk.as_str(), "BLK");
+        assert_eq!(FileType::Fifo.as_str(), "FIFO");
+        assert_eq!(FileType::Sock.as_str(), "sock");
+        assert_eq!(FileType::Link.as_str(), "LINK");
+        assert_eq!(FileType::Pipe.as_str(), "PIPE");
+        assert_eq!(FileType::Kqueue.as_str(), "KQUE");
+        assert_eq!(FileType::Unix.as_str(), "unix");
+        assert_eq!(FileType::IPv4.as_str(), "IPv4");
+        assert_eq!(FileType::IPv6.as_str(), "IPv6");
+        assert_eq!(FileType::Systm.as_str(), "systm");
+        assert_eq!(FileType::Psem.as_str(), "PSEM");
+        assert_eq!(FileType::Pshm.as_str(), "PSHM");
+        assert_eq!(FileType::Atalk.as_str(), "ATALK");
+        assert_eq!(FileType::Fsevents.as_str(), "FSEV");
+        assert_eq!(FileType::Unknown("0014".to_string()).as_str(), "0014");
+    }
+
+    #[test]
+    fn file_type_display() {
+        assert_eq!(format!("{}", FileType::Reg), "REG");
+        assert_eq!(format!("{}", FileType::IPv4), "IPv4");
+    }
+
+    // ── Access ──────────────────────────────────────────────────────
+
+    #[test]
+    fn access_as_char() {
+        assert_eq!(Access::Read.as_char(), 'r');
+        assert_eq!(Access::Write.as_char(), 'w');
+        assert_eq!(Access::ReadWrite.as_char(), 'u');
+        assert_eq!(Access::None.as_char(), ' ');
+    }
+
+    // ── TcpState ────────────────────────────────────────────────────
+
+    #[test]
+    fn tcp_state_from_raw_all() {
+        assert_eq!(TcpState::from_raw(0), TcpState::Closed);
+        assert_eq!(TcpState::from_raw(1), TcpState::Listen);
+        assert_eq!(TcpState::from_raw(2), TcpState::SynSent);
+        assert_eq!(TcpState::from_raw(3), TcpState::SynRecv);
+        assert_eq!(TcpState::from_raw(4), TcpState::Established);
+        assert_eq!(TcpState::from_raw(5), TcpState::CloseWait);
+        assert_eq!(TcpState::from_raw(6), TcpState::FinWait1);
+        assert_eq!(TcpState::from_raw(7), TcpState::Closing);
+        assert_eq!(TcpState::from_raw(8), TcpState::LastAck);
+        assert_eq!(TcpState::from_raw(9), TcpState::FinWait2);
+        assert_eq!(TcpState::from_raw(10), TcpState::TimeWait);
+        assert_eq!(TcpState::from_raw(99), TcpState::Unknown(99));
+    }
+
+    #[test]
+    fn tcp_state_as_str() {
+        assert_eq!(TcpState::Listen.as_str(), "LISTEN");
+        assert_eq!(TcpState::Established.as_str(), "ESTABLISHED");
+        assert_eq!(TcpState::Unknown(42).as_str(), "UNKNOWN");
+    }
+
+    #[test]
+    fn tcp_state_display() {
+        assert_eq!(format!("{}", TcpState::Established), "ESTABLISHED");
+    }
+
+    // ── FdName ──────────────────────────────────────────────────────
+
+    #[test]
+    fn fd_name_as_display() {
+        assert_eq!(FdName::Cwd.as_display(), "cwd");
+        assert_eq!(FdName::Rtd.as_display(), "rtd");
+        assert_eq!(FdName::Txt.as_display(), "txt");
+        assert_eq!(FdName::Mem.as_display(), "mem");
+        assert_eq!(FdName::Err.as_display(), "err");
+        assert_eq!(FdName::Number(42).as_display(), "42");
+        assert_eq!(FdName::Other("jld".to_string()).as_display(), "jld");
+    }
+
+    #[test]
+    fn fd_name_with_access() {
+        assert_eq!(FdName::Number(3).with_access(Access::Read), "3r");
+        assert_eq!(FdName::Number(3).with_access(Access::Write), "3w");
+        assert_eq!(FdName::Number(3).with_access(Access::ReadWrite), "3u");
+        assert_eq!(FdName::Number(3).with_access(Access::None), "3");
+        assert_eq!(FdName::Cwd.with_access(Access::Read), "cwd");
+    }
+
+    // ── InetAddr ────────────────────────────────────────────────────
+
+    #[test]
+    fn inet_addr_default() {
+        let ia = InetAddr::default();
+        assert!(ia.addr.is_none());
+        assert_eq!(ia.port, 0);
+    }
+
+    // ── OpenFile ────────────────────────────────────────────────────
+
+    #[test]
+    fn open_file_full_name_no_append() {
+        let f = OpenFile {
+            name: "/tmp/test".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(f.full_name(), "/tmp/test");
+    }
+
+    #[test]
+    fn open_file_full_name_with_append() {
+        let f = OpenFile {
+            name: "/tmp/test".to_string(),
+            name_append: Some("(deleted)".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(f.full_name(), "/tmp/test (deleted)");
+    }
+
+    #[test]
+    fn open_file_size_or_offset_str() {
+        let f1 = OpenFile { size: Some(4096), ..Default::default() };
+        assert_eq!(f1.size_or_offset_str(), "4096");
+
+        let f2 = OpenFile { offset: Some(0), ..Default::default() };
+        assert_eq!(f2.size_or_offset_str(), "0t0");
+
+        let f3 = OpenFile::default();
+        assert_eq!(f3.size_or_offset_str(), "");
+    }
+
+    #[test]
+    fn open_file_size_prefers_size_over_offset() {
+        let f = OpenFile { size: Some(100), offset: Some(50), ..Default::default() };
+        assert_eq!(f.size_or_offset_str(), "100");
+    }
+
+    #[test]
+    fn open_file_device_str() {
+        let f1 = OpenFile { device: Some((1, 16)), ..Default::default() };
+        assert_eq!(f1.device_str(), "1,16");
+
+        let f2 = OpenFile::default();
+        assert_eq!(f2.device_str(), "");
+    }
+
+    #[test]
+    fn open_file_node_str_inode() {
+        let f = OpenFile { inode: Some(12345), ..Default::default() };
+        assert_eq!(f.node_str(), "12345");
+    }
+
+    #[test]
+    fn open_file_node_str_protocol() {
+        let f = OpenFile {
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(f.node_str(), "TCP");
+    }
+
+    #[test]
+    fn open_file_node_str_empty() {
+        let f = OpenFile::default();
+        assert_eq!(f.node_str(), "");
+    }
+
+    // ── Process ─────────────────────────────────────────────────────
+
+    #[test]
+    fn process_username_for_root() {
+        let p = Process {
+            pid: 1, ppid: 0, pgid: 1, uid: 0,
+            command: "launchd".to_string(),
+            files: vec![], sel_flags: 0, sel_state: 0,
+        };
+        assert_eq!(p.username(), "root");
+    }
+
+    #[test]
+    fn process_username_unknown_uid() {
+        let p = Process {
+            pid: 1, ppid: 0, pgid: 1, uid: 99999,
+            command: "test".to_string(),
+            files: vec![], sel_flags: 0, sel_state: 0,
+        };
+        // Unknown UID falls back to numeric string
+        assert_eq!(p.username(), "99999");
+    }
+}

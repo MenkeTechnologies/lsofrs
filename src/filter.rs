@@ -131,8 +131,6 @@ impl Filter {
             if !inet.is_empty() {
                 parse_inet_filter(inet, &mut f);
             }
-        } else if args.inet_flag {
-            f.network = true;
         }
 
         f
@@ -226,22 +224,72 @@ impl Filter {
                 FileType::IPv4 | FileType::IPv6 | FileType::Unix | FileType::Sock
             );
             if !is_network {
-                if self.and_mode || (!self.files.is_empty() || self.nfs_only) {
+                if self.and_mode || !self.files.is_empty() || self.nfs_only {
                     // Allow non-network files through if other file filters exist
                 } else {
                     return false;
                 }
             }
+            // Address family filter (4/6)
             if let Some(net_type) = self.network_type {
                 if net_type == 4 && file.file_type != FileType::IPv4 {
-                    if !matches!(file.file_type, FileType::IPv6 | FileType::Unix | FileType::Sock) {
-                        return false;
-                    }
-                    if file.file_type != FileType::IPv4 {
-                        return false;
-                    }
+                    return false;
                 }
                 if net_type == 6 && file.file_type != FileType::IPv6 {
+                    return false;
+                }
+            }
+            // Protocol/host/port filters from -i spec
+            if !self.network_filters.is_empty() && is_network {
+                let matches_any = self.network_filters.iter().any(|nf| {
+                    // Protocol check
+                    if let Some(ref proto) = nf.protocol {
+                        if let Some(ref si) = file.socket_info {
+                            if !si.protocol.eq_ignore_ascii_case(proto) {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                    // Port check
+                    if let Some(port) = nf.port_start {
+                        if let Some(ref si) = file.socket_info {
+                            let end = nf.port_end.unwrap_or(port);
+                            let local_match = si.local.port >= port && si.local.port <= end;
+                            let foreign_match =
+                                si.foreign.port >= port && si.foreign.port <= end;
+                            if !local_match && !foreign_match {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                    // Host check
+                    if let Some(ref host) = nf.host {
+                        if let Some(ref si) = file.socket_info {
+                            let local_match = si
+                                .local
+                                .addr
+                                .as_ref()
+                                .is_some_and(|a| a.to_string() == *host);
+                            let foreign_match = si
+                                .foreign
+                                .addr
+                                .as_ref()
+                                .is_some_and(|a| a.to_string() == *host);
+                            let name_match = file.name.contains(host);
+                            if !local_match && !foreign_match && !name_match {
+                                return false;
+                            }
+                        } else {
+                            return false;
+                        }
+                    }
+                    true
+                });
+                if !matches_any {
                     return false;
                 }
             }
@@ -290,20 +338,24 @@ fn parse_fd_filter(s: &str, filters: &mut Vec<FdFilter>) {
     }
 }
 
-fn parse_inet_filter(spec: &str, filter: &mut Filter) {
-    let spec = spec.trim();
+pub fn parse_inet_filter(spec: &str, filter: &mut Filter) {
+    let mut remaining = spec.trim();
 
-    // Check for 4 or 6 prefix
-    if spec == "4" {
+    // Check for 4/6 prefix (may precede protocol, e.g. "4TCP:80")
+    if let Some(rest) = remaining.strip_prefix('4') {
         filter.network_type = Some(4);
-        return;
-    }
-    if spec == "6" {
+        remaining = rest;
+        if remaining.is_empty() {
+            return;
+        }
+    } else if let Some(rest) = remaining.strip_prefix('6') {
         filter.network_type = Some(6);
-        return;
+        remaining = rest;
+        if remaining.is_empty() {
+            return;
+        }
     }
 
-    // Parse protocol@host:port format
     let mut nf = NetworkFilter {
         protocol: None,
         addr_family: None,
@@ -313,35 +365,604 @@ fn parse_inet_filter(spec: &str, filter: &mut Filter) {
         port_end: None,
     };
 
-    let mut remaining = spec;
-
-    // Check protocol prefix (TCP/UDP)
-    for proto in &["TCP@", "tcp@", "UDP@", "udp@", "TCP:", "tcp:", "UDP:", "udp:"] {
-        if let Some(rest) = remaining.strip_prefix(proto) {
-            nf.protocol = Some(proto[..3].to_uppercase());
-            remaining = rest;
+    // Strip protocol prefix (TCP, UDP — bare or followed by @/:)
+    let upper = remaining.to_uppercase();
+    for proto in &["TCP", "UDP"] {
+        if upper.starts_with(proto) {
+            nf.protocol = Some(proto.to_string());
+            remaining = &remaining[proto.len()..];
+            // consume optional separator
+            if remaining.starts_with('@') || remaining.starts_with(':') {
+                remaining = &remaining[1..];
+            }
             break;
         }
     }
 
-    // Check for @host
-    if let Some(at_pos) = remaining.find('@') {
-        let host = &remaining[at_pos + 1..];
-        if let Some(colon) = host.rfind(':') {
-            nf.host = Some(host[..colon].to_string());
-            if let Ok(port) = host[colon + 1..].parse::<u16>() {
-                nf.port_start = Some(port);
-                nf.port_end = Some(port);
+    if remaining.is_empty() {
+        filter.network_filters.push(nf);
+        return;
+    }
+
+    // What remains is [@]host[:port] or :port or port
+    if let Some(rest) = remaining.strip_prefix('@') {
+        remaining = rest;
+    }
+
+    // host:port or just port
+    if let Some(colon) = remaining.rfind(':') {
+        let before = &remaining[..colon];
+        let after = &remaining[colon + 1..];
+        if let Ok(port) = after.parse::<u16>() {
+            if !before.is_empty() {
+                nf.host = Some(before.to_string());
             }
-        } else {
-            nf.host = Some(host.to_string());
-        }
-    } else if let Some(colon) = remaining.find(':') {
-        if let Ok(port) = remaining[colon + 1..].parse::<u16>() {
             nf.port_start = Some(port);
             nf.port_end = Some(port);
+        } else {
+            // No valid port, treat whole thing as host
+            nf.host = Some(remaining.to_string());
         }
+    } else if let Ok(port) = remaining.parse::<u16>() {
+        nf.port_start = Some(port);
+        nf.port_end = Some(port);
+    } else {
+        nf.host = Some(remaining.to_string());
     }
 
     filter.network_filters.push(nf);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    // ── Helper constructors ─────────────────────────────────────────
+
+    fn empty_filter() -> Filter {
+        Filter {
+            pids: vec![], exclude_pids: vec![],
+            uids: vec![], exclude_uids: vec![],
+            usernames: vec![], exclude_usernames: vec![],
+            pgids: vec![], commands: vec![], command_regexes: vec![],
+            fd_filters: vec![], fd_exclude: false,
+            network: false, network_type: None, network_filters: vec![],
+            nfs_only: false, unix_socket: false, files: vec![],
+            and_mode: false, terse: false,
+        }
+    }
+
+    fn make_proc(pid: i32, uid: u32, pgid: i32, cmd: &str) -> Process {
+        Process {
+            pid, ppid: 1, pgid, uid,
+            command: cmd.to_string(),
+            files: vec![], sel_flags: 0, sel_state: 0,
+        }
+    }
+
+    fn make_file(fd: i32, ft: FileType, name: &str) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: ft,
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn make_tcp_file(fd: i32, proto: &str, local_port: u16, foreign_port: u16) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv4,
+            name: format!("*:{local_port}"),
+            socket_info: Some(crate::types::SocketInfo {
+                protocol: proto.to_string(),
+                local: InetAddr { addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)), port: local_port },
+                foreign: InetAddr { addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)), port: foreign_port },
+                tcp_state: Some(TcpState::Listen),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn make_cwd_file(name: &str) -> OpenFile {
+        OpenFile {
+            fd: FdName::Cwd,
+            access: Access::Read,
+            file_type: FileType::Dir,
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    // ── parse_inet_filter tests ─────────────────────────────────────
+
+    #[test]
+    fn inet_filter_bare_4() {
+        let mut f = empty_filter();
+        parse_inet_filter("4", &mut f);
+        assert_eq!(f.network_type, Some(4));
+        assert!(f.network_filters.is_empty());
+    }
+
+    #[test]
+    fn inet_filter_bare_6() {
+        let mut f = empty_filter();
+        parse_inet_filter("6", &mut f);
+        assert_eq!(f.network_type, Some(6));
+        assert!(f.network_filters.is_empty());
+    }
+
+    #[test]
+    fn inet_filter_bare_tcp() {
+        let mut f = empty_filter();
+        parse_inet_filter("TCP", &mut f);
+        assert_eq!(f.network_filters.len(), 1);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert!(f.network_filters[0].port_start.is_none());
+        assert!(f.network_filters[0].host.is_none());
+    }
+
+    #[test]
+    fn inet_filter_bare_udp_lowercase() {
+        let mut f = empty_filter();
+        parse_inet_filter("udp", &mut f);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
+    }
+
+    #[test]
+    fn inet_filter_tcp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("TCP:8080", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.port_start, Some(8080));
+        assert_eq!(nf.port_end, Some(8080));
+    }
+
+    #[test]
+    fn inet_filter_port_only() {
+        let mut f = empty_filter();
+        parse_inet_filter(":443", &mut f);
+        let nf = &f.network_filters[0];
+        assert!(nf.protocol.is_none());
+        assert_eq!(nf.port_start, Some(443));
+    }
+
+    #[test]
+    fn inet_filter_host_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("@10.0.0.1:80", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.host.as_deref(), Some("10.0.0.1"));
+        assert_eq!(nf.port_start, Some(80));
+    }
+
+    #[test]
+    fn inet_filter_host_only() {
+        let mut f = empty_filter();
+        parse_inet_filter("@10.0.0.1", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.host.as_deref(), Some("10.0.0.1"));
+        assert!(nf.port_start.is_none());
+    }
+
+    #[test]
+    fn inet_filter_4tcp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("4TCP:22", &mut f);
+        assert_eq!(f.network_type, Some(4));
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.port_start, Some(22));
+    }
+
+    #[test]
+    fn inet_filter_6udp() {
+        let mut f = empty_filter();
+        parse_inet_filter("6UDP", &mut f);
+        assert_eq!(f.network_type, Some(6));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
+    }
+
+    #[test]
+    fn inet_filter_tcp_at_host_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("TCP@192.168.1.1:3306", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.host.as_deref(), Some("192.168.1.1"));
+        assert_eq!(nf.port_start, Some(3306));
+    }
+
+    // ── parse_fd_filter tests ───────────────────────────────────────
+
+    #[test]
+    fn fd_filter_single_number() {
+        let mut filters = vec![];
+        parse_fd_filter("5", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(5, 5)));
+    }
+
+    #[test]
+    fn fd_filter_range() {
+        let mut filters = vec![];
+        parse_fd_filter("0-10", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(0, 10)));
+    }
+
+    #[test]
+    fn fd_filter_named() {
+        let mut filters = vec![];
+        parse_fd_filter("cwd", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Name(s) if s == "cwd"));
+    }
+
+    #[test]
+    fn fd_filter_txt() {
+        let mut filters = vec![];
+        parse_fd_filter("txt", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Name(s) if s == "txt"));
+    }
+
+    // ── matches_process tests ───────────────────────────────────────
+
+    #[test]
+    fn no_filter_matches_everything() {
+        let f = empty_filter();
+        assert!(f.matches_process(&make_proc(1, 0, 1, "launchd")));
+        assert!(f.matches_process(&make_proc(999, 501, 999, "vim")));
+    }
+
+    #[test]
+    fn pid_filter_includes() {
+        let mut f = empty_filter();
+        f.pids = vec![100, 200];
+        assert!(f.matches_process(&make_proc(100, 0, 1, "a")));
+        assert!(f.matches_process(&make_proc(200, 0, 1, "b")));
+        assert!(!f.matches_process(&make_proc(300, 0, 1, "c")));
+    }
+
+    #[test]
+    fn pid_filter_excludes() {
+        let mut f = empty_filter();
+        f.exclude_pids = vec![100];
+        assert!(!f.matches_process(&make_proc(100, 0, 1, "a")));
+        assert!(f.matches_process(&make_proc(200, 0, 1, "b")));
+    }
+
+    #[test]
+    fn uid_filter() {
+        let mut f = empty_filter();
+        f.uids = vec![501];
+        assert!(f.matches_process(&make_proc(1, 501, 1, "a")));
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "b")));
+    }
+
+    #[test]
+    fn uid_exclude_filter() {
+        let mut f = empty_filter();
+        f.exclude_uids = vec![0];
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "root_proc")));
+        assert!(f.matches_process(&make_proc(2, 501, 1, "user_proc")));
+    }
+
+    #[test]
+    fn pgid_filter() {
+        let mut f = empty_filter();
+        f.pgids = vec![42];
+        assert!(f.matches_process(&make_proc(1, 0, 42, "a")));
+        assert!(!f.matches_process(&make_proc(1, 0, 99, "b")));
+    }
+
+    #[test]
+    fn command_prefix_filter() {
+        let mut f = empty_filter();
+        f.commands = vec!["Chrome".to_string()];
+        assert!(f.matches_process(&make_proc(1, 0, 1, "Chrome Helper")));
+        assert!(f.matches_process(&make_proc(1, 0, 1, "Chrome")));
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "Firefox")));
+    }
+
+    #[test]
+    fn command_regex_filter() {
+        let mut f = empty_filter();
+        f.command_regexes = vec![Regex::new("nginx|apache").unwrap()];
+        assert!(f.matches_process(&make_proc(1, 0, 1, "nginx")));
+        assert!(f.matches_process(&make_proc(1, 0, 1, "apache2")));
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "sshd")));
+    }
+
+    #[test]
+    fn or_mode_any_match() {
+        let mut f = empty_filter();
+        f.pids = vec![100];
+        f.commands = vec!["vim".to_string()];
+        // OR mode: either PID or command matches
+        assert!(f.matches_process(&make_proc(100, 0, 1, "bash")));  // pid match
+        assert!(f.matches_process(&make_proc(999, 0, 1, "vim")));   // cmd match
+        assert!(!f.matches_process(&make_proc(999, 0, 1, "bash"))); // neither
+    }
+
+    #[test]
+    fn and_mode_all_must_match() {
+        let mut f = empty_filter();
+        f.and_mode = true;
+        f.pids = vec![100];
+        f.commands = vec!["vim".to_string()];
+        assert!(f.matches_process(&make_proc(100, 0, 1, "vim")));    // both
+        assert!(!f.matches_process(&make_proc(100, 0, 1, "bash")));  // pid only
+        assert!(!f.matches_process(&make_proc(999, 0, 1, "vim")));   // cmd only
+    }
+
+    #[test]
+    fn exclude_overrides_include() {
+        let mut f = empty_filter();
+        f.pids = vec![100];
+        f.exclude_pids = vec![100];
+        assert!(!f.matches_process(&make_proc(100, 0, 1, "a")));
+    }
+
+    // ── matches_file tests ──────────────────────────────────────────
+
+    #[test]
+    fn no_filter_matches_all_files() {
+        let f = empty_filter();
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+        assert!(f.matches_file(&make_file(5, FileType::IPv4, "*:80")));
+    }
+
+    #[test]
+    fn fd_filter_range_match() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Range(0, 5)];
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+        assert!(!f.matches_file(&make_file(10, FileType::Reg, "/tmp/y")));
+    }
+
+    #[test]
+    fn fd_filter_exclude() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Range(0, 2)];
+        f.fd_exclude = true;
+        assert!(!f.matches_file(&make_file(1, FileType::Reg, "/tmp/x")));
+        assert!(f.matches_file(&make_file(5, FileType::Reg, "/tmp/y")));
+    }
+
+    #[test]
+    fn fd_filter_named_cwd() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Name("cwd".to_string())];
+        assert!(f.matches_file(&make_cwd_file("/home/user")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp")));
+    }
+
+    #[test]
+    fn network_filter_blocks_non_network() {
+        let mut f = empty_filter();
+        f.network = true;
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+        assert!(f.matches_file(&make_file(3, FileType::IPv4, "*:80")));
+        assert!(f.matches_file(&make_file(3, FileType::IPv6, "*:80")));
+        assert!(f.matches_file(&make_file(3, FileType::Unix, "/tmp/sock")));
+    }
+
+    #[test]
+    fn network_type_4_blocks_ipv6() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_type = Some(4);
+        assert!(f.matches_file(&make_file(3, FileType::IPv4, "*:80")));
+        assert!(!f.matches_file(&make_file(3, FileType::IPv6, "*:80")));
+    }
+
+    #[test]
+    fn network_type_6_blocks_ipv4() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_type = Some(6);
+        assert!(!f.matches_file(&make_file(3, FileType::IPv4, "*:80")));
+        assert!(f.matches_file(&make_file(3, FileType::IPv6, "*:80")));
+    }
+
+    #[test]
+    fn network_protocol_filter_tcp() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("TCP".to_string()),
+            addr_family: None, addr: None, host: None,
+            port_start: None, port_end: None,
+        }];
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 80, 0)));
+        assert!(!f.matches_file(&make_tcp_file(3, "UDP", 53, 0)));
+    }
+
+    #[test]
+    fn network_port_filter() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: None, addr_family: None, addr: None, host: None,
+            port_start: Some(443), port_end: Some(443),
+        }];
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 443, 0)));
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 0, 443))); // foreign port
+        assert!(!f.matches_file(&make_tcp_file(3, "TCP", 80, 0)));
+    }
+
+    #[test]
+    fn network_host_filter() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: None, addr_family: None, addr: None,
+            host: Some("10.0.0.1".to_string()),
+            port_start: None, port_end: None,
+        }];
+        let mut file = make_tcp_file(3, "TCP", 80, 0);
+        file.socket_info.as_mut().unwrap().local.addr = Some(IpAddr::V4("10.0.0.1".parse().unwrap()));
+        assert!(f.matches_file(&file));
+
+        let file2 = make_tcp_file(3, "TCP", 80, 0); // 0.0.0.0
+        assert!(!f.matches_file(&file2));
+    }
+
+    #[test]
+    fn network_protocol_and_port_combined() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("TCP".to_string()),
+            addr_family: None, addr: None, host: None,
+            port_start: Some(80), port_end: Some(80),
+        }];
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 80, 0)));
+        assert!(!f.matches_file(&make_tcp_file(3, "UDP", 80, 0)));
+        assert!(!f.matches_file(&make_tcp_file(3, "TCP", 443, 0)));
+    }
+
+    #[test]
+    fn nfs_filter() {
+        let mut f = empty_filter();
+        f.nfs_only = true;
+        let mut nfs_file = make_file(3, FileType::Reg, "/mnt/nfs/data");
+        nfs_file.is_nfs = true;
+        assert!(f.matches_file(&nfs_file));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/local")));
+    }
+
+    #[test]
+    fn unix_socket_filter() {
+        let mut f = empty_filter();
+        f.unix_socket = true;
+        assert!(f.matches_file(&make_file(3, FileType::Unix, "/tmp/sock")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+    }
+
+    #[test]
+    fn file_path_filter() {
+        let mut f = empty_filter();
+        f.files = vec!["/var/log/syslog".to_string()];
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/other")));
+    }
+
+    #[test]
+    fn file_path_dir_prefix() {
+        let mut f = empty_filter();
+        f.files = vec!["/var/log".to_string()];
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/logs/other")));
+    }
+
+    // ── from_args parsing tests ─────────────────────────────────────
+
+    #[test]
+    fn from_args_pid_parsing() {
+        let args = Args::parse_from(["lsofrs", "-p", "100,200,^300"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.pids, vec![100, 200]);
+        assert_eq!(f.exclude_pids, vec![300]);
+    }
+
+    #[test]
+    fn from_args_user_parsing() {
+        let args = Args::parse_from(["lsofrs", "-u", "root,^nobody,501"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.usernames, vec!["root".to_string()]);
+        assert_eq!(f.exclude_usernames, vec!["nobody".to_string()]);
+        assert_eq!(f.uids, vec![501]);
+    }
+
+    #[test]
+    fn from_args_pgid_parsing() {
+        let args = Args::parse_from(["lsofrs", "-g", "10,20"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.pgids, vec![10, 20]);
+    }
+
+    #[test]
+    fn from_args_command_prefix() {
+        let args = Args::parse_from(["lsofrs", "-c", "nginx"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.commands, vec!["nginx".to_string()]);
+    }
+
+    #[test]
+    fn from_args_command_regex() {
+        let args = Args::parse_from(["lsofrs", "-c", "/nginx|apache/"]);
+        let f = Filter::from_args(&args);
+        assert!(f.commands.is_empty());
+        assert_eq!(f.command_regexes.len(), 1);
+    }
+
+    #[test]
+    fn from_args_fd_range() {
+        let args = Args::parse_from(["lsofrs", "-d", "0-10,cwd"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.fd_filters.len(), 2);
+    }
+
+    #[test]
+    fn from_args_fd_exclude() {
+        let args = Args::parse_from(["lsofrs", "-d", "^0-2"]);
+        let f = Filter::from_args(&args);
+        assert!(f.fd_exclude);
+    }
+
+    #[test]
+    fn from_args_inet_bare() {
+        let args = Args::parse_from(["lsofrs", "-i"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(f.network_filters.is_empty());
+    }
+
+    #[test]
+    fn from_args_inet_tcp() {
+        let args = Args::parse_from(["lsofrs", "-i", "TCP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
+    fn from_args_inet_port() {
+        let args = Args::parse_from(["lsofrs", "-i", ":8080"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].port_start, Some(8080));
+    }
+
+    #[test]
+    fn from_args_and_mode() {
+        let args = Args::parse_from(["lsofrs", "-a", "-p", "1", "-i", "TCP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.and_mode);
+    }
+
+    #[test]
+    fn from_args_nfs_flag() {
+        let args = Args::parse_from(["lsofrs", "-N"]);
+        let f = Filter::from_args(&args);
+        assert!(f.nfs_only);
+    }
+
+    #[test]
+    fn from_args_unix_flag() {
+        let args = Args::parse_from(["lsofrs", "-U"]);
+        let f = Filter::from_args(&args);
+        assert!(f.unix_socket);
+    }
+
+    #[test]
+    fn from_args_file_args() {
+        let args = Args::parse_from(["lsofrs", "/tmp/foo", "/var/log/bar"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.files, vec!["/tmp/foo", "/var/log/bar"]);
+    }
 }
