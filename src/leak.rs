@@ -110,11 +110,7 @@ impl LeakDetector {
         let out = io::stdout();
         let mut out = out.lock();
 
-        let flagged: Vec<&LeakEntry> = self
-            .table
-            .values()
-            .filter(|e| e.flagged)
-            .collect();
+        let flagged: Vec<&LeakEntry> = self.table.values().filter(|e| e.flagged).collect();
 
         let scanned = self.table.values().filter(|e| e.seen).count();
 
@@ -144,8 +140,11 @@ impl LeakDetector {
         } else {
             let _ = writeln!(
                 out,
-                "  {hdr}{bold}{:>7}  {:<15}  {:>6}  {:>8}  {}{reset}",
-                "PID", "COMMAND", "UID", "SAMPLES", "FD TREND",
+                "  {hdr}{bold}{:>7}  {:<15}  {:>6}  {:>8}  FD TREND{reset}",
+                "PID",
+                "COMMAND",
+                "UID",
+                "SAMPLES",
                 hdr = theme.hdr_bg(),
                 bold = theme.bold(),
                 reset = theme.reset(),
@@ -191,16 +190,22 @@ mod tests {
 
     fn make_proc(pid: i32, cmd: &str, n_files: usize) -> Process {
         Process {
-            pid, ppid: 1, pgid: 1, uid: 501,
+            pid,
+            ppid: 1,
+            pgid: 1,
+            uid: 501,
             command: cmd.to_string(),
-            files: (0..n_files).map(|i| OpenFile {
-                fd: FdName::Number(i as i32),
-                access: Access::Read,
-                file_type: FileType::Reg,
-                name: format!("/tmp/file{i}"),
-                ..Default::default()
-            }).collect(),
-            sel_flags: 0, sel_state: 0,
+            files: (0..n_files)
+                .map(|i| OpenFile {
+                    fd: FdName::Number(i as i32),
+                    access: Access::Read,
+                    file_type: FileType::Reg,
+                    name: format!("/tmp/file{i}"),
+                    ..Default::default()
+                })
+                .collect(),
+            sel_flags: 0,
+            sel_state: 0,
         }
     }
 
@@ -243,7 +248,7 @@ mod tests {
         ld.update(&[make_proc(100, "test", 10)]);
         ld.update(&[make_proc(100, "test", 11)]);
         ld.update(&[make_proc(100, "test", 12)]);
-        ld.update(&[make_proc(100, "test", 8)]);  // decrease resets
+        ld.update(&[make_proc(100, "test", 8)]); // decrease resets
         ld.update(&[make_proc(100, "test", 9)]);
         ld.update(&[make_proc(100, "test", 10)]);
         let flagged: Vec<_> = ld.table.values().filter(|e| e.flagged).collect();

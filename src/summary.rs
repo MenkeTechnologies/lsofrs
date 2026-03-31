@@ -40,11 +40,15 @@ pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
 
         // Type breakdown
         for f in &p.files {
-            *type_map.entry(f.file_type.as_str().to_string()).or_insert(0) += 1;
+            *type_map
+                .entry(f.file_type.as_str().to_string())
+                .or_insert(0) += 1;
         }
 
         // Per-user stats
-        let entry = user_map.entry(p.uid).or_insert_with(|| (p.username(), 0, 0));
+        let entry = user_map
+            .entry(p.uid)
+            .or_insert_with(|| (p.username(), 0, 0));
         entry.1 += 1; // proc_count
         entry.2 += fd_count; // file_count
 
@@ -80,9 +84,22 @@ pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
     user_stats.sort_by(|a, b| b.file_count.cmp(&a.file_count).then(a.uid.cmp(&b.uid)));
 
     if json_output {
-        print_summary_json(procs.len(), total_files, &type_stats, &proc_stats, &user_stats);
+        print_summary_json(
+            procs.len(),
+            total_files,
+            &type_stats,
+            &proc_stats,
+            &user_stats,
+        );
     } else {
-        print_summary_text(procs.len(), total_files, &type_stats, &proc_stats, &user_stats, theme);
+        print_summary_text(
+            procs.len(),
+            total_files,
+            &type_stats,
+            &proc_stats,
+            &user_stats,
+            theme,
+        );
     }
 }
 
@@ -126,7 +143,11 @@ fn print_summary_text(
     for (i, ts) in types.iter().enumerate() {
         if i >= 15 {
             let other: usize = types[i..].iter().map(|t| t.count).sum();
-            let pct = if total_files > 0 { other as f64 / total_files as f64 * 100.0 } else { 0.0 };
+            let pct = if total_files > 0 {
+                other as f64 / total_files as f64 * 100.0
+            } else {
+                0.0
+            };
             let bar_len = (other as f64 / max_count as f64 * BAR_MAX as f64) as usize;
             let bar: String = "█".repeat(bar_len);
             let _ = writeln!(
@@ -140,7 +161,11 @@ fn print_summary_text(
             );
             break;
         }
-        let pct = if total_files > 0 { ts.count as f64 / total_files as f64 * 100.0 } else { 0.0 };
+        let pct = if total_files > 0 {
+            ts.count as f64 / total_files as f64 * 100.0
+        } else {
+            0.0
+        };
         let bar_len = (ts.count as f64 / max_count as f64 * BAR_MAX as f64) as usize;
         let bar: String = "█".repeat(bar_len);
         let _ = writeln!(
@@ -165,7 +190,10 @@ fn print_summary_text(
     let _ = writeln!(
         out,
         "  {hdr}{bold}{:>7}  {:<15}  {:<8}  {:>8}{reset}",
-        "PID", "COMMAND", "USER", "FDs",
+        "PID",
+        "COMMAND",
+        "USER",
+        "FDs",
         hdr = theme.hdr_bg(),
         bold = theme.bold(),
         reset = theme.reset(),
@@ -184,7 +212,11 @@ fn print_summary_text(
             "  {mag}{:>7}{reset}  {cyan}{:<15}{reset}  {yellow}{:<8}{reset}  {:>8}",
             ps.pid,
             cmd,
-            if username.len() > 8 { &username[..8] } else { &username },
+            if username.len() > 8 {
+                &username[..8]
+            } else {
+                &username
+            },
             fmt_num(ps.fd_count),
             mag = theme.magenta(),
             cyan = theme.cyan(),
@@ -203,13 +235,19 @@ fn print_summary_text(
     let _ = writeln!(
         out,
         "  {hdr}{bold}{:<10}  {:>8}  {:>8}{reset}",
-        "USER", "PROCS", "FILES",
+        "USER",
+        "PROCS",
+        "FILES",
         hdr = theme.hdr_bg(),
         bold = theme.bold(),
         reset = theme.reset(),
     );
     for us in users.iter().take(20) {
-        let uname = if us.username.len() > 10 { &us.username[..10] } else { &us.username };
+        let uname = if us.username.len() > 10 {
+            &us.username[..10]
+        } else {
+            &us.username
+        };
         let _ = writeln!(
             out,
             "  {yellow}{:<10}{reset}  {:>8}  {:>8}",

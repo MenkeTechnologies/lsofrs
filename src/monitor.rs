@@ -48,17 +48,19 @@ impl Default for MonitorState {
     }
 }
 
-pub fn run_monitor(filter: &Filter, interval: u64, theme: &Theme, show_pgid: bool, show_ppid: bool) {
+pub fn run_monitor(
+    filter: &Filter,
+    interval: u64,
+    theme: &Theme,
+    show_pgid: bool,
+    show_ppid: bool,
+) {
     let mut state = MonitorState::default();
 
     // Enter alternate screen and raw mode
     let _ = terminal::enable_raw_mode();
     let mut stdout = io::stdout();
-    let _ = execute!(
-        stdout,
-        terminal::EnterAlternateScreen,
-        cursor::Hide,
-    );
+    let _ = execute!(stdout, terminal::EnterAlternateScreen, cursor::Hide,);
 
     loop {
         if !state.paused {
@@ -80,16 +82,18 @@ pub fn run_monitor(filter: &Filter, interval: u64, theme: &Theme, show_pgid: boo
             // Apply type filter
             if !state.type_filter.is_empty() {
                 let tf = state.type_filter.to_uppercase();
-                procs.retain(|p| {
-                    p.files.iter().any(|f| f.file_type.as_str() == tf)
-                });
+                procs.retain(|p| p.files.iter().any(|f| f.file_type.as_str() == tf));
             }
 
             // Sort
             sort_procs(&mut procs, &state);
 
             // Draw frame
-            let _ = execute!(stdout, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+            let _ = execute!(
+                stdout,
+                cursor::MoveTo(0, 0),
+                terminal::Clear(ClearType::All)
+            );
 
             // Status bar
             let now = chrono::Local::now().format("%H:%M:%S");
@@ -111,7 +115,12 @@ pub fn run_monitor(filter: &Filter, interval: u64, theme: &Theme, show_pgid: boo
                 mag = theme.magenta(),
             );
             if state.paused {
-                let _ = write!(stdout, " {red}[PAUSED]{reset}", red = theme.red(), reset = theme.reset());
+                let _ = write!(
+                    stdout,
+                    " {red}[PAUSED]{reset}",
+                    red = theme.red(),
+                    reset = theme.reset()
+                );
             }
             if !state.type_filter.is_empty() {
                 let _ = write!(stdout, " filter:{}", state.type_filter);
@@ -119,7 +128,12 @@ pub fn run_monitor(filter: &Filter, interval: u64, theme: &Theme, show_pgid: boo
             let _ = writeln!(stdout, "\r");
 
             if state.show_help {
-                let _ = writeln!(stdout, "{}Keys: s=sort r=reverse f=filter /=search p=pause q=quit ?=help{}\r", theme.dim(), theme.reset());
+                let _ = writeln!(
+                    stdout,
+                    "{}Keys: s=sort r=reverse f=filter /=search p=pause q=quit ?=help{}\r",
+                    theme.dim(),
+                    theme.reset()
+                );
             }
 
             // Limit output to terminal height
@@ -147,11 +161,7 @@ pub fn run_monitor(filter: &Filter, interval: u64, theme: &Theme, show_pgid: boo
     }
 
     // Restore terminal
-    let _ = execute!(
-        stdout,
-        cursor::Show,
-        terminal::LeaveAlternateScreen,
-    );
+    let _ = execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen,);
     let _ = terminal::disable_raw_mode();
 }
 
@@ -164,43 +174,59 @@ fn sort_procs(procs: &mut [Process], state: &MonitorState) {
             SORT_FDS => a.files.len().cmp(&b.files.len()),
             _ => a.pid.cmp(&b.pid),
         };
-        if state.sort_reverse { ord.reverse() } else { ord }
+        if state.sort_reverse {
+            ord.reverse()
+        } else {
+            ord
+        }
     });
 }
 
 fn handle_input(state: &mut MonitorState, interval: u64) -> bool {
     let timeout = Duration::from_secs(interval);
-    if event::poll(timeout).unwrap_or(false) {
-        if let Ok(Event::Key(KeyEvent { code, modifiers, .. })) = event::read() {
-            match code {
-                KeyCode::Char('q') | KeyCode::Char('Q') => return true,
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
-                KeyCode::Char('s') | KeyCode::Char('S') => {
-                    state.sort_mode = (state.sort_mode + 1) % 4;
-                }
-                KeyCode::Char('r') | KeyCode::Char('R') => {
-                    state.sort_reverse = !state.sort_reverse;
-                }
-                KeyCode::Char('p') | KeyCode::Char('P') => {
-                    state.paused = !state.paused;
-                }
-                KeyCode::Char('?') | KeyCode::Char('h') | KeyCode::Char('H') => {
-                    state.show_help = !state.show_help;
-                }
-                KeyCode::Char('f') | KeyCode::Char('F') => {
-                    // Toggle type filter - cycle through common types
-                    static FILTERS: &[&str] = &["", "REG", "DIR", "SOCK", "IPv4", "IPv6", "PIPE", "FIFO"];
-                    let current = FILTERS.iter().position(|&f| f == state.type_filter).unwrap_or(0);
-                    state.type_filter = FILTERS[(current + 1) % FILTERS.len()].to_string();
-                }
-                _ => {}
+    if event::poll(timeout).unwrap_or(false)
+        && let Ok(Event::Key(KeyEvent {
+            code, modifiers, ..
+        })) = event::read()
+    {
+        match code {
+            KeyCode::Char('q') | KeyCode::Char('Q') => return true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => return true,
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                state.sort_mode = (state.sort_mode + 1) % 4;
             }
+            KeyCode::Char('r') | KeyCode::Char('R') => {
+                state.sort_reverse = !state.sort_reverse;
+            }
+            KeyCode::Char('p') | KeyCode::Char('P') => {
+                state.paused = !state.paused;
+            }
+            KeyCode::Char('?') | KeyCode::Char('h') | KeyCode::Char('H') => {
+                state.show_help = !state.show_help;
+            }
+            KeyCode::Char('f') | KeyCode::Char('F') => {
+                // Toggle type filter - cycle through common types
+                static FILTERS: &[&str] =
+                    &["", "REG", "DIR", "SOCK", "IPv4", "IPv6", "PIPE", "FIFO"];
+                let current = FILTERS
+                    .iter()
+                    .position(|&f| f == state.type_filter)
+                    .unwrap_or(0);
+                state.type_filter = FILTERS[(current + 1) % FILTERS.len()].to_string();
+            }
+            _ => {}
         }
     }
     false
 }
 
-fn print_monitor_procs(procs: &[Process], theme: &Theme, _show_pgid: bool, _show_ppid: bool, out: &mut impl Write) {
+fn print_monitor_procs(
+    procs: &[Process],
+    theme: &Theme,
+    _show_pgid: bool,
+    _show_ppid: bool,
+    out: &mut impl Write,
+) {
     // Simplified columnar output for monitor mode with \r\n line endings
     let _ = write!(
         out,
@@ -221,8 +247,16 @@ fn print_monitor_procs(procs: &[Process], theme: &Theme, _show_pgid: bool, _show
 
     for p in procs {
         let username = p.username();
-        let user = if username.len() > 8 { &username[..8] } else { &username };
-        let cmd = if p.command.len() > 15 { &p.command[..15] } else { &p.command };
+        let user = if username.len() > 8 {
+            &username[..8]
+        } else {
+            &username
+        };
+        let cmd = if p.command.len() > 15 {
+            &p.command[..15]
+        } else {
+            &p.command
+        };
 
         let mut first = true;
         for f in &p.files {
@@ -230,8 +264,13 @@ fn print_monitor_procs(procs: &[Process], theme: &Theme, _show_pgid: bool, _show
                 let _ = write!(
                     out,
                     "{cyan}{:<15}{r} {mag}{:>7}{r} {yel}{:<8}{r} ",
-                    cmd, p.pid, user,
-                    cyan = theme.cyan(), mag = theme.magenta(), yel = theme.yellow(), r = theme.reset(),
+                    cmd,
+                    p.pid,
+                    user,
+                    cyan = theme.cyan(),
+                    mag = theme.magenta(),
+                    yel = theme.yellow(),
+                    r = theme.reset(),
                 );
                 first = false;
             } else {
@@ -247,7 +286,10 @@ fn print_monitor_procs(procs: &[Process], theme: &Theme, _show_pgid: bool, _show
                 f.size_or_offset_str(),
                 f.node_str(),
                 f.full_name(),
-                grn = theme.green(), blu = theme.blue(), dim = theme.dim(), r = theme.reset(),
+                grn = theme.green(),
+                blu = theme.blue(),
+                dim = theme.dim(),
+                r = theme.reset(),
             );
         }
     }

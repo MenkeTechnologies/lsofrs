@@ -68,12 +68,16 @@ impl DeltaTracker {
     }
 
     pub fn count_gone(&mut self) {
-        for (key, _) in &self.prev {
+        for key in self.prev.keys() {
             if !self.curr.contains_key(key) {
                 self.gone_count += 1;
             }
         }
-        self.new_count = self.curr.keys().filter(|k| !self.prev.contains_key(k)).count();
+        self.new_count = self
+            .curr
+            .keys()
+            .filter(|k| !self.prev.contains_key(k))
+            .count();
     }
 
     pub fn print_gone(&self, theme: &Theme) {
@@ -89,9 +93,17 @@ impl DeltaTracker {
                 let _ = writeln!(
                     out,
                     "{red}{cmd:<15} {pid:>7} {user:<8} {fd:<6} {type_:<5} {name} [GONE]{reset}",
-                    cmd = if entry.command.len() > 15 { &entry.command[..15] } else { &entry.command },
+                    cmd = if entry.command.len() > 15 {
+                        &entry.command[..15]
+                    } else {
+                        &entry.command
+                    },
                     pid = entry.pid,
-                    user = if username.len() > 8 { &username[..8] } else { &username },
+                    user = if username.len() > 8 {
+                        &username[..8]
+                    } else {
+                        &username
+                    },
                     fd = entry.fd,
                     type_ = entry.file_type,
                     name = entry.name,
@@ -124,16 +136,23 @@ mod tests {
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<(&str, &str)>) -> Process {
         Process {
-            pid, ppid: 1, pgid: 1, uid: 501,
+            pid,
+            ppid: 1,
+            pgid: 1,
+            uid: 501,
             command: cmd.to_string(),
-            files: files.into_iter().map(|(fd, name)| OpenFile {
-                fd: FdName::Number(fd.parse().unwrap()),
-                access: Access::ReadWrite,
-                file_type: FileType::Reg,
-                name: name.to_string(),
-                ..Default::default()
-            }).collect(),
-            sel_flags: 0, sel_state: 0,
+            files: files
+                .into_iter()
+                .map(|(fd, name)| OpenFile {
+                    fd: FdName::Number(fd.parse().unwrap()),
+                    access: Access::ReadWrite,
+                    file_type: FileType::Reg,
+                    name: name.to_string(),
+                    ..Default::default()
+                })
+                .collect(),
+            sel_flags: 0,
+            sel_state: 0,
         }
     }
 

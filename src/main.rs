@@ -10,6 +10,7 @@ mod leak;
 mod monitor;
 mod output;
 mod summary;
+mod tree;
 mod types;
 
 use std::io::{self, IsTerminal};
@@ -61,6 +62,11 @@ fn main() {
 
     // Single-shot modes
     let procs = gather_and_filter(&filter);
+
+    if args.tree {
+        tree::print_tree(&procs, &theme, args.json);
+        return;
+    }
 
     if args.summary {
         summary::print_summary(&procs, &theme, args.json);
@@ -141,20 +147,12 @@ fn run_repeat(args: &Args, filter: &Filter, theme: &Theme, interval: u64) {
             });
 
             match delta_fn {
-                Some(f) => output::print_processes(
-                    &procs,
-                    theme,
-                    args.show_pgid,
-                    args.show_ppid,
-                    Some(&f),
-                ),
-                None => output::print_processes(
-                    &procs,
-                    theme,
-                    args.show_pgid,
-                    args.show_ppid,
-                    None,
-                ),
+                Some(f) => {
+                    output::print_processes(&procs, theme, args.show_pgid, args.show_ppid, Some(&f))
+                }
+                None => {
+                    output::print_processes(&procs, theme, args.show_pgid, args.show_ppid, None)
+                }
             }
 
             // Print gone entries

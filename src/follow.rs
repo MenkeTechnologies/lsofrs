@@ -59,7 +59,11 @@ pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
                         new_count += 1;
                     }
                 } else {
-                    let status = if initialized { STATUS_NEW } else { STATUS_EXISTING };
+                    let status = if initialized {
+                        STATUS_NEW
+                    } else {
+                        STATUS_EXISTING
+                    };
                     if status == STATUS_NEW {
                         new_count += 1;
                     }
@@ -88,7 +92,11 @@ pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
         initialized = true;
 
         // Render
-        let _ = execute!(stdout, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+        let _ = execute!(
+            stdout,
+            cursor::MoveTo(0, 0),
+            terminal::Clear(ClearType::All)
+        );
 
         let now = chrono::Local::now().format("%H:%M:%S");
         let total = table.values().filter(|e| e.status != STATUS_GONE).count();
@@ -96,26 +104,42 @@ pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
         let _ = write!(
             stdout,
             "{bold}lsofrs follow{reset} PID {mag}{target_pid}{reset} | {cyan}{now}{reset} | FDs:{yellow}{total}{reset}",
-            bold = theme.bold(), reset = theme.reset(),
-            mag = theme.magenta(), cyan = theme.cyan(), yellow = theme.yellow(),
+            bold = theme.bold(),
+            reset = theme.reset(),
+            mag = theme.magenta(),
+            cyan = theme.cyan(),
+            yellow = theme.yellow(),
         );
         if new_count > 0 {
-            let _ = write!(stdout, " {green}+{new_count}{reset}", green = theme.green(), reset = theme.reset());
+            let _ = write!(
+                stdout,
+                " {green}+{new_count}{reset}",
+                green = theme.green(),
+                reset = theme.reset()
+            );
         }
         if gone_count > 0 {
-            let _ = write!(stdout, " {red}-{gone_count}{reset}", red = theme.red(), reset = theme.reset());
+            let _ = write!(
+                stdout,
+                " {red}-{gone_count}{reset}",
+                red = theme.red(),
+                reset = theme.reset()
+            );
         }
         let _ = writeln!(stdout, "\r");
 
         if target.is_none() {
-            let _ = writeln!(stdout, "\r\n{red}Process {target_pid} not found{reset}\r", red = theme.red(), reset = theme.reset());
+            let _ = writeln!(
+                stdout,
+                "\r\n{red}Process {target_pid} not found{reset}\r",
+                red = theme.red(),
+                reset = theme.reset()
+            );
         }
 
         // Sort entries: new first, gone last, then by fd
         let mut entries: Vec<&FollowEntry> = table.values().collect();
-        entries.sort_by(|a, b| {
-            a.status.cmp(&b.status).then(a.fd.cmp(&b.fd))
-        });
+        entries.sort_by(|a, b| a.status.cmp(&b.status).then(a.fd.cmp(&b.fd)));
 
         let (_, rows) = terminal::size().unwrap_or((80, 24));
         let max_rows = (rows as usize).saturating_sub(3);
@@ -151,13 +175,15 @@ pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
         }
 
         // Wait with input handling
-        if event::poll(Duration::from_secs(interval)).unwrap_or(false) {
-            if let Ok(Event::Key(KeyEvent { code, modifiers, .. })) = event::read() {
-                match code {
-                    KeyCode::Char('q') | KeyCode::Char('Q') => break,
-                    KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break,
-                    _ => {}
-                }
+        if event::poll(Duration::from_secs(interval)).unwrap_or(false)
+            && let Ok(Event::Key(KeyEvent {
+                code, modifiers, ..
+            })) = event::read()
+        {
+            match code {
+                KeyCode::Char('q') | KeyCode::Char('Q') => break,
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break,
+                _ => {}
             }
         }
     }

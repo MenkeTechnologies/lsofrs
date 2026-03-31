@@ -544,13 +544,7 @@ fn get_vnode_path_info(pid: pid_t) -> Option<ProcVnodePathInfo> {
 /// List FDs for a PID
 fn list_fds(pid: pid_t) -> Vec<ProcFdInfo> {
     unsafe {
-        let buf_size = proc_pidinfo(
-            pid,
-            PROC_PIDLISTFDS,
-            0,
-            std::ptr::null_mut(),
-            0,
-        );
+        let buf_size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, std::ptr::null_mut(), 0);
         if buf_size <= 0 {
             return Vec::new();
         }
@@ -653,49 +647,85 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                         sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
 
                         if family == AF_INET {
-                            let la = Ipv4Addr::from(u32::from_be(ini.insi_laddr.ina_46.i46a_addr4.s_addr));
-                            let fa = Ipv4Addr::from(u32::from_be(ini.insi_faddr.ina_46.i46a_addr4.s_addr));
+                            let la = Ipv4Addr::from(u32::from_be(
+                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
+                            ));
+                            let fa = Ipv4Addr::from(u32::from_be(
+                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
+                            ));
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
-                            sock_info.local = InetAddr { addr: Some(IpAddr::V4(la)), port: lp };
-                            sock_info.foreign = InetAddr { addr: Some(IpAddr::V4(fa)), port: fp };
+                            sock_info.local = InetAddr {
+                                addr: Some(IpAddr::V4(la)),
+                                port: lp,
+                            };
+                            sock_info.foreign = InetAddr {
+                                addr: Some(IpAddr::V4(fa)),
+                                port: fp,
+                            };
 
-                            name = format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
+                            name =
+                                format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
                             let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
                             let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
-                            sock_info.local = InetAddr { addr: Some(IpAddr::V6(la)), port: lp };
-                            sock_info.foreign = InetAddr { addr: Some(IpAddr::V6(fa)), port: fp };
+                            sock_info.local = InetAddr {
+                                addr: Some(IpAddr::V6(la)),
+                                port: lp,
+                            };
+                            sock_info.foreign = InetAddr {
+                                addr: Some(IpAddr::V6(fa)),
+                                port: fp,
+                            };
 
-                            name = format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
+                            name =
+                                format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
                         }
                     } else {
                         let ini: &InSockInfo = &*(proto_bytes.as_ptr() as *const InSockInfo);
 
                         if family == AF_INET {
-                            let la = Ipv4Addr::from(u32::from_be(ini.insi_laddr.ina_46.i46a_addr4.s_addr));
-                            let fa = Ipv4Addr::from(u32::from_be(ini.insi_faddr.ina_46.i46a_addr4.s_addr));
+                            let la = Ipv4Addr::from(u32::from_be(
+                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
+                            ));
+                            let fa = Ipv4Addr::from(u32::from_be(
+                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
+                            ));
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
-                            sock_info.local = InetAddr { addr: Some(IpAddr::V4(la)), port: lp };
-                            sock_info.foreign = InetAddr { addr: Some(IpAddr::V4(fa)), port: fp };
+                            sock_info.local = InetAddr {
+                                addr: Some(IpAddr::V4(la)),
+                                port: lp,
+                            };
+                            sock_info.foreign = InetAddr {
+                                addr: Some(IpAddr::V4(fa)),
+                                port: fp,
+                            };
 
-                            name = format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
+                            name =
+                                format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
                             let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
                             let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
-                            sock_info.local = InetAddr { addr: Some(IpAddr::V6(la)), port: lp };
-                            sock_info.foreign = InetAddr { addr: Some(IpAddr::V6(fa)), port: fp };
+                            sock_info.local = InetAddr {
+                                addr: Some(IpAddr::V6(la)),
+                                port: lp,
+                            };
+                            sock_info.foreign = InetAddr {
+                                addr: Some(IpAddr::V6(fa)),
+                                port: fp,
+                            };
 
-                            name = format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
+                            name =
+                                format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
                         }
                     }
                 }
@@ -830,7 +860,7 @@ fn format_inet_name(la: IpAddr, lp: u16, fa: IpAddr, fp: u16, _proto: &str) -> S
     let foreign = format_endpoint(&fa, fp);
 
     if is_any_addr(&fa) && fp == 0 {
-        format!("{local}")
+        local
     } else {
         format!("{local}->{foreign}")
     }
@@ -904,38 +934,30 @@ pub fn gather_processes() -> Vec<Process> {
                 PROX_FDTYPE_SOCKET => process_socket_fd(pid, fdi.proc_fd),
                 PROX_FDTYPE_PIPE => process_pipe_fd(pid, fdi.proc_fd),
                 PROX_FDTYPE_KQUEUE => process_kqueue_fd(pid, fdi.proc_fd),
-                PROX_FDTYPE_PSEM => {
-                    Some(OpenFile {
-                        fd: FdName::Number(fdi.proc_fd),
-                        file_type: FileType::Psem,
-                        name: String::new(),
-                        ..Default::default()
-                    })
-                }
-                PROX_FDTYPE_PSHM => {
-                    Some(OpenFile {
-                        fd: FdName::Number(fdi.proc_fd),
-                        file_type: FileType::Pshm,
-                        name: String::new(),
-                        ..Default::default()
-                    })
-                }
-                PROX_FDTYPE_FSEVENTS => {
-                    Some(OpenFile {
-                        fd: FdName::Number(fdi.proc_fd),
-                        file_type: FileType::Fsevents,
-                        name: String::new(),
-                        ..Default::default()
-                    })
-                }
-                PROX_FDTYPE_ATALK => {
-                    Some(OpenFile {
-                        fd: FdName::Number(fdi.proc_fd),
-                        file_type: FileType::Atalk,
-                        name: String::new(),
-                        ..Default::default()
-                    })
-                }
+                PROX_FDTYPE_PSEM => Some(OpenFile {
+                    fd: FdName::Number(fdi.proc_fd),
+                    file_type: FileType::Psem,
+                    name: String::new(),
+                    ..Default::default()
+                }),
+                PROX_FDTYPE_PSHM => Some(OpenFile {
+                    fd: FdName::Number(fdi.proc_fd),
+                    file_type: FileType::Pshm,
+                    name: String::new(),
+                    ..Default::default()
+                }),
+                PROX_FDTYPE_FSEVENTS => Some(OpenFile {
+                    fd: FdName::Number(fdi.proc_fd),
+                    file_type: FileType::Fsevents,
+                    name: String::new(),
+                    ..Default::default()
+                }),
+                PROX_FDTYPE_ATALK => Some(OpenFile {
+                    fd: FdName::Number(fdi.proc_fd),
+                    file_type: FileType::Atalk,
+                    name: String::new(),
+                    ..Default::default()
+                }),
                 _ => None,
             };
             if let Some(f) = of {
@@ -1033,10 +1055,22 @@ mod tests {
             let s: SocketInfo = mem::zeroed();
             let p = &s as *const _ as usize;
             assert_eq!(&s.soi_type as *const _ as usize - p, 152, "soi_type offset");
-            assert_eq!(&s.soi_protocol as *const _ as usize - p, 156, "soi_protocol offset");
-            assert_eq!(&s.soi_family as *const _ as usize - p, 160, "soi_family offset");
+            assert_eq!(
+                &s.soi_protocol as *const _ as usize - p,
+                156,
+                "soi_protocol offset"
+            );
+            assert_eq!(
+                &s.soi_family as *const _ as usize - p,
+                160,
+                "soi_family offset"
+            );
             assert_eq!(&s.soi_kind as *const _ as usize - p, 232, "soi_kind offset");
-            assert_eq!(&s.soi_proto as *const _ as usize - p, 240, "soi_proto offset");
+            assert_eq!(
+                &s.soi_proto as *const _ as usize - p,
+                240,
+                "soi_proto offset"
+            );
             let _ = base;
         }
     }
@@ -1092,10 +1126,7 @@ mod tests {
         let procs = gather_processes();
         let me = procs.iter().find(|p| p.pid == my_pid).unwrap();
         // Without root, we may not get cwd, but we should have some FDs
-        assert!(
-            !me.files.is_empty(),
-            "our process should have open files"
-        );
+        assert!(!me.files.is_empty(), "our process should have open files");
     }
 
     #[test]
@@ -1119,9 +1150,8 @@ mod tests {
     fn gather_processes_file_types_valid() {
         let procs = gather_processes();
         let valid_types = [
-            "REG", "DIR", "CHR", "BLK", "FIFO", "sock", "LINK", "PIPE",
-            "KQUE", "unix", "IPv4", "IPv6", "systm", "PSEM", "PSHM",
-            "ATALK", "FSEV",
+            "REG", "DIR", "CHR", "BLK", "FIFO", "sock", "LINK", "PIPE", "KQUE", "unix", "IPv4",
+            "IPv6", "systm", "PSEM", "PSHM", "ATALK", "FSEV",
         ];
         for p in &procs {
             for f in &p.files {
@@ -1129,7 +1159,9 @@ mod tests {
                 assert!(
                     valid_types.contains(&ts) || ts.chars().all(|c| c.is_ascii_digit() || c == 'o'),
                     "unexpected file type '{}' for pid {} fd {:?}",
-                    ts, p.pid, f.fd
+                    ts,
+                    p.pid,
+                    f.fd
                 );
             }
         }

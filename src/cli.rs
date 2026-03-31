@@ -10,7 +10,7 @@ use clap::Parser;
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
                   Supports regular files, directories, sockets, pipes, devices, and streams.",
-    disable_help_flag = true,
+    disable_help_flag = true
 )]
 pub struct Args {
     /// Display help
@@ -103,6 +103,10 @@ pub struct Args {
     /// FD leak detection `[interval,threshold]`
     #[arg(long = "leak-detect")]
     pub leak_detect: Option<Option<String>>,
+
+    /// Process tree view with FD inheritance
+    #[arg(long = "tree")]
+    pub tree: bool,
 
     /// Delta highlighting in repeat mode
     #[arg(long = "delta")]
@@ -389,7 +393,10 @@ mod tests {
 
     #[test]
     fn leak_detect_params_defaults() {
-        let args = Args { leak_detect: Some(None), ..Args::parse_from(["lsofrs"]) };
+        let args = Args {
+            leak_detect: Some(None),
+            ..Args::parse_from(["lsofrs"])
+        };
         assert_eq!(args.leak_detect_params(), Some((5, 3)));
     }
 

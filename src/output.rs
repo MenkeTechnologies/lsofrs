@@ -4,6 +4,9 @@ use std::io::{self, Write};
 
 use crate::types::*;
 
+/// Delta status callback: (pid, fd, name) -> DeltaStatus
+pub type DeltaFn<'a> = Option<&'a dyn Fn(i32, &str, &str) -> DeltaStatus>;
+
 /// ANSI color codes for cyberpunk theme
 pub struct Theme {
     pub is_tty: bool,
@@ -55,7 +58,9 @@ impl Theme {
     pub fn dev_title(&self) -> &str {
         if self.is_tty { "DEV/ICE" } else { "DEVICE" }
     }
-    pub fn fd_title(&self) -> &str { "FD" }
+    pub fn fd_title(&self) -> &str {
+        "FD"
+    }
     pub fn name_title(&self) -> &str {
         if self.is_tty { "T4RGET" } else { "NAME" }
     }
@@ -74,7 +79,9 @@ impl Theme {
     pub fn user_title(&self) -> &str {
         if self.is_tty { "H4XOR" } else { "USER" }
     }
-    pub fn pgid_title(&self) -> &str { "PGID" }
+    pub fn pgid_title(&self) -> &str {
+        "PGID"
+    }
     pub fn ppid_title(&self) -> &str {
         if self.is_tty { "PPRC" } else { "PPID" }
     }
@@ -97,16 +104,16 @@ struct ColWidths {
 impl ColWidths {
     fn compute(procs: &[Process], show_pgid: bool, show_ppid: bool) -> Self {
         let mut w = ColWidths {
-            cmd: 7,     // "COMMAND" or "PROCESS"
-            pid: 3,     // "PID" or "PRC"
-            user: 4,    // "USER" or "H4XOR"
-            fd: 2,      // "FD"
-            type_: 4,   // "TYPE" or "CL4SS"
-            device: 6,  // "DEVICE" or "DEV/ICE"
+            cmd: 7,      // "COMMAND" or "PROCESS"
+            pid: 3,      // "PID" or "PRC"
+            user: 4,     // "USER" or "H4XOR"
+            fd: 2,       // "FD"
+            type_: 4,    // "TYPE" or "CL4SS"
+            device: 6,   // "DEVICE" or "DEV/ICE"
             size_off: 8, // "SIZE/OFF"
-            node: 4,    // "NODE"
-            pgid: 4,    // "PGID"
-            ppid: 4,    // "PPID"
+            node: 4,     // "NODE"
+            pgid: 4,     // "PGID"
+            ppid: 4,     // "PPID"
         };
 
         for p in procs {
@@ -139,7 +146,7 @@ pub fn print_processes(
     theme: &Theme,
     show_pgid: bool,
     show_ppid: bool,
-    delta_status: Option<&dyn Fn(i32, &str, &str) -> DeltaStatus>,
+    delta_status: DeltaFn<'_>,
 ) {
     let w = ColWidths::compute(procs, show_pgid, show_ppid);
     let out = io::stdout();
@@ -162,9 +169,9 @@ pub fn print_processes(
     if show_ppid {
         let _ = write!(out, "{:>rw$} ", theme.ppid_title(), rw = w.ppid);
     }
-    let _ = write!(
+    let _ = writeln!(
         out,
-        "{user:<uw$} {fd:<fw$} {type_:<tw$} {dev:<dw$} {szoff:>sw$} {node:<nw$} {name}{reset}\n",
+        "{user:<uw$} {fd:<fw$} {type_:<tw$} {dev:<dw$} {szoff:>sw$} {node:<nw$} {name}{reset}",
         user = theme.user_title(),
         uw = w.user,
         fd = theme.fd_title(),
@@ -247,14 +254,7 @@ pub fn print_processes(
                 );
                 first = false;
             } else {
-                let _ = write!(
-                    out,
-                    "{:<cw$} {:>pw$} ",
-                    "",
-                    "",
-                    cw = w.cmd,
-                    pw = w.pid,
-                );
+                let _ = write!(out, "{:<cw$} {:>pw$} ", "", "", cw = w.cmd, pw = w.pid,);
                 if show_pgid {
                     let _ = write!(out, "{:>gw$} ", "", gw = w.pgid);
                 }
@@ -264,9 +264,9 @@ pub fn print_processes(
                 let _ = write!(out, "{:<uw$} ", "", uw = w.user);
             }
 
-            let _ = write!(
+            let _ = writeln!(
                 out,
-                "{green}{fd:<fw$}{reset} {blue}{type_:<tw$}{reset} {dim}{dev:<dw$}{reset} {szoff:>sw$} {node:<nw$} {name}{suffix}{reset}\n",
+                "{green}{fd:<fw$}{reset} {blue}{type_:<tw$}{reset} {dim}{dev:<dw$}{reset} {szoff:>sw$} {node:<nw$} {name}{suffix}{reset}",
                 green = theme.green(),
                 fd = fd_str,
                 fw = w.fd,
@@ -314,12 +314,24 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
         // Process-level fields
         for &fc in &field_chars {
             match fc {
-                'p' => { let _ = write!(out, "p{}{}", p.pid, terminator); }
-                'c' => { let _ = write!(out, "c{}{}", p.command, terminator); }
-                'g' => { let _ = write!(out, "g{}{}", p.pgid, terminator); }
-                'R' => { let _ = write!(out, "R{}{}", p.ppid, terminator); }
-                'u' => { let _ = write!(out, "u{}{}", p.uid, terminator); }
-                'L' => { let _ = write!(out, "L{}{}", p.username(), terminator); }
+                'p' => {
+                    let _ = write!(out, "p{}{}", p.pid, terminator);
+                }
+                'c' => {
+                    let _ = write!(out, "c{}{}", p.command, terminator);
+                }
+                'g' => {
+                    let _ = write!(out, "g{}{}", p.pgid, terminator);
+                }
+                'R' => {
+                    let _ = write!(out, "R{}{}", p.ppid, terminator);
+                }
+                'u' => {
+                    let _ = write!(out, "u{}{}", p.uid, terminator);
+                }
+                'L' => {
+                    let _ = write!(out, "L{}{}", p.username(), terminator);
+                }
                 _ => {}
             }
         }
@@ -328,13 +340,17 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
         for f in &p.files {
             for &fc in &field_chars {
                 match fc {
-                    'f' => { let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator); }
+                    'f' => {
+                        let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator);
+                    }
                     'a' => {
                         if f.access != Access::None {
                             let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
                         }
                     }
-                    't' => { let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator); }
+                    't' => {
+                        let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator);
+                    }
                     'D' => {
                         if let Some((maj, min)) = f.device {
                             let _ = write!(out, "D0x{:x}{:02x}{}", maj, min, terminator);
@@ -355,19 +371,21 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
                             let _ = write!(out, "i{}{}", ino, terminator);
                         }
                     }
-                    'n' => { let _ = write!(out, "n{}{}", f.full_name(), terminator); }
+                    'n' => {
+                        let _ = write!(out, "n{}{}", f.full_name(), terminator);
+                    }
                     'P' => {
-                        if let Some(ref si) = f.socket_info {
-                            if !si.protocol.is_empty() {
-                                let _ = write!(out, "P{}{}", si.protocol, terminator);
-                            }
+                        if let Some(ref si) = f.socket_info
+                            && !si.protocol.is_empty()
+                        {
+                            let _ = write!(out, "P{}{}", si.protocol, terminator);
                         }
                     }
                     'T' => {
-                        if let Some(ref si) = f.socket_info {
-                            if let Some(ref state) = si.tcp_state {
-                                let _ = write!(out, "TST={}{}", state, terminator);
-                            }
+                        if let Some(ref si) = f.socket_info
+                            && let Some(ref state) = si.tcp_state
+                        {
+                            let _ = write!(out, "TST={}{}", state, terminator);
                         }
                     }
                     _ => {}

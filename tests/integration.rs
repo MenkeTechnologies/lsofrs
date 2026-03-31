@@ -58,7 +58,11 @@ fn default_run_has_processes() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
     // Header + at least a few processes
-    assert!(lines.len() > 5, "expected output lines, got {}", lines.len());
+    assert!(
+        lines.len() > 5,
+        "expected output lines, got {}",
+        lines.len()
+    );
 }
 
 // ── PID filter ──────────────────────────────────────────────────────
@@ -71,10 +75,15 @@ fn pid_filter_self() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Every non-header line should contain our PID
     for line in stdout.lines().skip(1) {
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         // Continuation lines (indented) are part of same process
         if !line.starts_with(' ') {
-            assert!(line.contains(&my_pid), "line doesn't contain our pid: {line}");
+            assert!(
+                line.contains(&my_pid),
+                "line doesn't contain our pid: {line}"
+            );
         }
     }
 }
@@ -97,7 +106,9 @@ fn terse_output_pids_only() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     for line in stdout.lines() {
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         assert!(
             line.trim().parse::<i32>().is_ok(),
             "terse line should be a PID: '{line}'"
@@ -124,8 +135,8 @@ fn json_output_valid() {
     let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    let parsed: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("JSON output should be valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("JSON output should be valid JSON");
     assert!(parsed.is_array());
 }
 
@@ -175,7 +186,10 @@ fn field_output_pid_and_name() {
 #[test]
 fn field_output_nul_terminator() {
     let my_pid = std::process::id().to_string();
-    let out = lsofrs().args(["-F", "p", "-0", "-p", &my_pid]).output().unwrap();
+    let out = lsofrs()
+        .args(["-F", "p", "-0", "-p", &my_pid])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = &out.stdout;
     // Should contain NUL bytes
@@ -268,8 +282,8 @@ fn summary_json() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Should be valid JSON
-    let parsed: serde_json::Value = serde_json::from_str(&stdout)
-        .expect("summary --json should produce valid JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("summary --json should produce valid JSON");
     assert!(parsed.is_object() || parsed.is_array());
 }
 
@@ -278,14 +292,20 @@ fn summary_json() {
 #[test]
 fn fd_filter_range() {
     let my_pid = std::process::id().to_string();
-    let out = lsofrs().args(["-d", "0-2", "-p", &my_pid]).output().unwrap();
+    let out = lsofrs()
+        .args(["-d", "0-2", "-p", &my_pid])
+        .output()
+        .unwrap();
     assert!(out.status.success());
 }
 
 #[test]
 fn fd_filter_cwd() {
     let my_pid = std::process::id().to_string();
-    let out = lsofrs().args(["-d", "cwd", "-p", &my_pid]).output().unwrap();
+    let out = lsofrs()
+        .args(["-d", "cwd", "-p", &my_pid])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     // cwd may not be visible without root; just verify no crash
 }
@@ -296,12 +316,21 @@ fn fd_filter_cwd() {
 fn and_mode_narrows_results() {
     let my_pid = std::process::id().to_string();
     // Without -a: OR mode
-    let out_or = lsofrs().args(["-p", &my_pid, "-c", "nonexistent_cmd"]).output().unwrap();
+    let out_or = lsofrs()
+        .args(["-p", &my_pid, "-c", "nonexistent_cmd"])
+        .output()
+        .unwrap();
     let count_or = String::from_utf8_lossy(&out_or.stdout).lines().count();
     // With -a: AND mode, both must match — "nonexistent_cmd" won't match our process
-    let out_and = lsofrs().args(["-a", "-p", &my_pid, "-c", "nonexistent_cmd"]).output().unwrap();
+    let out_and = lsofrs()
+        .args(["-a", "-p", &my_pid, "-c", "nonexistent_cmd"])
+        .output()
+        .unwrap();
     let count_and = String::from_utf8_lossy(&out_and.stdout).lines().count();
-    assert!(count_and < count_or, "AND mode should produce fewer results");
+    assert!(
+        count_and < count_or,
+        "AND mode should produce fewer results"
+    );
 }
 
 // ── PGID / PPID display ────────────────────────────────────────────
@@ -309,7 +338,10 @@ fn and_mode_narrows_results() {
 #[test]
 fn pgid_show_flag() {
     let my_pid = std::process::id().to_string();
-    let out = lsofrs().args(["--pgid-show", "-p", &my_pid]).output().unwrap();
+    let out = lsofrs()
+        .args(["--pgid-show", "-p", &my_pid])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("PGID") || stdout.contains("PG/ID"));
@@ -329,14 +361,21 @@ fn ppid_show_flag() {
 #[test]
 fn pid_exclude() {
     let my_pid = std::process::id().to_string();
-    let out = lsofrs().args(["-p", &format!("^{my_pid}")]).output().unwrap();
+    let out = lsofrs()
+        .args(["-p", &format!("^{my_pid}")])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Our PID should not appear in process lines
     for line in stdout.lines().skip(1) {
-        if line.starts_with(' ') || line.trim().is_empty() { continue; }
-        assert!(!line.contains(&format!(" {my_pid} ")),
-            "excluded pid should not appear: {line}");
+        if line.starts_with(' ') || line.trim().is_empty() {
+            continue;
+        }
+        assert!(
+            !line.contains(&format!(" {my_pid} ")),
+            "excluded pid should not appear: {line}"
+        );
     }
 }
 

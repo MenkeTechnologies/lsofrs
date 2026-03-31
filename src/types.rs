@@ -96,19 +96,10 @@ impl Access {
 }
 
 /// Internet address info for a socket endpoint
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct InetAddr {
     pub addr: Option<IpAddr>,
     pub port: u16,
-}
-
-impl Default for InetAddr {
-    fn default() -> Self {
-        Self {
-            addr: None,
-            port: 0,
-        }
-    }
 }
 
 /// TCP state
@@ -483,10 +474,16 @@ mod tests {
 
     #[test]
     fn open_file_size_or_offset_str() {
-        let f1 = OpenFile { size: Some(4096), ..Default::default() };
+        let f1 = OpenFile {
+            size: Some(4096),
+            ..Default::default()
+        };
         assert_eq!(f1.size_or_offset_str(), "4096");
 
-        let f2 = OpenFile { offset: Some(0), ..Default::default() };
+        let f2 = OpenFile {
+            offset: Some(0),
+            ..Default::default()
+        };
         assert_eq!(f2.size_or_offset_str(), "0t0");
 
         let f3 = OpenFile::default();
@@ -495,13 +492,20 @@ mod tests {
 
     #[test]
     fn open_file_size_prefers_size_over_offset() {
-        let f = OpenFile { size: Some(100), offset: Some(50), ..Default::default() };
+        let f = OpenFile {
+            size: Some(100),
+            offset: Some(50),
+            ..Default::default()
+        };
         assert_eq!(f.size_or_offset_str(), "100");
     }
 
     #[test]
     fn open_file_device_str() {
-        let f1 = OpenFile { device: Some((1, 16)), ..Default::default() };
+        let f1 = OpenFile {
+            device: Some((1, 16)),
+            ..Default::default()
+        };
         assert_eq!(f1.device_str(), "1,16");
 
         let f2 = OpenFile::default();
@@ -510,7 +514,10 @@ mod tests {
 
     #[test]
     fn open_file_node_str_inode() {
-        let f = OpenFile { inode: Some(12345), ..Default::default() };
+        let f = OpenFile {
+            inode: Some(12345),
+            ..Default::default()
+        };
         assert_eq!(f.node_str(), "12345");
     }
 
@@ -537,9 +544,14 @@ mod tests {
     #[test]
     fn process_username_for_root() {
         let p = Process {
-            pid: 1, ppid: 0, pgid: 1, uid: 0,
+            pid: 1,
+            ppid: 0,
+            pgid: 1,
+            uid: 0,
             command: "launchd".to_string(),
-            files: vec![], sel_flags: 0, sel_state: 0,
+            files: vec![],
+            sel_flags: 0,
+            sel_state: 0,
         };
         assert_eq!(p.username(), "root");
     }
@@ -547,9 +559,14 @@ mod tests {
     #[test]
     fn process_username_unknown_uid() {
         let p = Process {
-            pid: 1, ppid: 0, pgid: 1, uid: 99999,
+            pid: 1,
+            ppid: 0,
+            pgid: 1,
+            uid: 99999,
             command: "test".to_string(),
-            files: vec![], sel_flags: 0, sel_state: 0,
+            files: vec![],
+            sel_flags: 0,
+            sel_state: 0,
         };
         // Unknown UID falls back to numeric string
         assert_eq!(p.username(), "99999");
