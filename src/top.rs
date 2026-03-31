@@ -156,16 +156,18 @@ fn render(
     total_fds: usize,
     top_n: usize,
 ) {
-    let out = io::stdout();
-    let mut out = out.lock();
+    // Build entire frame into a buffer, then write atomically to avoid
+    // partial-line flicker in raw mode / alternate screen
+    let mut buf = String::with_capacity(4096);
 
     if theme.is_tty {
-        let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+        // MoveTo(0,0) + Clear will be done via crossterm before the write
     }
 
-    // Title bar
+    use std::fmt::Write as FmtWrite;
+
     let _ = writeln!(
-        out,
+        buf,
         "{bold}{hdr} lsofrs top — {procs} processes, {fds} open files — refresh {int}s — iteration {iter} {reset}",
         bold = theme.bold(),
         hdr = theme.hdr_bg(),
@@ -176,18 +178,19 @@ fn render(
         reset = theme.reset(),
     );
     let _ = writeln!(
-        out,
+        buf,
         "{dim}  showing top {n} by FD count — press q to quit{reset}",
         dim = theme.dim(),
         n = top_n,
         reset = theme.reset(),
     );
-    let _ = writeln!(out);
+    let _ = writeln!(buf);
 
     // Header
+    let r = theme.reset();
     let _ = writeln!(
-        out,
-        "{bold}{hdr}{:>7}  {:<8}  {:>5}  {:>6}  {:>4}  {:>4}  {:>4}  {:>5}  {:<20}  COMMAND{reset}",
+        buf,
+        "{bold}{hdr}{:>7}  {:<8}  {:>5}  {:>6}  {:>4}  {:>4}  {:>4}  {:>5}  {:<20}  COMMAND{r}",
         "PID",
         "USER",
         "FDs",
@@ -199,7 +202,6 @@ fn render(
         "DISTRIBUTION",
         bold = theme.bold(),
         hdr = theme.hdr_bg(),
-        reset = theme.reset(),
     );
 
     for (i, e) in entries.iter().enumerate() {
@@ -217,7 +219,6 @@ fn render(
             &e.command
         };
 
-        // Delta indicator
         let delta_str = match e.prev_fd_count {
             Some(prev) if e.fd_count > prev => format!("+{}", e.fd_count - prev),
             Some(prev) if e.fd_count < prev => format!("-{}", prev - e.fd_count),
@@ -255,36 +256,51 @@ fn render(
             bar.push_str(theme.dim());
             bar.push_str(&"░".repeat(other_w));
         }
-        bar.push_str(theme.reset());
+        bar.push_str(r);
 
         let alt = if i % 2 == 1 { theme.row_alt() } else { "" };
-        let r = theme.reset();
 
-        let _ = write!(out, "{alt}");
-        let _ = write!(out, "{}{:>7}{}  ", theme.magenta(), e.pid, r);
-        let _ = write!(out, "{}{:<8}{}  ", theme.yellow(), user_display, r);
-        let _ = write!(out, "{}{:>5}{}  ", theme.bold(), e.fd_count, r);
-        let _ = write!(out, "{}{:>6}{}  ", delta_color, delta_str, r);
-        let _ = write!(
-            out,
-            "{:>4}  {:>4}  {:>4}  {:>5}  ",
-            e.reg_count, e.sock_count, e.pipe_count, e.other_count
+        let _ = writeln!(
+            buf,
+            "{alt}{}{:>7}{r}  {}{:<8}{r}  {}{:>5}{r}  {}{:>6}{r}  {:>4}  {:>4}  {:>4}  {:>5}  {bar}  {}{cmd}{r}",
+            theme.magenta(),
+            e.pid,
+            theme.yellow(),
+            user_display,
+            theme.bold(),
+            e.fd_count,
+            delta_color,
+            delta_str,
+            e.reg_count,
+            e.sock_count,
+            e.pipe_count,
+            e.other_count,
+            theme.cyan(),
         );
-        let _ = write!(out, "{bar}  ");
-        let _ = writeln!(out, "{}{}{}", theme.cyan(), cmd, r);
     }
 
-    // Legend
-    let _ = writeln!(out);
+    let _ = writeln!(buf);
     let _ = writeln!(
-        out,
-        "{dim}  {cyan}██{reset}{dim} REG/DIR/CHR  {green}██{reset}{dim} SOCK/NET  {yellow}██{reset}{dim} PIPE  {dim}░░ OTHER{reset}",
+        buf,
+        "{dim}  {cyan}██{r}{dim} REG/DIR/CHR  {green}██{r}{dim} SOCK/NET  {yellow}██{r}{dim} PIPE  {dim}░░ OTHER{r}",
         dim = theme.dim(),
         cyan = theme.cyan(),
         green = theme.green(),
         yellow = theme.yellow(),
-        reset = theme.reset(),
     );
+
+    // Atomic write: clear screen then dump entire buffer at once
+    // In raw mode, \n doesn't return to column 0 — must use \r\n
+    if theme.is_tty {
+        buf = buf.replace('\n', "\r\n");
+    }
+    let out = io::stdout();
+    let mut out = out.lock();
+    if theme.is_tty {
+        let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+    }
+    let _ = out.write_all(buf.as_bytes());
+    let _ = out.flush();
 }
 
 #[cfg(test)]
