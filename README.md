@@ -250,20 +250,61 @@ Currently targets **macOS/Darwin** via the `libproc` API (`proc_listpids`, `proc
 
 ## // PERFORMANCE
 
-Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup):
+Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~550 processes / ~5800 open files):
 
-| Tool | Mean | Range | User CPU | System CPU |
-|------|------|-------|----------|------------|
-| **lsofrs** (Rust) | **300 ms** | 94–742 ms | 18 ms | 41 ms |
-| lsof 4.91 (C) | 686 ms | 237–2208 ms | 104 ms | 97 ms |
-| lsofng (C) | 5607 ms | 5267–6270 ms | 105 ms | 112 ms |
+### All Open Files (default)
+
+| Tool | Mean | Min–Max | User CPU | Sys CPU |
+|------|------|---------|----------|---------|
+| **lsofrs** (Rust) | **73 ms** | 50–117 ms | 17 ms | 32 ms |
+| lsof 4.91 (C) | 274 ms | 225–344 ms | 108 ms | 100 ms |
+| lsofng (C) | 5630 ms | 5223–8302 ms | 109 ms | 116 ms |
 
 | vs | Speedup |
 |----|---------|
-| lsof (system) | **2.3x** faster |
-| lsofng | **18.7x** faster |
+| lsof (system) | **3.7x** faster |
+| lsofng | **76.8x** faster |
 
-Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from more efficient memory allocation patterns, output formatting, and lower user/system CPU overhead (5.7x less user CPU than lsof, 2.4x less system CPU).
+### Network Connections (`-i TCP`)
+
+| Tool | Mean | Min–Max | User CPU | Sys CPU |
+|------|------|---------|----------|---------|
+| **lsofrs** | **89 ms** | 30–307 ms | 4 ms | 14 ms |
+| lsof 4.91 | 157 ms | 105–345 ms | 69 ms | 20 ms |
+| lsofng | 5246 ms | 5103–5602 ms | 70 ms | 21 ms |
+
+| vs | Speedup |
+|----|---------|
+| lsof | **1.8x** faster |
+| lsofng | **58.9x** faster |
+
+### Terse Output (`-t`, PIDs only)
+
+| Tool | Mean | Min–Max | User CPU | Sys CPU |
+|------|------|---------|----------|---------|
+| **lsofrs** | **46 ms** | 18–124 ms | 4 ms | 14 ms |
+| lsof 4.91 | 211 ms | 139–474 ms | 53 ms | 90 ms |
+| lsofng | 253 ms | 172–492 ms | 52 ms | 104 ms |
+
+| vs | Speedup |
+|----|---------|
+| lsof | **4.6x** faster |
+| lsofng | **5.5x** faster |
+
+### Structured Output (`-J` JSON / `-F` field)
+
+| Tool | Mean | Min–Max | User CPU | Sys CPU |
+|------|------|---------|----------|---------|
+| **lsofrs** `-J` | **126 ms** | 63–223 ms | 16 ms | 36 ms |
+| lsof `-F pcfn` | 231 ms | 186–488 ms | 89 ms | 89 ms |
+| lsofng `-J` | 244 ms | 159–414 ms | 59 ms | 103 ms |
+
+| vs | Speedup |
+|----|---------|
+| lsof | **1.8x** faster |
+| lsofng | **1.9x** faster |
+
+Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from zero-copy FFI, efficient memory allocation, and lower user/system CPU overhead (6.4x less user CPU than lsof, 3.1x less system CPU).
 
 ---
 

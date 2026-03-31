@@ -1005,4 +1005,178 @@ mod tests {
         let f = Filter::from_args(&args);
         assert_eq!(f.files, vec!["/tmp/foo", "/var/log/bar"]);
     }
+
+    // ── Edge cases ──────────────────────────────────────────────────
+
+    #[test]
+    fn multiple_pid_exclusions() {
+        let mut f = empty_filter();
+        f.exclude_pids = vec![1, 2, 3];
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "a")));
+        assert!(!f.matches_process(&make_proc(2, 0, 1, "b")));
+        assert!(!f.matches_process(&make_proc(3, 0, 1, "c")));
+        assert!(f.matches_process(&make_proc(4, 0, 1, "d")));
+    }
+
+    #[test]
+    fn command_prefix_is_not_substring() {
+        let mut f = empty_filter();
+        f.commands = vec!["ssh".to_string()];
+        assert!(f.matches_process(&make_proc(1, 0, 1, "sshd")));
+        assert!(f.matches_process(&make_proc(1, 0, 1, "ssh")));
+        // "bssh" does not start with "ssh"
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "bssh")));
+    }
+
+    #[test]
+    fn multiple_commands_or() {
+        let mut f = empty_filter();
+        f.commands = vec!["nginx".to_string(), "apache".to_string()];
+        assert!(f.matches_process(&make_proc(1, 0, 1, "nginx")));
+        assert!(f.matches_process(&make_proc(1, 0, 1, "apache2")));
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "sshd")));
+    }
+
+    #[test]
+    fn fd_range_boundary() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Range(5, 10)];
+        assert!(!f.matches_file(&make_file(4, FileType::Reg, "/x")));
+        assert!(f.matches_file(&make_file(5, FileType::Reg, "/x")));
+        assert!(f.matches_file(&make_file(10, FileType::Reg, "/x")));
+        assert!(!f.matches_file(&make_file(11, FileType::Reg, "/x")));
+    }
+
+    #[test]
+    fn fd_single_number_is_range_to_self() {
+        let mut filters = vec![];
+        parse_fd_filter("7", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(7, 7)));
+    }
+
+    #[test]
+    fn network_allows_sock_type() {
+        let mut f = empty_filter();
+        f.network = true;
+        assert!(f.matches_file(&make_file(3, FileType::Sock, "sock")));
+    }
+
+    #[test]
+    fn network_with_file_filter_allows_non_network() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.files = vec!["/tmp/x".to_string()];
+        // non-network file matching file filter should pass
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+    }
+
+    #[test]
+    fn protocol_filter_case_insensitive() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("TCP".to_string()),
+            addr_family: None,
+            addr: None,
+            host: None,
+            port_start: None,
+            port_end: None,
+        }];
+        // lowercase "tcp" in socket info should match "TCP" filter
+        assert!(f.matches_file(&make_tcp_file(3, "tcp", 80, 0)));
+    }
+
+    #[test]
+    fn network_filter_no_socket_info_rejected() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("TCP".to_string()),
+            addr_family: None,
+            addr: None,
+            host: None,
+            port_start: None,
+            port_end: None,
+        }];
+        // IPv4 file without socket_info should be rejected by protocol filter
+        let file = make_file(3, FileType::IPv4, "*:80");
+        assert!(!f.matches_file(&file));
+    }
+
+    #[test]
+    fn host_matches_in_name() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: None,
+            addr_family: None,
+            addr: None,
+            host: Some("example.com".to_string()),
+            port_start: None,
+            port_end: None,
+        }];
+        let mut file = make_tcp_file(3, "TCP", 80, 0);
+        file.name = "10.0.0.1:80->example.com:443".to_string();
+        assert!(f.matches_file(&file));
+    }
+
+    #[test]
+    fn inet_filter_whitespace_trimmed() {
+        let mut f = empty_filter();
+        parse_inet_filter("  TCP  ", &mut f);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
+    fn from_args_multiple_exclude_uids() {
+        let args = Args::parse_from(["lsofrs", "-u", "^0,^65534"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.exclude_uids, vec![0, 65534]);
+    }
+
+    #[test]
+    fn from_args_mixed_uid_and_username() {
+        let args = Args::parse_from(["lsofrs", "-u", "root,0,^nobody"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.usernames, vec!["root".to_string()]);
+        assert_eq!(f.uids, vec![0]);
+        assert_eq!(f.exclude_usernames, vec!["nobody".to_string()]);
+    }
+
+    #[test]
+    fn from_args_multiple_commands() {
+        let args = Args::parse_from(["lsofrs", "-c", "nginx,apache,/sshd.*/"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.commands, vec!["nginx".to_string(), "apache".to_string()]);
+        assert_eq!(f.command_regexes.len(), 1);
+    }
+
+    #[test]
+    fn from_args_inet_4() {
+        let args = Args::parse_from(["lsofrs", "-i", "4"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_type, Some(4));
+        assert!(f.network_filters.is_empty());
+    }
+
+    #[test]
+    fn from_args_inet_6tcp() {
+        let args = Args::parse_from(["lsofrs", "-i", "6TCP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_type, Some(6));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
+    fn and_mode_with_uid_and_pgid() {
+        let mut f = empty_filter();
+        f.and_mode = true;
+        f.uids = vec![501];
+        f.pgids = vec![42];
+        assert!(f.matches_process(&make_proc(1, 501, 42, "x")));
+        assert!(!f.matches_process(&make_proc(1, 501, 99, "x"))); // pgid mismatch
+        assert!(!f.matches_process(&make_proc(1, 0, 42, "x"))); // uid mismatch
+    }
 }

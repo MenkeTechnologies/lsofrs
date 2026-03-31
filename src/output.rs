@@ -290,6 +290,224 @@ pub fn print_processes(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Theme tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn theme_tty_has_ansi_codes() {
+        let t = Theme::new(true);
+        assert!(t.reset().contains("\x1b["));
+        assert!(t.cyan().contains("\x1b["));
+        assert!(t.magenta().contains("\x1b["));
+        assert!(t.green().contains("\x1b["));
+        assert!(t.yellow().contains("\x1b["));
+        assert!(t.red().contains("\x1b["));
+        assert!(t.blue().contains("\x1b["));
+        assert!(t.dim().contains("\x1b["));
+        assert!(t.bold().contains("\x1b["));
+        assert!(t.hdr_bg().contains("\x1b["));
+        assert!(t.row_alt().contains("\x1b["));
+    }
+
+    #[test]
+    fn theme_no_tty_empty_strings() {
+        let t = Theme::new(false);
+        assert_eq!(t.reset(), "");
+        assert_eq!(t.cyan(), "");
+        assert_eq!(t.magenta(), "");
+        assert_eq!(t.green(), "");
+        assert_eq!(t.yellow(), "");
+        assert_eq!(t.red(), "");
+        assert_eq!(t.blue(), "");
+        assert_eq!(t.dim(), "");
+        assert_eq!(t.bold(), "");
+        assert_eq!(t.hdr_bg(), "");
+        assert_eq!(t.row_alt(), "");
+    }
+
+    #[test]
+    fn theme_tty_cyberpunk_titles() {
+        let t = Theme::new(true);
+        assert_eq!(t.cmd_title(), "PROCESS");
+        assert_eq!(t.pid_title(), "PRC");
+        assert_eq!(t.user_title(), "H4XOR");
+        assert_eq!(t.type_title(), "CL4SS");
+        assert_eq!(t.dev_title(), "DEV/ICE");
+        assert_eq!(t.size_off_title(), "BYT3/0FF");
+        assert_eq!(t.node_title(), "N0DE");
+        assert_eq!(t.name_title(), "T4RGET");
+        assert_eq!(t.ppid_title(), "PPRC");
+    }
+
+    #[test]
+    fn theme_pipe_plain_titles() {
+        let t = Theme::new(false);
+        assert_eq!(t.cmd_title(), "COMMAND");
+        assert_eq!(t.pid_title(), "PID");
+        assert_eq!(t.user_title(), "USER");
+        assert_eq!(t.type_title(), "TYPE");
+        assert_eq!(t.dev_title(), "DEVICE");
+        assert_eq!(t.size_off_title(), "SIZE/OFF");
+        assert_eq!(t.node_title(), "NODE");
+        assert_eq!(t.name_title(), "NAME");
+        assert_eq!(t.ppid_title(), "PPID");
+    }
+
+    #[test]
+    fn theme_fd_and_pgid_titles_same() {
+        let tty = Theme::new(true);
+        let pipe = Theme::new(false);
+        assert_eq!(tty.fd_title(), "FD");
+        assert_eq!(pipe.fd_title(), "FD");
+        assert_eq!(tty.pgid_title(), "PGID");
+        assert_eq!(pipe.pgid_title(), "PGID");
+    }
+
+    // ── ColWidths tests ─────────────────────────────────────────────
+
+    fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
+        Process {
+            pid,
+            ppid: 1,
+            pgid: pid,
+            uid: 0,
+            command: cmd.to_string(),
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+        }
+    }
+
+    fn make_file(fd: i32, ft: FileType, name: &str) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: ft,
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn col_widths_defaults_on_empty() {
+        let w = ColWidths::compute(&[], false, false);
+        assert!(w.cmd >= 7);
+        assert!(w.pid >= 3);
+    }
+
+    #[test]
+    fn col_widths_grows_for_long_pid() {
+        let p = make_proc(1234567, "test", vec![make_file(3, FileType::Reg, "/x")]);
+        let w = ColWidths::compute(&[p], false, false);
+        assert!(w.pid >= 7); // "1234567" is 7 chars
+    }
+
+    #[test]
+    fn col_widths_cmd_capped_at_15() {
+        let p = make_proc(1, "a_very_long_command_name_here", vec![]);
+        let w = ColWidths::compute(&[p], false, false);
+        assert!(w.cmd <= 15);
+    }
+
+    #[test]
+    fn col_widths_pgid_only_with_flag() {
+        let p = make_proc(1, "test", vec![]);
+        let w_no = ColWidths::compute(&[p.clone()], false, false);
+        let w_yes = ColWidths::compute(&[p], true, false);
+        // pgid width should only grow when show_pgid is true
+        assert_eq!(w_no.pgid, 4); // default
+        assert!(w_yes.pgid >= 1);
+    }
+
+    // ── print_processes smoke tests ─────────────────────────────────
+
+    #[test]
+    fn print_processes_empty_no_panic() {
+        let theme = Theme::new(false);
+        print_processes(&[], &theme, false, false, None);
+    }
+
+    #[test]
+    fn print_processes_with_data_no_panic() {
+        let theme = Theme::new(false);
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_processes(&procs, &theme, false, false, None);
+    }
+
+    #[test]
+    fn print_processes_with_pgid_ppid_no_panic() {
+        let theme = Theme::new(false);
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_processes(&procs, &theme, true, true, None);
+    }
+
+    #[test]
+    fn print_processes_with_delta_no_panic() {
+        let theme = Theme::new(false);
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::New;
+        print_processes(&procs, &theme, false, false, Some(&delta));
+    }
+
+    #[test]
+    fn print_terse_no_panic() {
+        let procs = vec![make_proc(1, "a", vec![]), make_proc(2, "b", vec![])];
+        print_terse(&procs);
+    }
+
+    #[test]
+    fn print_field_output_no_panic() {
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_field_output(&procs, "pcfnta", '\n');
+    }
+
+    #[test]
+    fn print_field_output_empty_fields_uses_defaults() {
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        // empty string should use defaults (p, f, n)
+        print_field_output(&procs, "", '\n');
+    }
+
+    #[test]
+    fn print_field_output_all_fields_no_panic() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.device = Some((1, 16));
+        f.size = Some(4096);
+        f.offset = Some(0);
+        f.inode = Some(12345);
+        f.socket_info = Some(crate::types::SocketInfo {
+            protocol: "TCP".to_string(),
+            tcp_state: Some(TcpState::Established),
+            ..Default::default()
+        });
+        let procs = vec![make_proc(42, "test", vec![f])];
+        print_field_output(&procs, "pcfntaDsoiPTguRL", '\n');
+    }
+}
+
 /// Print processes in terse mode (PIDs only)
 pub fn print_terse(procs: &[Process]) {
     let out = io::stdout();

@@ -435,10 +435,276 @@ fn tree_mode_json() {
     assert!(arr[0].get("children").is_some());
 }
 
+// ── Tree mode extras ────────────────────────────────────────────────
+
+#[test]
+fn tree_mode_with_command_filter() {
+    let out = lsofrs().args(["--tree", "-c", "lsofrs"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn tree_mode_with_user_filter() {
+    let out = lsofrs().args(["--tree", "-u", &whoami()]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("PID"));
+}
+
+// ── JSON edge cases ────────────────────────────────────────────────
+
+#[test]
+fn json_empty_result_valid() {
+    let out = lsofrs().args(["-J", "-p", "9999999"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(parsed.is_empty());
+}
+
+#[test]
+fn json_file_has_type_field() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    if !parsed.is_empty() {
+        let files = parsed[0]["files"].as_array().unwrap();
+        if !files.is_empty() {
+            let t = files[0]["type"].as_str().unwrap();
+            assert!(!t.is_empty());
+        }
+    }
+}
+
+// ── Field output extras ────────────────────────────────────────────
+
+#[test]
+fn field_output_command_field() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "pc", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().any(|l| l.starts_with('c')));
+}
+
+#[test]
+fn field_output_type_field() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "pt", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().any(|l| l.starts_with('t')));
+}
+
+#[test]
+fn field_output_uid_field() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "pu", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().any(|l| l.starts_with('u')));
+}
+
+#[test]
+fn field_output_login_name_field() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "pL", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().any(|l| l.starts_with('L')));
+}
+
+// ── Multiple filters combined ──────────────────────────────────────
+
+#[test]
+fn pid_and_user_filter_or() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-p", &my_pid, "-u", &whoami()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().count() > 1);
+}
+
+#[test]
+fn exclude_pid_still_shows_others() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-p", &format!("^{my_pid}")])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.lines().count() > 1, "should have other processes");
+}
+
+// ── FD filter extras ───────────────────────────────────────────────
+
+#[test]
+fn fd_filter_single_number() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-d", "0", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn fd_filter_exclude_range() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-d", "^0-2", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Network filter combos ──────────────────────────────────────────
+
+#[test]
+fn inet_tcp_port_combo() {
+    let out = lsofrs().args(["-i", "TCP:443"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn inet_6tcp_combo() {
+    let out = lsofrs().args(["-i", "6TCP"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn inet_4udp_combo() {
+    let out = lsofrs().args(["-i", "4UDP"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn inet_host_port_combo() {
+    let out = lsofrs().args(["-i", "TCP@127.0.0.1:80"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+// ── Summary extras ─────────────────────────────────────────────────
+
+#[test]
+fn summary_with_pid_filter() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--summary", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn summary_with_command_filter() {
+    let out = lsofrs()
+        .args(["--summary", "-c", "lsofrs"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Terse extras ───────────────────────────────────────────────────
+
+#[test]
+fn terse_no_header() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("COMMAND"));
+    assert!(!stdout.contains("PID"));
+}
+
+#[test]
+fn terse_nonexistent_pid_empty() {
+    let out = lsofrs().args(["-t", "-p", "9999999"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.trim().is_empty());
+}
+
+// ── Multiple flag combos ───────────────────────────────────────────
+
+#[test]
+fn all_boolean_flags_no_crash() {
+    let out = lsofrs()
+        .args(["-n", "-P", "-w", "-R", "--pgid-show"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn json_with_pgid_ppid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-R", "--pgid-show", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(!parsed.is_empty());
+    assert!(parsed[0].get("ppid").is_some());
+    assert!(parsed[0].get("pgid").is_some());
+}
+
+// ── Help content validation ────────────────────────────────────────
+
+#[test]
+fn help_contains_all_sections() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("SELECTION"));
+    assert!(stdout.contains("NETWORK"));
+    assert!(stdout.contains("FILES & DIRECTORIES"));
+    assert!(stdout.contains("DISPLAY"));
+    assert!(stdout.contains("SYSTEM"));
+    assert!(stdout.contains("EXAMPLES"));
+    assert!(stdout.contains("INFO"));
+}
+
+#[test]
+fn help_contains_tree_option() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--tree"));
+}
+
+#[test]
+fn help_contains_lsofrs_banner() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("FILE DESCRIPTOR SCANNER"));
+    assert!(stdout.contains("Every open file tells a story"));
+}
+
 // ── Invalid args ────────────────────────────────────────────────────
 
 #[test]
 fn invalid_flag_exits_nonzero() {
     let out = lsofrs().arg("--nonexistent-flag-xyz").output().unwrap();
     assert!(!out.status.success());
+}
+
+#[test]
+fn invalid_short_flag_exits_nonzero() {
+    let out = lsofrs().arg("-Z").output().unwrap();
+    assert!(!out.status.success());
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+fn whoami() -> String {
+    String::from_utf8(
+        std::process::Command::new("whoami")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string()
 }

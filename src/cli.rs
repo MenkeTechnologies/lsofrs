@@ -420,4 +420,79 @@ mod tests {
         let (_, threshold) = args.leak_detect_params().unwrap();
         assert_eq!(threshold, 2);
     }
+
+    #[test]
+    fn parse_tree() {
+        let args = Args::parse_from(["lsofrs", "--tree"]);
+        assert!(args.tree);
+    }
+
+    #[test]
+    fn parse_tree_with_json() {
+        let args = Args::parse_from(["lsofrs", "--tree", "--json"]);
+        assert!(args.tree);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_tree_with_filters() {
+        let args = Args::parse_from(["lsofrs", "--tree", "-u", "root", "-c", "sshd"]);
+        assert!(args.tree);
+        assert_eq!(args.user.as_deref(), Some("root"));
+        assert_eq!(args.command.as_deref(), Some("sshd"));
+    }
+
+    #[test]
+    fn parse_no_flags_defaults() {
+        let args = Args::parse_from(["lsofrs"]);
+        assert!(!args.help);
+        assert!(!args.tree);
+        assert!(!args.json);
+        assert!(!args.terse);
+        assert!(!args.and_mode);
+        assert!(!args.nfs);
+        assert!(!args.unix_socket);
+        assert!(!args.monitor);
+        assert!(!args.summary);
+        assert!(!args.delta);
+        assert!(!args.show_pgid);
+        assert!(!args.show_ppid);
+        assert!(!args.no_host_lookup);
+        assert!(!args.no_port_lookup);
+        assert!(!args.suppress_warnings);
+        assert!(!args.nul_terminator);
+        assert!(args.pid.is_none());
+        assert!(args.user.is_none());
+        assert!(args.pgid.is_none());
+        assert!(args.command.is_none());
+        assert!(args.inet.is_none());
+        assert!(args.fd.is_none());
+        assert!(args.field_output.is_none());
+        assert!(args.repeat.is_none());
+        assert!(args.follow.is_none());
+        assert!(args.leak_detect.is_none());
+        assert!(args.files.is_empty());
+    }
+
+    #[test]
+    fn leak_detect_params_interval_only() {
+        let args = Args {
+            leak_detect: Some(Some("15".to_string())),
+            ..Args::parse_from(["lsofrs"])
+        };
+        let (interval, threshold) = args.leak_detect_params().unwrap();
+        assert_eq!(interval, 15);
+        assert_eq!(threshold, 3); // default
+    }
+
+    #[test]
+    fn leak_detect_params_invalid_input() {
+        let args = Args {
+            leak_detect: Some(Some("abc,xyz".to_string())),
+            ..Args::parse_from(["lsofrs"])
+        };
+        let (interval, threshold) = args.leak_detect_params().unwrap();
+        assert_eq!(interval, 5); // fallback
+        assert_eq!(threshold, 3); // fallback
+    }
 }
