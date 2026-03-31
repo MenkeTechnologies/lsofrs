@@ -185,12 +185,14 @@ impl Args {
 {green}   -W, --monitor     {reset}live full-screen refresh mode {magenta}(like top){reset}
 {green}   --summary, --stats {reset}aggregate FD summary: type breakdown, top processes, per-user
 {green}   --follow PID      {reset}watch a single process's FDs, highlight opens/closes
+{green}   --tree            {reset}process tree view with FD counts {magenta}(like pstree + lsof){reset}
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
 {green}   lsofrs -i :8080       {reset}list files using port 8080
 {green}   lsofrs -p 1234        {reset}list files opened by PID 1234
 {green}   lsofrs -u root        {reset}list files opened by root
+{green}   lsofrs --tree -u root {reset}process tree for root's processes
 {green}   lsofrs /var/log/syslog{reset}  list processes using this file
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 

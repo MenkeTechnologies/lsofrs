@@ -104,6 +104,19 @@ lsofrs -c '/nginx|apache/'       # regex command match
 
 ## // ADVANCED MODES
 
+### Process Tree (`--tree`)
+
+Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
+
+```bash
+lsofrs --tree                    # full process tree with FD stats
+lsofrs --tree -u root            # tree for root's processes
+lsofrs --tree -c Chrome          # tree for Chrome and helpers
+lsofrs --tree --json             # JSON tree with nested children
+```
+
+Each node shows: PID, user, FD count, command name, type breakdown (`[REG:12 IPv4:3 PIPE:2]`), and network connection count. Notable files (sockets, pipes) are listed inline under each process.
+
 ### Live Monitor (`--monitor` / `-W`)
 
 Full-screen alternate-buffer display like `top(1)`. Auto-refreshes with interactive controls.
@@ -144,6 +157,19 @@ lsofrs --summary                 # text report
 lsofrs --summary --json          # JSON report
 lsofrs --summary -i              # network-only summary
 ```
+
+### Process Tree (`--tree`)
+
+Visualize parent/child process relationships with FD counts, type breakdowns, and network connection summaries. Like `pstree` meets `lsof`.
+
+```bash
+lsofrs --tree                    # full process tree with FD counts
+lsofrs --tree -u root            # tree for root's processes
+lsofrs --tree -c Chrome          # tree for Chrome and helpers
+lsofrs --tree --json             # JSON tree with nested children
+```
+
+Each node shows PID, user, FD count, command, type breakdown (`[REG:12 IPv4:3 PIPE:2]`), and network connection count. Notable files (sockets, pipes) are listed inline beneath each process.
 
 ### Delta Highlighting (`--delta`)
 
@@ -190,7 +216,8 @@ src/
 ├── follow.rs    # Single-process FD tracking with status transitions
 ├── leak.rs      # Circular-buffer leak detector
 ├── delta.rs     # Iteration-diff engine for change highlighting
-└── summary.rs   # Aggregate statistics with bar charts
+├── summary.rs   # Aggregate statistics with bar charts
+└── tree.rs      # Process tree view with FD inheritance
 completions/
 └── _lsofrs      # Zsh completion function
 ```

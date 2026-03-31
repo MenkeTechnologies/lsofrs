@@ -395,6 +395,46 @@ fn combined_flags_no_crash() {
     assert!(out.status.success());
 }
 
+// ── Tree mode ───────────────────────────────────────────────────────
+
+#[test]
+fn tree_mode() {
+    let out = lsofrs().arg("--tree").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("PID"));
+    assert!(stdout.contains("FDs"));
+    assert!(stdout.contains("CMD"));
+}
+
+#[test]
+fn tree_mode_with_pid_filter() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--tree", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(&my_pid));
+}
+
+#[test]
+fn tree_mode_json() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("tree --json should produce valid JSON");
+    assert!(parsed.is_array());
+    let arr = parsed.as_array().unwrap();
+    assert!(!arr.is_empty());
+    assert!(arr[0].get("pid").is_some());
+    assert!(arr[0].get("fd_count").is_some());
+    assert!(arr[0].get("children").is_some());
+}
+
 // ── Invalid args ────────────────────────────────────────────────────
 
 #[test]

@@ -29,6 +29,7 @@ _arguments -C -s -S \
   '(-W --monitor)'{-W,--monitor}'[live full-screen monitor mode]' \
   '(--summary --stats)'{--summary,--stats}'[aggregate FD summary/statistics]' \
   '--follow[follow a single process FDs in real-time]:process ID:_pids' \
+  '--tree[process tree view with FD counts]' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 
