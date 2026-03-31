@@ -30,6 +30,7 @@ _arguments -C -s -S \
   '(--summary --stats)'{--summary,--stats}'[aggregate FD summary/statistics]' \
   '--follow[follow a single process FDs in real-time]:process ID:_pids' \
   '--tree[process tree view with FD counts]' \
+  '--top=-[live top-N processes by FD count]::count' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 

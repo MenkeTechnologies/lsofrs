@@ -10,6 +10,7 @@ mod leak;
 mod monitor;
 mod output;
 mod summary;
+mod top;
 mod tree;
 mod types;
 
@@ -39,6 +40,13 @@ fn main() {
     // Follow mode
     if let Some(pid) = args.follow {
         follow::run_follow(pid, interval, &theme);
+        return;
+    }
+
+    // Top mode
+    if let Some(ref top_n) = args.top {
+        let n = top_n.unwrap_or(20);
+        top::run_top(&filter, interval, &theme, n);
         return;
     }
 

@@ -104,6 +104,19 @@ lsofrs -c '/nginx|apache/'       # regex command match
 
 ## // ADVANCED MODES
 
+### Top-N Dashboard (`--top`)
+
+Live auto-refreshing dashboard of the top processes sorted by FD count. Like `iotop` for file descriptors — shows FD type distribution bars, delta tracking, and per-process breakdowns.
+
+```bash
+lsofrs --top                     # top 20 processes by FD count
+lsofrs --top 10                  # top 10 only
+lsofrs --top -r 5                # refresh every 5 seconds
+lsofrs --top -u root             # top FD consumers for root
+```
+
+**Columns**: PID, USER, FDs, DELTA (change since last refresh), REG, SOCK, PIPE, OTHER counts, color-coded distribution bar, COMMAND. Press `q` or `Esc` to quit.
+
 ### Process Tree (`--tree`)
 
 Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
@@ -217,7 +230,8 @@ src/
 ├── leak.rs      # Circular-buffer leak detector
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
-└── tree.rs      # Process tree view with FD inheritance
+├── tree.rs      # Process tree view with FD inheritance
+└── top.rs       # Live top-N FD dashboard with delta tracking
 completions/
 └── _lsofrs      # Zsh completion function
 ```

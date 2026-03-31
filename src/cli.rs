@@ -108,6 +108,10 @@ pub struct Args {
     #[arg(long = "tree")]
     pub tree: bool,
 
+    /// Live top-N processes by FD count
+    #[arg(long = "top")]
+    pub top: Option<Option<usize>>,
+
     /// Delta highlighting in repeat mode
     #[arg(long = "delta")]
     pub delta: bool,
@@ -186,6 +190,7 @@ impl Args {
 {green}   --summary, --stats {reset}aggregate FD summary: type breakdown, top processes, per-user
 {green}   --follow PID      {reset}watch a single process's FDs, highlight opens/closes
 {green}   --tree            {reset}process tree view with FD counts {magenta}(like pstree + lsof){reset}
+{green}   --top [N]         {reset}live top-N processes by FD count {magenta}(default: 20){reset}
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
