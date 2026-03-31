@@ -32,7 +32,7 @@ pub struct Args {
     #[arg(short = 'c', long = "command")]
     pub command: Option<String>,
 
-    /// Select internet connections [4|6|protocol[@host[:port]]]
+    /// Select internet connections `[4|6|protocol[@host[:port]]]`
     #[arg(short = 'i', num_args = 0..=1, default_missing_value = "")]
     pub inet: Option<String>,
 
@@ -100,7 +100,7 @@ pub struct Args {
     #[arg(long = "follow")]
     pub follow: Option<i32>,
 
-    /// FD leak detection [interval,threshold]
+    /// FD leak detection `[interval,threshold]`
     #[arg(long = "leak-detect")]
     pub leak_detect: Option<Option<String>>,
 
@@ -130,15 +130,15 @@ impl Args {
 
         println!(
             r#"
-{dcyan}  ██▓     ██████  ▒█████    █████▒{reset}
-{dcyan} ▓██▒   ▒██    ▒ ▒██▒  ██▒▓██   ▒ {reset}
-{dmagenta} ▒██░   ░ ▓██▄   ▒██░  ██▒▒████ ░ {reset}
-{dmagenta} ░██░     ▒   ██▒▒██   ██░░▓█▒  ░ {reset}
-{red} ░██░   ▒██████▒░░ ████▓▒░░▒█░    {reset}
-{red} ░▓     ▒ ▒▓▒ ▒ ░░ ▒░▒░▒░  ▒ ░   {reset}
-{dyellow}  ▒ ░   ░ ░▒  ░ ░  ░ ▒ ▒░  ░     {reset}
-{dyellow}  ▒ ░   ░  ░  ░  ░ ░ ░ ▒   ░ ░   {reset}
-{dyellow}  ░           ░      ░ ░          {reset}
+{dcyan}  ██▓     ██████  ▒█████    █████▒██████  ██████ {reset}
+{dcyan} ▓██▒   ▒██    ▒ ▒██▒  ██▒▓██   ▒██   ▒ ▒██    ▒{reset}
+{dmagenta} ▒██░   ░ ▓██▄   ▒██░  ██▒▒████ ░▓██▄    ░ ▓██▄  {reset}
+{dmagenta} ░██░     ▒   ██▒▒██   ██░░▓█▒  ░▒   ██▒  ▒   ██▒{reset}
+{red} ░██████▒▒██████▒▒░ ████▓▒░░▒█░  ▒██████▒▒██████▒▒{reset}
+{red} ░ ▒░▓  ░▒ ▒▓▒ ▒ ░░ ▒░▒░▒░  ▒ ░ ▒ ▒▓▒ ▒ ░ ▒▓▒ ▒ ░{reset}
+{dyellow}  ░ ▒  ░░ ░▒  ░ ░  ░ ▒ ▒░  ░   ░ ░▒  ░ ░ ░▒  ░ ░{reset}
+{dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
+{dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
 {cyan}  >> FILE DESCRIPTOR SCANNER v1.0 << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}

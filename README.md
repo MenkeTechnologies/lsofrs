@@ -215,15 +215,20 @@ Currently targets **macOS/Darwin** via the `libproc` API (`proc_listpids`, `proc
 
 ## // PERFORMANCE
 
-Benchmarked on macOS with ~550 processes / ~5800 open files:
+Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup):
 
-| Metric | lsofrs (Rust) | lsofng (C) | Speedup |
-|--------|--------------|------------|---------|
-| Wall clock | ~4.9s | ~16.0s | **3.3x** |
-| User CPU | 0.01s | 0.11s | **11x** |
-| System CPU | 0.03s | 0.11s | **3.7x** |
+| Tool | Mean | Range | User CPU | System CPU |
+|------|------|-------|----------|------------|
+| **lsofrs** (Rust) | **300 ms** | 94–742 ms | 18 ms | 41 ms |
+| lsof 4.91 (C) | 686 ms | 237–2208 ms | 104 ms | 97 ms |
+| lsofng (C) | 5607 ms | 5267–6270 ms | 105 ms | 112 ms |
 
-Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from more efficient memory allocation patterns and output formatting.
+| vs | Speedup |
+|----|---------|
+| lsof (system) | **2.3x** faster |
+| lsofng | **18.7x** faster |
+
+Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from more efficient memory allocation patterns, output formatting, and lower user/system CPU overhead (5.7x less user CPU than lsof, 2.4x less system CPU).
 
 ---
 
