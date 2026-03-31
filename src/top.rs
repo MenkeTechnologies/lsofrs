@@ -1,7 +1,6 @@
 //! Top-N mode — live-sorted processes by FD count, auto-refreshing dashboard
 
 use std::io::{self, Write};
-use std::thread;
 use std::time::Duration;
 
 use crossterm::{
@@ -41,12 +40,14 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
         let _ = terminal::enable_raw_mode();
     }
 
-    // Handle Ctrl-C
+    // Handle Ctrl-C (only in interactive mode)
     let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc_handler(move || {
-        r.store(false, std::sync::atomic::Ordering::SeqCst);
-    });
+    if use_alt {
+        let r = running.clone();
+        ctrlc_handler(move || {
+            r.store(false, std::sync::atomic::Ordering::SeqCst);
+        });
+    }
 
     while running.load(std::sync::atomic::Ordering::SeqCst) {
         iteration += 1;
@@ -112,21 +113,22 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
             n,
         );
 
-        // Check for 'q' key
-        if use_alt {
-            let deadline = std::time::Instant::now() + Duration::from_secs(interval);
-            while std::time::Instant::now() < deadline {
-                if crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false)
-                    && let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read()
-                    && (key.code == crossterm::event::KeyCode::Char('q')
-                        || key.code == crossterm::event::KeyCode::Esc)
-                {
-                    running.store(false, std::sync::atomic::Ordering::SeqCst);
-                    break;
-                }
+        // Non-TTY: single-shot, print once and exit
+        if !use_alt {
+            break;
+        }
+
+        // TTY: check for 'q' key during interval
+        let deadline = std::time::Instant::now() + Duration::from_secs(interval);
+        while std::time::Instant::now() < deadline {
+            if crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false)
+                && let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read()
+                && (key.code == crossterm::event::KeyCode::Char('q')
+                    || key.code == crossterm::event::KeyCode::Esc)
+            {
+                running.store(false, std::sync::atomic::Ordering::SeqCst);
+                break;
             }
-        } else {
-            thread::sleep(Duration::from_secs(interval));
         }
     }
 
@@ -228,49 +230,48 @@ fn render(
             _ => theme.dim(),
         };
 
-        // Distribution bar (20 chars wide)
+        // Distribution bar (20 chars visible width)
         let bar_width = 20;
         let total = e.fd_count.max(1);
         let reg_w = (e.reg_count * bar_width) / total;
         let sock_w = (e.sock_count * bar_width) / total;
         let pipe_w = (e.pipe_count * bar_width) / total;
         let other_w = bar_width.saturating_sub(reg_w + sock_w + pipe_w);
-        let bar = format!(
-            "{cyan}{reg}{green}{sock}{yellow}{pipe}{dim}{other}{reset}",
-            cyan = theme.cyan(),
-            reg = "█".repeat(reg_w),
-            green = theme.green(),
-            sock = "█".repeat(sock_w),
-            yellow = theme.yellow(),
-            pipe = "█".repeat(pipe_w),
-            dim = theme.dim(),
-            other = "░".repeat(other_w),
-            reset = theme.reset(),
-        );
+
+        let mut bar = String::new();
+        if reg_w > 0 {
+            bar.push_str(theme.cyan());
+            bar.push_str(&"█".repeat(reg_w));
+        }
+        if sock_w > 0 {
+            bar.push_str(theme.green());
+            bar.push_str(&"█".repeat(sock_w));
+        }
+        if pipe_w > 0 {
+            bar.push_str(theme.yellow());
+            bar.push_str(&"█".repeat(pipe_w));
+        }
+        if other_w > 0 {
+            bar.push_str(theme.dim());
+            bar.push_str(&"░".repeat(other_w));
+        }
+        bar.push_str(theme.reset());
 
         let alt = if i % 2 == 1 { theme.row_alt() } else { "" };
+        let r = theme.reset();
 
-        let _ = writeln!(
+        let _ = write!(out, "{alt}");
+        let _ = write!(out, "{}{:>7}{}  ", theme.magenta(), e.pid, r);
+        let _ = write!(out, "{}{:<8}{}  ", theme.yellow(), user_display, r);
+        let _ = write!(out, "{}{:>5}{}  ", theme.bold(), e.fd_count, r);
+        let _ = write!(out, "{}{:>6}{}  ", delta_color, delta_str, r);
+        let _ = write!(
             out,
-            "{alt}{mag}{pid:>7}{reset}  {yellow}{user:<8}{reset}  {bold}{fds:>5}{reset}  {dc}{delta:>6}{reset}  {reg:>4}  {sock:>4}  {pipe:>4}  {other:>5}  {bar}  {cmd_color}{cmd}{reset}",
-            alt = alt,
-            mag = theme.magenta(),
-            pid = e.pid,
-            reset = theme.reset(),
-            yellow = theme.yellow(),
-            user = user_display,
-            bold = theme.bold(),
-            fds = e.fd_count,
-            dc = delta_color,
-            delta = delta_str,
-            reg = e.reg_count,
-            sock = e.sock_count,
-            pipe = e.pipe_count,
-            other = e.other_count,
-            bar = bar,
-            cmd_color = theme.cyan(),
-            cmd = cmd,
+            "{:>4}  {:>4}  {:>4}  {:>5}  ",
+            e.reg_count, e.sock_count, e.pipe_count, e.other_count
         );
+        let _ = write!(out, "{bar}  ");
+        let _ = writeln!(out, "{}{}{}", theme.cyan(), cmd, r);
     }
 
     // Legend
