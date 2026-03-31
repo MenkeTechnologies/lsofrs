@@ -1,0 +1,217 @@
+```
+ ██▓      ██████  ▒█████    █████▒██████  ██████
+▓██▒    ▒██    ▒ ▒██▒  ██▒▓██   ▒██   ▒ ▒██    ▒
+▒██░    ░ ▓██▄   ▒██░  ██▒▒████ ░▓██▄    ░ ▓██▄
+▒██░      ▒   ██▒▒██   ██░░▓█▒  ░▒   ██▒  ▒   ██▒
+░██████▒▒██████▒▒░ ████▓▒░░▒█░  ▒██████▒▒██████▒▒
+░ ▒░▓  ░▒ ▒▓▒ ▒ ░░ ▒░▒░▒░  ▒ ░ ▒ ▒▓▒ ▒ ░ ▒▓▒ ▒ ░
+░ ░ ▒  ░░ ░▒  ░ ░  ░ ▒ ▒░  ░   ░ ░▒  ░ ░ ░▒  ░ ░
+  ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░
+    ░        ░        ░ ░           ░           ░
+```
+
+> *"Rewritten in Rust. Faster. Safer. The same cyberpunk soul."*
+
+---
+
+## // WHAT IS THIS
+
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v6.3.0
+
+A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
+
+If a process has a file descriptor, `lsofrs` sees it.
+
+---
+
+## // JACK IN — BUILD FROM SOURCE
+
+```bash
+cargo build --release
+sudo cp target/release/lsofrs /usr/local/sbin/
+```
+
+Or install directly:
+
+```bash
+cargo install --path .
+```
+
+---
+
+## // USAGE
+
+```bash
+lsofrs                           # list all open files
+lsofrs -p 1234                   # files for PID 1234
+lsofrs -c Chrome                 # files for Chrome processes
+lsofrs -u root                   # files for root user
+lsofrs -i                        # network connections only
+lsofrs -i :8080                  # who's listening on port 8080
+lsofrs /path/to/file             # who has this file open
+lsofrs -t -c nginx               # just PIDs (for scripting)
+```
+
+### Network Filters
+
+```bash
+lsofrs -i                        # all network files
+lsofrs -i 4                      # IPv4 only
+lsofrs -i 6                      # IPv6 only
+lsofrs -i TCP                    # TCP only
+lsofrs -i :443                   # port 443
+lsofrs -i TCP:443                # TCP port 443
+```
+
+### Output Formats
+
+```bash
+lsofrs                           # columnar (default, cyberpunk-themed on TTY)
+lsofrs --json                    # JSON array output
+lsofrs -J                        # JSON (short form)
+lsofrs -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)
+lsofrs -t                        # terse (PIDs only)
+```
+
+### Selection Combinators
+
+```bash
+lsofrs -p 1234,5678              # multiple PIDs
+lsofrs -u root,wizard            # multiple users
+lsofrs -p ^1234                  # exclude PID 1234
+lsofrs -u ^root                  # exclude root
+lsofrs -a -p 1234 -i             # AND: PID 1234 AND network
+lsofrs -d 0-10                   # FD range 0-10
+lsofrs -c '/nginx|apache/'       # regex command match
+```
+
+---
+
+## // ADVANCED MODES
+
+### Live Monitor (`--monitor` / `-W`)
+
+Full-screen alternate-buffer display like `top(1)`. Auto-refreshes with interactive controls.
+
+```bash
+lsofrs --monitor                 # full-screen monitor
+lsofrs -W -r 2                   # refresh every 2 seconds
+lsofrs -W -c Chrome              # monitor Chrome only
+```
+
+**Controls**: `s`=sort, `r`=reverse, `f`=filter, `p`=pause, `?`=help, `q`=quit
+
+### Follow Mode (`--follow PID`)
+
+Watch a single process's FDs in real-time. New opens highlighted `+NEW` in green, closes `-DEL` in red.
+
+```bash
+lsofrs --follow 1234             # watch PID 1234
+lsofrs --follow 1234 -r 2        # 2-second refresh
+```
+
+### FD Leak Detection (`--leak-detect`)
+
+Monitors per-process FD counts over time. Flags processes with monotonically increasing FD counts.
+
+```bash
+lsofrs --leak-detect             # default: 5s interval, 3 increase threshold
+lsofrs --leak-detect=10,5        # 10s interval, flag after 5 consecutive increases
+lsofrs --leak-detect -u wizard   # monitor only wizard's processes
+```
+
+### Summary / Statistics (`--summary`)
+
+Aggregate FD breakdown with bar charts, top processes, per-user totals.
+
+```bash
+lsofrs --summary                 # text report
+lsofrs --summary --json          # JSON report
+lsofrs --summary -i              # network-only summary
+```
+
+### Delta Highlighting (`--delta`)
+
+Color-code changes between repeat iterations. New FDs in green, gone in red.
+
+```bash
+lsofrs --delta -r 2              # repeat every 2s with change highlighting
+lsofrs --delta -r 1 -c myapp     # watch myapp changes
+```
+
+---
+
+## // CYBERPUNK THEME
+
+When output goes to a TTY, lsofrs activates cyberpunk-themed column headers and ANSI coloring:
+
+| Piped | TTY |
+|-------|-----|
+| COMMAND | PROCESS |
+| PID | PRC |
+| USER | H4XOR |
+| TYPE | CL4SS |
+| DEVICE | DEV/ICE |
+| SIZE/OFF | BYT3/0FF |
+| NODE | N0DE |
+| NAME | T4RGET |
+
+When piped or redirected, plain headers and no colors are used — safe for scripts.
+
+---
+
+## // ARCHITECTURE
+
+```
+src/
+├── main.rs      # CLI entry point, dispatch, repeat/leak-detect loops
+├── cli.rs       # clap argument definitions
+├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
+├── darwin.rs    # macOS libproc FFI — process/FD enumeration
+├── filter.rs    # Selection & filtering (PID, user, command, FD, network)
+├── output.rs    # Columnar & field output formatting, ANSI theming
+├── json.rs      # JSON serialization via serde
+├── monitor.rs   # Live full-screen mode (crossterm alternate screen)
+├── follow.rs    # Single-process FD tracking with status transitions
+├── leak.rs      # Circular-buffer leak detector
+├── delta.rs     # Iteration-diff engine for change highlighting
+└── summary.rs   # Aggregate statistics with bar charts
+```
+
+### Platform Support
+
+Currently targets **macOS/Darwin** via the `libproc` API (`proc_listpids`, `proc_pidinfo`, `proc_pidfdinfo`). The architecture is designed for dialect extension — Linux (`/proc` filesystem), FreeBSD, etc. can be added as platform-specific modules behind `#[cfg(target_os)]`.
+
+### Key Design Decisions
+
+- **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.
+- **Streaming output**: Processes are gathered, filtered, and printed in a single pass.
+- **crossterm for TUI**: Alternate screen buffer, raw mode, cursor control — no ncurses dependency.
+- **serde for JSON**: Derive-based serialization, no hand-rolled escaping.
+- **clap for CLI**: Derive-based argument parsing with full help generation.
+
+---
+
+## // PERFORMANCE
+
+Benchmarked on macOS with ~550 processes / ~5800 open files:
+
+| Metric | lsofrs (Rust) | lsofng (C) | Speedup |
+|--------|--------------|------------|---------|
+| Wall clock | ~4.9s | ~16.0s | **3.3x** |
+| User CPU | 0.01s | 0.11s | **11x** |
+| System CPU | 0.03s | 0.11s | **3.7x** |
+
+Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from more efficient memory allocation patterns and output formatting.
+
+---
+
+## // LICENSE
+
+MIT License — Jacob Menke
+
+---
+
+## // CREDITS
+
+Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng) by Jacob Menke, which itself is a modernized fork of the original [lsof](https://github.com/lsof-org/lsof) by Vic Abell.
