@@ -196,19 +196,6 @@ lsofrs --summary --json          # JSON report
 lsofrs --summary -i              # network-only summary
 ```
 
-### Process Tree (`--tree`)
-
-Visualize parent/child process relationships with FD counts, type breakdowns, and network connection summaries. Like `pstree` meets `lsof`.
-
-```bash
-lsofrs --tree                    # full process tree with FD counts
-lsofrs --tree -u root            # tree for root's processes
-lsofrs --tree -c Chrome          # tree for Chrome and helpers
-lsofrs --tree --json             # JSON tree with nested children
-```
-
-Each node shows PID, user, FD count, command, type breakdown (`[REG:12 IPv4:3 PIPE:2]`), and network connection count. Notable files (sockets, pipes) are listed inline beneath each process.
-
 ### Delta Highlighting (`--delta`)
 
 Color-code changes between repeat iterations. New FDs in green, gone in red.
