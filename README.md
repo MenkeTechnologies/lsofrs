@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v1.3.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v1.4.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
@@ -115,7 +115,20 @@ lsofrs --top -r 5                # refresh every 5 seconds
 lsofrs --top -u root             # top FD consumers for root
 ```
 
-**Columns**: PID, USER, FDs, DELTA (change since last refresh), REG, SOCK, PIPE, OTHER counts, color-coded distribution bar, COMMAND. Press `q` or `Esc` to quit.
+**Controls**:
+
+| Key | Action |
+|-----|--------|
+| `s` | Cycle sort column (FDs→PID→USER→REG→SOCK→PIPE→OTHER→DELTA→CMD) |
+| `r` | Reverse sort order |
+| `+`/`-` | Show more/fewer processes (±5) |
+| `1`-`9` | Set refresh interval (seconds) |
+| `<`/`>` | Fine-adjust refresh interval (±1s) |
+| `p` | Pause/resume data collection |
+| `b` | Toggle distribution bar column |
+| `d` | Toggle delta column |
+| `?`/`h` | Toggle help overlay |
+| `q`/`Esc`/`Ctrl-C` | Quit |
 
 ### Process Tree (`--tree`)
 
