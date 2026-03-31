@@ -6,6 +6,9 @@ authors = ["Jacob Menke"]
 description = "Modern, high-performance lsof implementation in Rust"
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/lsofrs"
+keywords = ["lsof", "process", "files", "sockets", "diagnostics"]
+categories = ["command-line-utilities", "os"]
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
