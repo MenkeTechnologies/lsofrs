@@ -278,7 +278,7 @@ fn draw_status_bar(buf: &mut Buffer, area: Rect, title: &str, state: &TuiState) 
         state.interval,
         state.iteration,
         pause_str,
-        state.theme.name.display_name(),
+        state.theme.display_name(),
     );
     set_str(buf, area.x, area.y, &status, bg_s, area.width);
 }
@@ -289,7 +289,8 @@ pub fn draw_help(buf: &mut Buffer, area: Rect, theme: &LsofTheme, mode_keys: Vec
         ("q / Esc", "quit"),
         ("p", "pause / resume"),
         ("h / ?", "toggle help"),
-        ("c", "cycle theme"),
+        ("c", "theme chooser"),
+        ("C", "theme editor"),
         ("1-9", "set refresh interval"),
         ("< / >", "adjust interval"),
     ];

@@ -1,6 +1,19 @@
 //! Persistent configuration — reads/writes ~/.lsofrs.conf (TOML)
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+
+/// Custom theme colors stored in config (6-color palette).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomThemeColors {
+    pub c1: u8,
+    pub c2: u8,
+    pub c3: u8,
+    pub c4: u8,
+    pub c5: u8,
+    pub c6: u8,
+}
 
 /// User preferences persisted to disk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -9,6 +22,10 @@ pub struct Prefs {
     pub theme: Option<String>,
     #[serde(default = "default_refresh")]
     pub refresh_rate: Option<u64>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub custom_themes: HashMap<String, CustomThemeColors>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_custom_theme: Option<String>,
 }
 
 fn default_refresh() -> Option<u64> {
@@ -20,6 +37,8 @@ impl Default for Prefs {
         Prefs {
             theme: None,
             refresh_rate: Some(1),
+            custom_themes: HashMap::new(),
+            active_custom_theme: None,
         }
     }
 }
@@ -71,6 +90,7 @@ mod tests {
         let p = Prefs {
             theme: Some("matrix".into()),
             refresh_rate: Some(3),
+            ..Default::default()
         };
         let s = toml::to_string_pretty(&p).unwrap();
         let p2: Prefs = toml::from_str(&s).unwrap();

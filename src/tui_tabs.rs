@@ -140,13 +140,23 @@ struct TabbedTui {
     show_theme_chooser: bool,
     theme_chooser_idx: usize,
     theme_before_chooser: usize, // to revert on Esc
+    // Theme editor modal
+    show_theme_editor: bool,
+    editor_slot: usize,     // which color slot is selected (0-5)
+    editor_colors: [u8; 6], // current palette values
+    editor_naming: bool,    // in naming mode
+    editor_name: String,    // custom theme name input
+    editor_cursor: usize,   // cursor position in name
+    // Custom themes loaded from config
+    custom_themes: std::collections::HashMap<String, config::CustomThemeColors>,
+    active_custom_theme: Option<String>,
     // Totals for status bar
     total_procs: usize,
     total_files: usize,
 }
 
 impl TabbedTui {
-    fn new(theme_idx: usize) -> Self {
+    fn new(theme_idx: usize, prefs: &config::Prefs) -> Self {
         Self {
             active: Tab::Top,
             top_mode: TopMode::new(20),
@@ -159,6 +169,14 @@ impl TabbedTui {
             show_theme_chooser: false,
             theme_chooser_idx: theme_idx,
             theme_before_chooser: theme_idx,
+            show_theme_editor: false,
+            editor_slot: 0,
+            editor_colors: [0; 6],
+            editor_naming: false,
+            editor_name: String::new(),
+            editor_cursor: 0,
+            custom_themes: prefs.custom_themes.clone(),
+            active_custom_theme: prefs.active_custom_theme.clone(),
             total_procs: 0,
             total_files: 0,
         }
@@ -535,7 +553,7 @@ fn draw_bottom_bar(
         " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {} \u{2502} #{}",
         total_procs,
         total_files,
-        state.theme.name.display_name(),
+        state.theme.display_name(),
         state.interval,
         running_str,
         state.iteration,
@@ -1033,6 +1051,43 @@ fn render_pipes(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PipeRow
     }
 }
 
+// ── Custom theme helpers ──────────────────────────────────────────────────────
+
+/// Get sorted list of custom theme names for deterministic ordering.
+fn sorted_custom_names(
+    custom_themes: &std::collections::HashMap<String, config::CustomThemeColors>,
+) -> Vec<String> {
+    let mut names: Vec<String> = custom_themes.keys().cloned().collect();
+    names.sort();
+    names
+}
+
+/// Apply a theme chooser selection (handles both built-in and custom themes).
+fn apply_chooser_selection(
+    idx: usize,
+    state: &mut TuiState,
+    active_custom: &mut Option<String>,
+    custom_themes: &std::collections::HashMap<String, config::CustomThemeColors>,
+    custom_names: &[String],
+) {
+    let builtin_count = ThemeName::ALL.len();
+    if idx < builtin_count {
+        state.theme_idx = idx;
+        state.theme = LsofTheme::from_name(ThemeName::ALL[idx]);
+        *active_custom = None;
+    } else {
+        let ci = idx - builtin_count;
+        if ci < custom_names.len() {
+            let name = &custom_names[ci];
+            if let Some(ct) = custom_themes.get(name) {
+                state.theme =
+                    LsofTheme::from_custom(name, ct.c1, ct.c2, ct.c3, ct.c4, ct.c5, ct.c6);
+                *active_custom = Some(name.clone());
+            }
+        }
+    }
+}
+
 // ── Theme chooser modal ──────────────────────────────────────────────────────
 
 /// Draw theme chooser as a centered modal overlay. Returns the rect used for hit-testing.
@@ -1042,8 +1097,10 @@ fn draw_theme_chooser(
     theme: &LsofTheme,
     chooser_idx: usize,
     current_theme_idx: usize,
+    custom_themes: &std::collections::HashMap<String, config::CustomThemeColors>,
 ) -> (u16, u16, u16, u16) {
-    let theme_count = ThemeName::ALL.len();
+    let custom_names = sorted_custom_names(custom_themes);
+    let theme_count = ThemeName::ALL.len() + custom_names.len();
     let bw = 50u16.min(area.width.saturating_sub(4));
     let bh = ((theme_count + 4) as u16).min(area.height.saturating_sub(2));
     let bg = theme.help_bg;
@@ -1085,6 +1142,7 @@ fn draw_theme_chooser(
         0
     };
 
+    let builtin_count = ThemeName::ALL.len();
     for i in 0..max_rows {
         let ti = scroll + i;
         if ti >= theme_count {
@@ -1095,8 +1153,6 @@ fn draw_theme_chooser(
             break;
         }
 
-        let name = ThemeName::ALL[ti];
-        let swatch = name.swatch_colors();
         let is_selected = ti == chooser_idx;
         let is_active = ti == current_theme_idx;
 
@@ -1108,29 +1164,218 @@ fn draw_theme_chooser(
             set_cell(buf, x, row_y, " ", Style::default().bg(row_bg));
         }
 
-        // Active marker
-        let marker = if is_active { "\u{25b8}" } else { " " }; // ▸
-        set_str(buf, cx, row_y, marker, text_s, 2);
+        if ti < builtin_count {
+            // Built-in theme
+            let name = ThemeName::ALL[ti];
+            let swatch = name.swatch_colors();
 
-        // Swatch blocks (6 colored blocks)
-        for (si, &color_idx) in swatch.iter().enumerate() {
-            let swatch_s = Style::default().fg(Color::Indexed(color_idx)).bg(row_bg);
-            set_str(buf, cx + 2 + si as u16, row_y, "\u{2588}", swatch_s, 1); // █
+            let marker = if is_active { "\u{25b8}" } else { " " }; // ▸
+            set_str(buf, cx, row_y, marker, text_s, 2);
+
+            for (si, &color_idx) in swatch.iter().enumerate() {
+                let swatch_s = Style::default().fg(Color::Indexed(color_idx)).bg(row_bg);
+                set_str(buf, cx + 2 + si as u16, row_y, "\u{2588}", swatch_s, 1);
+            }
+
+            let display = name.display_name();
+            set_str(
+                buf,
+                cx + 9,
+                row_y,
+                display,
+                text_s,
+                inner_w.saturating_sub(10),
+            );
+        } else {
+            // Custom theme
+            let ci = ti - builtin_count;
+            if ci < custom_names.len() {
+                let cname = &custom_names[ci];
+                if let Some(ct) = custom_themes.get(cname) {
+                    let swatch = [ct.c1, ct.c2, ct.c3, ct.c4, ct.c5, ct.c6];
+
+                    let marker = if is_active { "\u{2605}" } else { "\u{2606}" }; // ★ / ☆
+                    set_str(buf, cx, row_y, marker, text_s, 2);
+
+                    for (si, &color_idx) in swatch.iter().enumerate() {
+                        let swatch_s = Style::default().fg(Color::Indexed(color_idx)).bg(row_bg);
+                        set_str(buf, cx + 2 + si as u16, row_y, "\u{2588}", swatch_s, 1);
+                    }
+
+                    set_str(
+                        buf,
+                        cx + 9,
+                        row_y,
+                        cname,
+                        text_s,
+                        inner_w.saturating_sub(10),
+                    );
+                }
+            }
         }
-
-        // Theme name
-        let display = name.display_name();
-        set_str(
-            buf,
-            cx + 9,
-            row_y,
-            display,
-            text_s,
-            inner_w.saturating_sub(10),
-        );
     }
 
     (x0, y0 + 2, bw, max_rows as u16)
+}
+
+// ── Theme editor modal ───────────────────────────────────────────────────────
+
+/// Draw the theme editor as a centered modal overlay. Returns (x0, y0, bw, bh) for hit-testing.
+fn draw_theme_editor(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    tui: &TabbedTui,
+) -> (u16, u16, u16, u16) {
+    let bw = 56u16.min(area.width.saturating_sub(4));
+    let bh: u16 = if tui.editor_naming { 16 } else { 15 };
+    let bh = bh.min(area.height.saturating_sub(4));
+    let bg = theme.help_bg;
+    let bs = Style::default().fg(theme.help_border);
+    let bgs = Style::default().fg(Color::White).bg(bg);
+    let ts = Style::default()
+        .fg(theme.help_title)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD);
+    let hint_s = Style::default().fg(Color::Indexed(240)).bg(bg);
+    let sel_s = Style::default().fg(Color::White).bg(Color::Indexed(237));
+
+    let (x0, y0) = draw_box(buf, area, bw, bh, bg, bs);
+
+    // Title
+    let title = "THEME EDITOR";
+    let tlen = title.len() as u16;
+    set_str(
+        buf,
+        x0 + (bw.saturating_sub(tlen)) / 2,
+        y0 + 1,
+        title,
+        ts,
+        bw - 2,
+    );
+
+    // Color channel labels
+    let labels = ["primary", "accent", "c3", "c4", "c5", "c6"];
+    let colors = tui.editor_colors;
+
+    for (i, label) in labels.iter().enumerate() {
+        let row_y = y0 + 3 + i as u16;
+        if row_y >= y0 + bh - 2 {
+            break;
+        }
+        let is_sel = i == tui.editor_slot;
+
+        let row_style = if is_sel { sel_s } else { bgs };
+        if is_sel {
+            for x in x0 + 1..x0 + bw - 1 {
+                set_cell(buf, x, row_y, " ", sel_s);
+            }
+        }
+
+        let marker = if is_sel { "\u{25b8} " } else { "  " };
+        set_str(buf, x0 + 2, row_y, marker, row_style, 2);
+
+        let label_str = format!("{:<10}", label);
+        set_str(buf, x0 + 4, row_y, &label_str, row_style, 10);
+
+        let val_str = format!("{:>3}", colors[i]);
+        set_str(buf, x0 + 15, row_y, &val_str, row_style, 3);
+
+        // Color swatch
+        let swatch_s = Style::default().fg(Color::Indexed(colors[i])).bg(bg);
+        set_str(
+            buf,
+            x0 + 20,
+            row_y,
+            "\u{2588}\u{2588}\u{2588}\u{2588}\u{2588}",
+            swatch_s,
+            5,
+        );
+
+        // Arrow preview
+        let arrow_s = Style::default().fg(Color::Indexed(colors[i])).bg(bg);
+        set_str(
+            buf,
+            x0 + 26,
+            row_y,
+            " \u{25c0}\u{2500}\u{2500}\u{25b6}",
+            arrow_s,
+            5,
+        );
+    }
+
+    // Preview bar using the full palette
+    let preview_y = y0 + 10;
+    if preview_y < y0 + bh - 2 {
+        set_str(buf, x0 + 2, preview_y, "preview:", hint_s, 8);
+        let preview_w = (bw as usize).saturating_sub(13);
+        for j in 0..preview_w {
+            let frac = j as f64 / preview_w as f64;
+            let c = if frac < 0.20 {
+                Color::Indexed(colors[0])
+            } else if frac < 0.40 {
+                Color::Indexed(colors[1])
+            } else if frac < 0.55 {
+                Color::Indexed(colors[2])
+            } else if frac < 0.70 {
+                Color::Indexed(colors[3])
+            } else if frac < 0.85 {
+                Color::Indexed(colors[4])
+            } else {
+                Color::Indexed(colors[5])
+            };
+            set_cell(
+                buf,
+                x0 + 11 + j as u16,
+                preview_y,
+                "\u{2588}",
+                Style::default().fg(c).bg(bg),
+            );
+        }
+    }
+
+    // Naming prompt or keybind hints
+    if tui.editor_naming {
+        let name_y = y0 + 12;
+        if name_y < y0 + bh - 1 {
+            let input_s = Style::default()
+                .fg(Color::Indexed(48))
+                .bg(Color::Indexed(235));
+            set_str(buf, x0 + 2, name_y, "Theme name:", bgs, 11);
+            let name_display = format!("{}_", tui.editor_name);
+            set_str(buf, x0 + 14, name_y, &name_display, input_s, bw - 16);
+            set_str(
+                buf,
+                x0 + 2,
+                name_y + 1,
+                "Enter:save  Esc:back",
+                hint_s,
+                bw - 4,
+            );
+        }
+    } else {
+        let hint_y = y0 + 12;
+        if hint_y < y0 + bh - 1 {
+            set_str(
+                buf,
+                x0 + 2,
+                hint_y,
+                "j/k:select  h/l:\u{00b1}1  H/L:\u{00b1}10",
+                hint_s,
+                bw - 4,
+            );
+            set_str(
+                buf,
+                x0 + 2,
+                hint_y + 1,
+                "Enter/s:save  Esc/q:cancel",
+                hint_s,
+                bw - 4,
+            );
+        }
+    }
+
+    (x0, y0, bw, bh)
 }
 
 // ── Main entry point ──────────────────────────────────────────────────────────
@@ -1153,11 +1398,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = TuiState::new_pub(interval, theme.clone());
-    let mut tui = TabbedTui::new(state.theme_idx);
+    let prefs = config::load();
+    let mut tui = TabbedTui::new(state.theme_idx, &prefs);
     let mut running = true;
     let start_time = Instant::now();
-    // Track the theme chooser scroll region for mouse hit-testing
+    // Track modal regions for mouse hit-testing
     let mut chooser_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
+    let mut editor_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
 
     while running {
         if !state.paused {
@@ -1282,7 +1529,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     &state.theme,
                     tui.theme_chooser_idx,
                     state.theme_idx,
+                    &tui.custom_themes,
                 );
+            }
+
+            // Theme editor overlay (on top of everything)
+            if tui.show_theme_editor {
+                editor_rect = draw_theme_editor(frame.buffer_mut(), size, &state.theme, &tui);
             }
         });
 
@@ -1298,9 +1551,135 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
 
             match ev {
                 Event::Key(key) => {
+                    // Theme editor intercepts ALL keys when open
+                    if tui.show_theme_editor {
+                        if tui.editor_naming {
+                            match key.code {
+                                KeyCode::Enter => {
+                                    let name = tui.editor_name.trim().to_string();
+                                    if !name.is_empty() {
+                                        let c = tui.editor_colors;
+                                        tui.custom_themes.insert(
+                                            name.clone(),
+                                            config::CustomThemeColors {
+                                                c1: c[0],
+                                                c2: c[1],
+                                                c3: c[2],
+                                                c4: c[3],
+                                                c5: c[4],
+                                                c6: c[5],
+                                            },
+                                        );
+                                        tui.active_custom_theme = Some(name.clone());
+                                        state.theme = LsofTheme::from_custom(
+                                            &name, c[0], c[1], c[2], c[3], c[4], c[5],
+                                        );
+                                        let mut prefs = config::load();
+                                        prefs.custom_themes = tui.custom_themes.clone();
+                                        prefs.active_custom_theme = Some(name);
+                                        prefs.theme = state.theme.display_name().to_string().into();
+                                        config::save(&prefs);
+                                    }
+                                    tui.show_theme_editor = false;
+                                    tui.editor_naming = false;
+                                    tui.editor_name.clear();
+                                    tui.editor_cursor = 0;
+                                }
+                                KeyCode::Esc => {
+                                    tui.editor_naming = false;
+                                    tui.editor_name.clear();
+                                    tui.editor_cursor = 0;
+                                }
+                                KeyCode::Backspace => {
+                                    if tui.editor_cursor > 0 {
+                                        tui.editor_cursor -= 1;
+                                        tui.editor_name.remove(tui.editor_cursor);
+                                    }
+                                }
+                                KeyCode::Left => {
+                                    tui.editor_cursor = tui.editor_cursor.saturating_sub(1);
+                                }
+                                KeyCode::Right => {
+                                    tui.editor_cursor =
+                                        (tui.editor_cursor + 1).min(tui.editor_name.len());
+                                }
+                                KeyCode::Char(c) => {
+                                    if tui.editor_name.len() < 20 {
+                                        tui.editor_name.insert(tui.editor_cursor, c);
+                                        tui.editor_cursor += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('q') => {
+                                    tui.show_theme_editor = false;
+                                    // Restore original theme
+                                    if let Some(ref name) = tui.active_custom_theme {
+                                        if let Some(ct) = tui.custom_themes.get(name) {
+                                            state.theme = LsofTheme::from_custom(
+                                                name, ct.c1, ct.c2, ct.c3, ct.c4, ct.c5, ct.c6,
+                                            );
+                                        }
+                                    } else {
+                                        state.theme =
+                                            LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                    }
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    tui.editor_slot = (tui.editor_slot + 1).min(5);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    tui.editor_slot = tui.editor_slot.saturating_sub(1);
+                                }
+                                KeyCode::Char('l') | KeyCode::Right => {
+                                    tui.editor_colors[tui.editor_slot] =
+                                        tui.editor_colors[tui.editor_slot].wrapping_add(1);
+                                    let c = tui.editor_colors;
+                                    state.theme = LsofTheme::from_custom(
+                                        "editing", c[0], c[1], c[2], c[3], c[4], c[5],
+                                    );
+                                }
+                                KeyCode::Char('h') | KeyCode::Left => {
+                                    tui.editor_colors[tui.editor_slot] =
+                                        tui.editor_colors[tui.editor_slot].wrapping_sub(1);
+                                    let c = tui.editor_colors;
+                                    state.theme = LsofTheme::from_custom(
+                                        "editing", c[0], c[1], c[2], c[3], c[4], c[5],
+                                    );
+                                }
+                                KeyCode::Char('L') => {
+                                    tui.editor_colors[tui.editor_slot] =
+                                        tui.editor_colors[tui.editor_slot].wrapping_add(10);
+                                    let c = tui.editor_colors;
+                                    state.theme = LsofTheme::from_custom(
+                                        "editing", c[0], c[1], c[2], c[3], c[4], c[5],
+                                    );
+                                }
+                                KeyCode::Char('H') => {
+                                    tui.editor_colors[tui.editor_slot] =
+                                        tui.editor_colors[tui.editor_slot].wrapping_sub(10);
+                                    let c = tui.editor_colors;
+                                    state.theme = LsofTheme::from_custom(
+                                        "editing", c[0], c[1], c[2], c[3], c[4], c[5],
+                                    );
+                                }
+                                KeyCode::Enter | KeyCode::Char('s') | KeyCode::Char('S') => {
+                                    tui.editor_naming = true;
+                                    tui.editor_name.clear();
+                                    tui.editor_cursor = 0;
+                                }
+                                _ => {}
+                            }
+                        }
+                        break;
+                    }
+
                     // Theme chooser intercepts keys when open
                     if tui.show_theme_chooser {
-                        let theme_count = ThemeName::ALL.len();
+                        let custom_names = sorted_custom_names(&tui.custom_themes);
+                        let theme_count = ThemeName::ALL.len() + custom_names.len();
                         let mut chooser_changed = true;
                         match key.code {
                             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c') => {
@@ -1328,11 +1707,17 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                 tui.theme_chooser_idx = tui.theme_chooser_idx.saturating_sub(10);
                             }
                             KeyCode::Enter | KeyCode::Char(' ') => {
-                                state.theme_idx = tui.theme_chooser_idx;
-                                state.theme = LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                apply_chooser_selection(
+                                    tui.theme_chooser_idx,
+                                    &mut state,
+                                    &mut tui.active_custom_theme,
+                                    &tui.custom_themes,
+                                    &custom_names,
+                                );
                                 tui.show_theme_chooser = false;
                                 let mut prefs = config::load();
-                                prefs.theme = Some(state.theme.name.display_name().to_string());
+                                prefs.theme = Some(state.theme.display_name().to_string());
+                                prefs.active_custom_theme = tui.active_custom_theme.clone();
                                 config::save(&prefs);
                             }
                             _ => {
@@ -1342,8 +1727,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         if chooser_changed {
                             // Live-preview: apply theme as you navigate
                             if tui.show_theme_chooser && tui.theme_chooser_idx < theme_count {
-                                state.theme_idx = tui.theme_chooser_idx;
-                                state.theme = LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                apply_chooser_selection(
+                                    tui.theme_chooser_idx,
+                                    &mut state,
+                                    &mut tui.active_custom_theme,
+                                    &tui.custom_themes,
+                                    &custom_names,
+                                );
                             }
                             // Re-render immediately without re-gathering data
                             break;
@@ -1399,6 +1789,25 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             tui.theme_chooser_idx = state.theme_idx;
                             break;
                         }
+                        KeyCode::Char('C') => {
+                            // Open theme editor with current palette
+                            let palette = if let Some(ref cname) = tui.active_custom_theme {
+                                if let Some(ct) = tui.custom_themes.get(cname) {
+                                    [ct.c1, ct.c2, ct.c3, ct.c4, ct.c5, ct.c6]
+                                } else {
+                                    state.theme.name.swatch_colors()
+                                }
+                            } else {
+                                state.theme.name.swatch_colors()
+                            };
+                            tui.editor_colors = palette;
+                            tui.editor_slot = 0;
+                            tui.editor_naming = false;
+                            tui.editor_name.clear();
+                            tui.editor_cursor = 0;
+                            tui.show_theme_editor = true;
+                            break;
+                        }
                         KeyCode::Char(d @ '1'..='7') => {
                             let idx = (d as usize) - ('1' as usize);
                             if idx < Tab::ALL.len() {
@@ -1426,10 +1835,28 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         let x = mouse.column;
                         let y = mouse.row;
 
+                        // Theme editor click handling (takes priority when open)
+                        if tui.show_theme_editor {
+                            let (ex0, ey0, ew, eh) = editor_rect;
+                            if x >= ex0 && x < ex0 + ew && y >= ey0 && y < ey0 + eh {
+                                // Click on a color slot row
+                                let slot_y_start = ey0 + 3;
+                                if y >= slot_y_start && y < slot_y_start + 6 {
+                                    tui.editor_slot = (y - slot_y_start) as usize;
+                                }
+                            } else {
+                                // Click outside editor dismisses it
+                                tui.show_theme_editor = false;
+                            }
+                            break;
+                        }
+
                         // Theme chooser click handling (takes priority when open)
                         if tui.show_theme_chooser {
                             let (cx0, cy0, cw, ch) = chooser_rect;
                             if x >= cx0 && x < cx0 + cw && y >= cy0 && y < cy0 + ch {
+                                let custom_names = sorted_custom_names(&tui.custom_themes);
+                                let total_count = ThemeName::ALL.len() + custom_names.len();
                                 // Calculate scroll offset (same logic as draw)
                                 let max_rows = ch as usize;
                                 let scroll = if tui.theme_chooser_idx >= max_rows {
@@ -1438,14 +1865,19 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                     0
                                 };
                                 let clicked_idx = scroll + (y - cy0) as usize;
-                                if clicked_idx < ThemeName::ALL.len() {
+                                if clicked_idx < total_count {
                                     tui.theme_chooser_idx = clicked_idx;
-                                    state.theme_idx = clicked_idx;
-                                    state.theme =
-                                        LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                    apply_chooser_selection(
+                                        clicked_idx,
+                                        &mut state,
+                                        &mut tui.active_custom_theme,
+                                        &tui.custom_themes,
+                                        &custom_names,
+                                    );
                                     tui.show_theme_chooser = false;
                                     let mut prefs = config::load();
-                                    prefs.theme = Some(state.theme.name.display_name().to_string());
+                                    prefs.theme = Some(state.theme.display_name().to_string());
+                                    prefs.active_custom_theme = tui.active_custom_theme.clone();
                                     config::save(&prefs);
                                 }
                             } else {
@@ -1502,7 +1934,7 @@ mod tests {
 
     #[test]
     fn tabbed_tui_new() {
-        let tui = TabbedTui::new(0);
+        let tui = TabbedTui::new(0, &config::Prefs::default());
         assert_eq!(tui.active, Tab::Top);
         assert!(tui.port_rows.is_empty());
         assert!(tui.stale_rows.is_empty());
@@ -1600,7 +2032,7 @@ mod tests {
 
     #[test]
     fn help_keys_includes_tab_nav() {
-        let tui = TabbedTui::new(0);
+        let tui = TabbedTui::new(0, &config::Prefs::default());
         let keys = tui.help_keys();
         assert!(keys.iter().any(|(k, _)| *k == "Tab / Right"));
         assert!(keys.iter().any(|(k, _)| *k == "1-7"));
@@ -1608,7 +2040,7 @@ mod tests {
 
     #[test]
     fn help_keys_top_includes_sort() {
-        let mut tui = TabbedTui::new(0);
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
         tui.active = Tab::Top;
         let keys = tui.help_keys();
         assert!(keys.iter().any(|(k, _)| *k == "s"));
@@ -1710,7 +2142,14 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 80, 40);
         let mut buf = Buffer::empty(area);
-        draw_theme_chooser(&mut buf, area, &theme, 0, 0);
+        draw_theme_chooser(
+            &mut buf,
+            area,
+            &theme,
+            0,
+            0,
+            &std::collections::HashMap::new(),
+        );
     }
 
     #[test]
@@ -1718,7 +2157,14 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::Classic);
         let area = Rect::new(0, 0, 80, 40);
         let mut buf = Buffer::empty(area);
-        draw_theme_chooser(&mut buf, area, &theme, 15, 5);
+        draw_theme_chooser(
+            &mut buf,
+            area,
+            &theme,
+            15,
+            5,
+            &std::collections::HashMap::new(),
+        );
     }
 
     #[test]
@@ -1728,5 +2174,161 @@ mod tests {
         let area = Rect::new(0, 0, 80, 2);
         let mut buf = Buffer::empty(area);
         draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s");
+    }
+
+    #[test]
+    fn draw_theme_editor_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        draw_theme_editor(&mut buf, area, &theme, &tui);
+    }
+
+    #[test]
+    fn draw_theme_editor_naming_mode() {
+        let theme = LsofTheme::from_name(ThemeName::Classic);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.editor_naming = true;
+        tui.editor_name = "MyTheme".to_string();
+        draw_theme_editor(&mut buf, area, &theme, &tui);
+    }
+
+    #[test]
+    fn draw_theme_chooser_with_custom_themes() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 45);
+        let mut buf = Buffer::empty(area);
+        let mut custom = std::collections::HashMap::new();
+        custom.insert(
+            "MyCustom".to_string(),
+            config::CustomThemeColors {
+                c1: 100,
+                c2: 200,
+                c3: 150,
+                c4: 50,
+                c5: 75,
+                c6: 25,
+            },
+        );
+        draw_theme_chooser(&mut buf, area, &theme, 0, 0, &custom);
+    }
+
+    #[test]
+    fn sorted_custom_names_ordering() {
+        let mut custom = std::collections::HashMap::new();
+        custom.insert(
+            "Zebra".to_string(),
+            config::CustomThemeColors {
+                c1: 1,
+                c2: 2,
+                c3: 3,
+                c4: 4,
+                c5: 5,
+                c6: 6,
+            },
+        );
+        custom.insert(
+            "Alpha".to_string(),
+            config::CustomThemeColors {
+                c1: 10,
+                c2: 20,
+                c3: 30,
+                c4: 40,
+                c5: 50,
+                c6: 60,
+            },
+        );
+        let names = sorted_custom_names(&custom);
+        assert_eq!(names, vec!["Alpha", "Zebra"]);
+    }
+
+    #[test]
+    fn apply_chooser_builtin() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let mut state = TuiState::new_pub(1, theme);
+        let mut active = None;
+        let custom = std::collections::HashMap::new();
+        let names: Vec<String> = vec![];
+        apply_chooser_selection(5, &mut state, &mut active, &custom, &names);
+        assert_eq!(state.theme.name, ThemeName::ALL[5]);
+        assert!(active.is_none());
+    }
+
+    #[test]
+    fn apply_chooser_custom() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let mut state = TuiState::new_pub(1, theme);
+        let mut active = None;
+        let mut custom = std::collections::HashMap::new();
+        custom.insert(
+            "Test".to_string(),
+            config::CustomThemeColors {
+                c1: 100,
+                c2: 200,
+                c3: 150,
+                c4: 50,
+                c5: 75,
+                c6: 25,
+            },
+        );
+        let names = vec!["Test".to_string()];
+        let idx = ThemeName::ALL.len(); // first custom theme
+        apply_chooser_selection(idx, &mut state, &mut active, &custom, &names);
+        assert_eq!(active, Some("Test".to_string()));
+        assert_eq!(state.theme.custom_name.as_deref(), Some("Test"));
+    }
+
+    #[test]
+    fn custom_theme_from_custom() {
+        let t = LsofTheme::from_custom("MyTheme", 100, 200, 150, 50, 75, 25);
+        assert_eq!(t.custom_name.as_deref(), Some("MyTheme"));
+        assert_eq!(t.display_name(), "MyTheme");
+    }
+
+    #[test]
+    fn builtin_theme_display_name() {
+        let t = LsofTheme::from_name(ThemeName::Matrix);
+        assert_eq!(t.display_name(), "Matrix");
+        assert!(t.custom_name.is_none());
+    }
+
+    #[test]
+    fn prefs_custom_themes_roundtrip() {
+        let mut p = config::Prefs::default();
+        p.custom_themes.insert(
+            "TestTheme".to_string(),
+            config::CustomThemeColors {
+                c1: 10,
+                c2: 20,
+                c3: 30,
+                c4: 40,
+                c5: 50,
+                c6: 60,
+            },
+        );
+        p.active_custom_theme = Some("TestTheme".to_string());
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: config::Prefs = toml::from_str(&s).unwrap();
+        assert!(p2.custom_themes.contains_key("TestTheme"));
+        assert_eq!(p2.active_custom_theme, Some("TestTheme".to_string()));
+        let ct = &p2.custom_themes["TestTheme"];
+        assert_eq!(ct.c1, 10);
+        assert_eq!(ct.c6, 60);
+    }
+
+    #[test]
+    fn tabbed_tui_editor_fields() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        assert!(!tui.show_theme_editor);
+        assert_eq!(tui.editor_slot, 0);
+        assert_eq!(tui.editor_colors, [0; 6]);
+        assert!(!tui.editor_naming);
+        assert!(tui.editor_name.is_empty());
+        assert_eq!(tui.editor_cursor, 0);
+        assert!(tui.custom_themes.is_empty());
+        assert!(tui.active_custom_theme.is_none());
     }
 }

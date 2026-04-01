@@ -173,6 +173,8 @@ impl ThemeName {
 #[derive(Debug, Clone)]
 pub struct LsofTheme {
     pub name: ThemeName,
+    /// Display name for custom themes (None for built-in themes).
+    pub custom_name: Option<String>,
     // Header/title bar
     pub header_bg: Color,
     pub header_fg: Color,
@@ -248,10 +250,27 @@ impl LsofTheme {
         }
     }
 
+    /// Display name, using custom_name if set, otherwise the built-in ThemeName.
+    pub fn display_name(&self) -> &str {
+        if let Some(ref n) = self.custom_name {
+            n.as_str()
+        } else {
+            self.name.display_name()
+        }
+    }
+
+    /// Build a theme from a raw 6-color palette with a custom display name.
+    pub fn from_custom(custom_name: &str, c1: u8, c2: u8, c3: u8, c4: u8, c5: u8, c6: u8) -> Self {
+        let mut t = Self::from_palette(ThemeName::NeonSprawl, c1, c2, c3, c4, c5, c6);
+        t.custom_name = Some(custom_name.to_string());
+        t
+    }
+
     /// Build a theme from a 6-color palette (c1=primary, c2=accent, c3-c6=secondary).
     fn from_palette(name: ThemeName, c1: u8, c2: u8, c3: u8, c4: u8, c5: u8, c6: u8) -> Self {
         Self {
             name,
+            custom_name: None,
             header_bg: Color::Indexed(234),
             header_fg: Color::Indexed(c2),
             pid_fg: Color::Indexed(c1),
@@ -284,6 +303,7 @@ impl LsofTheme {
     fn neon_sprawl() -> Self {
         Self {
             name: ThemeName::NeonSprawl,
+            custom_name: None,
             header_bg: Color::Indexed(234),
             header_fg: Color::Indexed(255),
             pid_fg: Color::Indexed(201),  // magenta
@@ -316,6 +336,7 @@ impl LsofTheme {
     fn classic() -> Self {
         Self {
             name: ThemeName::Classic,
+            custom_name: None,
             header_bg: Color::Indexed(236),
             header_fg: Color::Indexed(255),
             pid_fg: Color::Indexed(252),
@@ -348,6 +369,7 @@ impl LsofTheme {
     fn solar_flare() -> Self {
         Self {
             name: ThemeName::SolarFlare,
+            custom_name: None,
             header_bg: Color::Indexed(52),
             header_fg: Color::Indexed(226),
             pid_fg: Color::Indexed(208),
@@ -380,6 +402,7 @@ impl LsofTheme {
     fn ice_breaker() -> Self {
         Self {
             name: ThemeName::IceBreaker,
+            custom_name: None,
             header_bg: Color::Indexed(17),
             header_fg: Color::Indexed(159),
             pid_fg: Color::Indexed(75),
@@ -412,6 +435,7 @@ impl LsofTheme {
     fn blade_runner() -> Self {
         Self {
             name: ThemeName::BladeRunner,
+            custom_name: None,
             header_bg: Color::Indexed(52),
             header_fg: Color::Indexed(208),
             pid_fg: Color::Indexed(208),
@@ -444,6 +468,7 @@ impl LsofTheme {
     fn synthwave() -> Self {
         Self {
             name: ThemeName::Synthwave,
+            custom_name: None,
             header_bg: Color::Indexed(53),
             header_fg: Color::Indexed(213),
             pid_fg: Color::Indexed(213),
@@ -476,6 +501,7 @@ impl LsofTheme {
     fn acid_rain() -> Self {
         Self {
             name: ThemeName::AcidRain,
+            custom_name: None,
             header_bg: Color::Indexed(22),
             header_fg: Color::Indexed(154),
             pid_fg: Color::Indexed(154),
@@ -508,6 +534,7 @@ impl LsofTheme {
     fn ghost_wire() -> Self {
         Self {
             name: ThemeName::GhostWire,
+            custom_name: None,
             header_bg: Color::Indexed(235),
             header_fg: Color::Indexed(253),
             pid_fg: Color::Indexed(146),
@@ -540,6 +567,7 @@ impl LsofTheme {
     fn red_sector() -> Self {
         Self {
             name: ThemeName::RedSector,
+            custom_name: None,
             header_bg: Color::Indexed(52),
             header_fg: Color::Indexed(196),
             pid_fg: Color::Indexed(196),
@@ -572,6 +600,7 @@ impl LsofTheme {
     fn deep_net() -> Self {
         Self {
             name: ThemeName::DeepNet,
+            custom_name: None,
             header_bg: Color::Indexed(17),
             header_fg: Color::Indexed(69),
             pid_fg: Color::Indexed(69),
@@ -604,6 +633,7 @@ impl LsofTheme {
     fn overlock() -> Self {
         Self {
             name: ThemeName::Overlock,
+            custom_name: None,
             header_bg: Color::Indexed(236),
             header_fg: Color::Indexed(37),
             pid_fg: Color::Indexed(37),
@@ -636,6 +666,7 @@ impl LsofTheme {
     fn matrix() -> Self {
         Self {
             name: ThemeName::Matrix,
+            custom_name: None,
             header_bg: Color::Indexed(22),
             header_fg: Color::Indexed(46),
             pid_fg: Color::Indexed(40),
