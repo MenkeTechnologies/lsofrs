@@ -147,18 +147,30 @@ impl TopMode {
                     Some(_) => "0 (stable)".to_string(),
                     None => "new".to_string(),
                 };
+                let pct = if self.total_fds > 0 {
+                    format!("{:.1}%", e.fd_count as f64 / self.total_fds as f64 * 100.0)
+                } else {
+                    "0%".into()
+                };
                 vec![
-                    ("PID".into(), e.pid.to_string()),
-                    ("User".into(), e.username()),
-                    ("Command".into(), e.command.clone()),
-                    ("Total FDs".into(), e.fd_count.to_string()),
-                    ("REG".into(), e.reg_count.to_string()),
-                    ("SOCK".into(), e.sock_count.to_string()),
-                    ("PIPE".into(), e.pipe_count.to_string()),
-                    ("OTHER".into(), e.other_count.to_string()),
-                    ("Delta".into(), delta_str),
-                    ("PPID".into(), e.ppid.to_string()),
-                    ("PGID".into(), e.pgid.to_string()),
+                    ("\u{25b6} Process".into(), e.command.clone()),
+                    ("  PID".into(), e.pid.to_string()),
+                    ("  PPID".into(), e.ppid.to_string()),
+                    ("  PGID".into(), e.pgid.to_string()),
+                    ("  User".into(), e.username()),
+                    ("  UID".into(), e.uid.to_string()),
+                    ("  Total FDs".into(), e.fd_count.to_string()),
+                    ("  % of system".into(), pct),
+                    ("  Rank".into(), format!("#{}", idx + 1)),
+                    ("  REG/DIR/CHR".into(), e.reg_count.to_string()),
+                    ("  SOCK/NET".into(), e.sock_count.to_string()),
+                    ("  PIPE".into(), e.pipe_count.to_string()),
+                    ("  OTHER".into(), e.other_count.to_string()),
+                    ("  Delta".into(), delta_str),
+                    ("".into(), String::new()),
+                    ("  Kill".into(), format!("kill {}", e.pid)),
+                    ("  Signal".into(), format!("kill -9 {}", e.pid)),
+                    ("  Copy".into(), "y to copy row".into()),
                 ]
             }
             None => vec![],

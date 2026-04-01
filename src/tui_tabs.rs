@@ -749,19 +749,39 @@ impl TabbedTui {
             }
             Tab::Tree => {
                 if let Some(r) = self.tree_rows.get(idx) {
+                    // Count children (rows with indent == r.indent+1 and same parent range)
+                    let children = self
+                        .tree_rows
+                        .iter()
+                        .skip(idx + 1)
+                        .take_while(|c| c.indent > r.indent)
+                        .filter(|c| c.indent == r.indent + 1)
+                        .count();
+                    let descendants = self
+                        .tree_rows
+                        .iter()
+                        .skip(idx + 1)
+                        .take_while(|c| c.indent > r.indent)
+                        .count();
                     vec![
                         ("\u{25b6} Process".into(), r.command.clone()),
                         ("  PID".into(), r.pid.to_string()),
                         ("  PPID".into(), r.ppid.to_string()),
                         ("  PGID".into(), r.pgid.to_string()),
                         ("  User".into(), r.user.clone()),
+                        ("  Tree depth".into(), r.indent.to_string()),
+                        ("  Children".into(), children.to_string()),
+                        ("  Descendants".into(), descendants.to_string()),
                         ("  Total FDs".into(), r.fd_count.to_string()),
                         ("  REG/DIR/CHR".into(), r.reg_count.to_string()),
                         ("  SOCK/NET".into(), r.sock_count.to_string()),
                         ("  PIPE".into(), r.pipe_count.to_string()),
                         ("  OTHER".into(), r.other_count.to_string()),
                         ("  Net Conns".into(), r.net_count.to_string()),
-                        ("  Depth".into(), r.indent.to_string()),
+                        ("".into(), String::new()),
+                        ("  Kill tree".into(), format!("kill -- -{}", r.pgid)),
+                        ("  Kill".into(), format!("kill {}", r.pid)),
+                        ("  Copy".into(), "y to copy row".into()),
                     ]
                 } else {
                     vec![]
@@ -777,8 +797,12 @@ impl TabbedTui {
                         ("  Processes".into(), r.processes.clone()),
                     ];
                     if !r.state_breakdown.is_empty() {
-                        lines.push(("States".into(), r.state_breakdown.clone()));
+                        lines.push(("  States".into(), r.state_breakdown.clone()));
                     }
+                    lines.push(("".into(), String::new()));
+                    lines.push(("  Resolve".into(), format!("dig {}", r.host)));
+                    lines.push(("  Ping".into(), format!("ping {}", r.host)));
+                    lines.push(("  Copy".into(), "y to copy row".into()));
                     lines
                 } else {
                     vec![]
@@ -786,11 +810,16 @@ impl TabbedTui {
             }
             Tab::PipeChain => {
                 if let Some(r) = self.pipe_rows.get(idx) {
-                    let mut lines =
-                        vec![("Type".into(), r.kind.clone()), ("ID".into(), r.id.clone())];
+                    let mut lines = vec![
+                        ("\u{25b6} IPC Connection".into(), r.kind.clone()),
+                        ("  ID".into(), r.id.clone()),
+                        ("  Endpoints".into(), r.endpoint_details.len().to_string()),
+                    ];
                     for (i, (pid, cmd, fd)) in r.endpoint_details.iter().enumerate() {
-                        lines.push((format!("EP {}", i + 1), format!("PID:{pid} {cmd} ({fd})")));
+                        lines.push((format!("  EP {}", i + 1), format!("PID:{pid} {cmd} ({fd})")));
                     }
+                    lines.push(("".into(), String::new()));
+                    lines.push(("  Copy".into(), "y to copy row".into()));
                     lines
                 } else {
                     vec![]
