@@ -3911,9 +3911,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         KeyCode::Char('T') => {
                             state.hover_tooltips = !state.hover_tooltips;
                             tui.set_status(if state.hover_tooltips {
-                                "Hover tooltips enabled"
+                                "Hover tooltips: on"
                             } else {
-                                "Hover tooltips disabled (right-click still works)"
+                                "Hover tooltips: off"
                             });
                             save_prefs(&state);
                             break;
