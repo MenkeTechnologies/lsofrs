@@ -142,6 +142,26 @@ lsofrs --watch /dev/null -r 2           # poll every 2 seconds
 
 Each event shows timestamp, open/close tag, PID, user, FD, and command. When piped, prints a single snapshot and exits.
 
+### Stale FDs (`--stale`)
+
+Find file descriptors pointing to deleted files — a common source of disk space leaks, zombie file handles, and security issues.
+
+```bash
+lsofrs --stale                   # find all deleted-file FDs
+lsofrs --stale -u www-data       # deleted files held by www-data
+lsofrs --stale --json            # JSON output
+```
+
+### Listening Ports (`--ports`)
+
+Quick "what's listening where" summary — like `ss -tlnp` but cross-platform (macOS + Linux).
+
+```bash
+lsofrs --ports                   # show all listening TCP/UDP ports
+lsofrs --ports --json            # JSON output
+lsofrs --ports -u root           # ports opened by root only
+```
+
 ### Process Tree (`--tree`)
 
 Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
@@ -245,7 +265,9 @@ src/
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
 ├── top.rs       # Live top-N FD dashboard with delta tracking
-└── watch.rs     # File watch — monitor opens/closes over time
+├── watch.rs     # File watch — monitor opens/closes over time
+├── stale.rs     # Stale FD finder — deleted files still held open
+└── ports.rs     # Listening ports summary (like ss -tlnp)
 completions/
 └── _lsofrs      # Zsh completion function
 ```

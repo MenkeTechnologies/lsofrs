@@ -120,6 +120,14 @@ pub struct Args {
     #[arg(long = "delta")]
     pub delta: bool,
 
+    /// Find FDs pointing to deleted files
+    #[arg(long = "stale")]
+    pub stale: bool,
+
+    /// Show listening ports summary
+    #[arg(long = "ports")]
+    pub ports: bool,
+
     /// Use NUL field terminator instead of NL
     #[arg(short = '0')]
     pub nul_terminator: bool,
@@ -196,6 +204,8 @@ impl Args {
 {green}   --tree            {reset}process tree view with FD counts {magenta}(like pstree + lsof){reset}
 {green}   --top [N]         {reset}live top-N processes by FD count {magenta}(default: 20){reset}
 {green}   --watch FILE      {reset}watch who opens/closes a file over time
+{green}   --stale            {reset}find FDs pointing to deleted files
+{green}   --ports            {reset}show listening ports summary {magenta}(like ss -tlnp){reset}
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
@@ -471,6 +481,8 @@ mod tests {
         assert!(!args.no_port_lookup);
         assert!(!args.suppress_warnings);
         assert!(!args.nul_terminator);
+        assert!(!args.stale);
+        assert!(!args.ports);
         assert!(args.pid.is_none());
         assert!(args.user.is_none());
         assert!(args.pgid.is_none());
@@ -482,6 +494,32 @@ mod tests {
         assert!(args.follow.is_none());
         assert!(args.leak_detect.is_none());
         assert!(args.files.is_empty());
+    }
+
+    #[test]
+    fn parse_stale() {
+        let args = Args::parse_from(["lsofrs", "--stale"]);
+        assert!(args.stale);
+    }
+
+    #[test]
+    fn parse_ports() {
+        let args = Args::parse_from(["lsofrs", "--ports"]);
+        assert!(args.ports);
+    }
+
+    #[test]
+    fn parse_stale_with_json() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--json"]);
+        assert!(args.stale);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_ports_with_json() {
+        let args = Args::parse_from(["lsofrs", "--ports", "--json"]);
+        assert!(args.ports);
+        assert!(args.json);
     }
 
     #[test]

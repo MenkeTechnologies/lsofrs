@@ -32,6 +32,8 @@ _arguments -C -s -S \
   '--tree[process tree view with FD counts]' \
   '--top=-[live top-N processes by FD count]::count' \
   '--watch[watch who opens/closes a file over time]:file:_files' \
+  '--stale[find FDs pointing to deleted files]' \
+  '--ports[show listening ports summary]' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 

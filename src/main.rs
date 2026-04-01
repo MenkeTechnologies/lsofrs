@@ -12,6 +12,8 @@ mod leak;
 mod linux;
 mod monitor;
 mod output;
+mod ports;
+mod stale;
 mod summary;
 mod top;
 mod tree;
@@ -80,6 +82,15 @@ fn main() {
 
     // Single-shot modes
     let procs = gather_and_filter(&filter);
+
+    if args.stale {
+        stale::print_stale(&procs, &theme, args.json);
+        return;
+    }
+    if args.ports {
+        ports::print_ports(&procs, &theme, args.json);
+        return;
+    }
 
     if args.tree {
         tree::print_tree(&procs, &theme, args.json);
