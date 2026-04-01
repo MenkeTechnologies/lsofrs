@@ -163,14 +163,15 @@ impl HoverState {
             .unwrap_or(false)
     }
 
-    /// Update position. Resets timer on any movement, clears right_click.
+    /// Update position. Cancels hover on any new position, clears right_click.
+    /// Caller must re-enable `since` for valid hover zones.
     fn move_to(&mut self, col: u16, row: u16) {
         let new_pos = (col, row);
         let old_pos = self.col.zip(self.row);
         if old_pos != Some(new_pos) {
             self.row = Some(row);
             self.col = Some(col);
-            self.since = Some(Instant::now());
+            self.since = None; // cancel tooltip immediately
             self.right_click = false;
         }
     }
@@ -4087,9 +4088,24 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             break;
                         }
                         MouseEventKind::Moved => {
+                            let old_pos = tui.hover.col.zip(tui.hover.row);
                             tui.hover.move_to(mouse.column, mouse.row);
-                            tui.tooltip.active = false; // dismiss all tooltips on move
-                            break; // re-render immediately
+                            tui.tooltip.active = false;
+                            let new_pos = (mouse.column, mouse.row);
+                            // Re-enable hover timer only for valid zones (storageshower pattern)
+                            if old_pos != Some(new_pos) {
+                                let y = mouse.row;
+                                let bdr = if state.show_border { 1u16 } else { 0 };
+                                let term_h = terminal.size().map(|s| s.height).unwrap_or(50);
+                                let is_valid = y == bdr // tab bar
+                                    || (y >= tui.content_area_y
+                                        && y < tui.content_area_y + tui.content_area_h) // content
+                                    || y >= term_h.saturating_sub(2 + bdr); // bottom bar
+                                if is_valid {
+                                    tui.hover.since = Some(Instant::now());
+                                }
+                            }
+                            break;
                         }
                         MouseEventKind::ScrollDown => {
                             if tui.show_theme_chooser {
@@ -4915,22 +4931,24 @@ mod tests {
     }
 
     #[test]
-    fn hover_state_move_resets_timer() {
+    fn hover_state_move_cancels_timer() {
         let mut h = HoverState::default();
         h.move_to(10, 5);
         assert_eq!(h.row, Some(5));
         assert_eq!(h.col, Some(10));
-        assert!(h.since.is_some()); // timer started
-        assert!(!h.ready()); // not ready yet (< 1s)
-        // Move to different position resets timer
-        let since1 = h.since;
+        assert!(h.since.is_none()); // cancelled — caller re-enables for valid zones
+        assert!(!h.ready());
+        // Simulate caller re-enabling for valid zone
+        h.since = Some(Instant::now());
+        // Move to different position cancels
         h.move_to(15, 5);
-        assert_ne!(h.since, since1); // timer reset
+        assert!(h.since.is_none()); // cancelled again
         assert_eq!(h.col, Some(15));
-        // Same exact position doesn't reset
-        let since2 = h.since;
+        // Same exact position doesn't cancel
+        let saved = Some(Instant::now());
+        h.since = saved;
         h.move_to(15, 5);
-        assert_eq!(h.since, since2); // unchanged
+        assert_eq!(h.since, saved); // unchanged
     }
 
     #[test]
