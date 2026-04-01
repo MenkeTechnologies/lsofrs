@@ -1005,13 +1005,19 @@ fn tui_flag_non_tty() {
 
 #[test]
 fn theme_flag_classic() {
-    let out = lsofrs().args(["--theme", "classic", "--summary"]).output().unwrap();
+    let out = lsofrs()
+        .args(["--theme", "classic", "--summary"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
 }
 
 #[test]
 fn theme_flag_matrix() {
-    let out = lsofrs().args(["--theme", "matrix", "--summary"]).output().unwrap();
+    let out = lsofrs()
+        .args(["--theme", "matrix", "--summary"])
+        .output()
+        .unwrap();
     assert!(out.status.success());
 }
 
@@ -1089,8 +1095,13 @@ fn terse_with_dir() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     for line in stdout.lines() {
-        if line.trim().is_empty() { continue; }
-        assert!(line.trim().parse::<i32>().is_ok(), "terse should be PID: '{line}'");
+        if line.trim().is_empty() {
+            continue;
+        }
+        assert!(
+            line.trim().parse::<i32>().is_ok(),
+            "terse should be PID: '{line}'"
+        );
     }
 }
 

@@ -143,4 +143,86 @@ mod tests {
         let p = Prefs::default();
         save(&p); // should not panic or write to disk
     }
+
+    #[test]
+    fn prefs_default_border_true() {
+        let p = Prefs::default();
+        assert!(p.show_border);
+    }
+
+    #[test]
+    fn prefs_default_no_custom_themes() {
+        let p = Prefs::default();
+        assert!(p.custom_themes.is_empty());
+        assert!(p.active_custom_theme.is_none());
+    }
+
+    #[test]
+    fn prefs_default_no_pinned() {
+        let p = Prefs::default();
+        assert!(p.pinned_pids.is_empty());
+    }
+
+    #[test]
+    fn prefs_default_not_frozen_or_compact() {
+        let p = Prefs::default();
+        assert!(!p.sort_frozen);
+        assert!(!p.compact_view);
+    }
+
+    #[test]
+    #[allow(clippy::field_reassign_with_default)]
+    fn prefs_roundtrip_all_fields() {
+        let mut ct = HashMap::new();
+        ct.insert(
+            "MyTheme".to_string(),
+            CustomThemeColors {
+                c1: 10,
+                c2: 20,
+                c3: 30,
+                c4: 40,
+                c5: 50,
+                c6: 60,
+            },
+        );
+        let p = Prefs {
+            theme: Some("ice-breaker".into()),
+            refresh_rate: Some(5),
+            show_border: false,
+            active_tab: Some(3),
+            pinned_pids: vec![100, 200],
+            sort_frozen: true,
+            compact_view: true,
+            custom_themes: ct,
+            active_custom_theme: Some("MyTheme".into()),
+        };
+
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+
+        assert_eq!(p2.theme.as_deref(), Some("ice-breaker"));
+        assert_eq!(p2.refresh_rate, Some(5));
+        assert!(!p2.show_border);
+        assert_eq!(p2.active_tab, Some(3));
+        assert_eq!(p2.pinned_pids, vec![100, 200]);
+        assert!(p2.sort_frozen);
+        assert!(p2.compact_view);
+        assert_eq!(p2.custom_themes.len(), 1);
+        let ct = &p2.custom_themes["MyTheme"];
+        assert_eq!(ct.c1, 10);
+        assert_eq!(ct.c6, 60);
+        assert_eq!(p2.active_custom_theme.as_deref(), Some("MyTheme"));
+    }
+
+    #[test]
+    fn prefs_skip_empty_fields_in_serialize() {
+        let p = Prefs::default();
+        let s = toml::to_string_pretty(&p).unwrap();
+        // Empty collections should not appear
+        assert!(!s.contains("pinned_pids"));
+        assert!(!s.contains("custom_themes"));
+        assert!(!s.contains("active_custom_theme"));
+        assert!(!s.contains("sort_frozen"));
+        assert!(!s.contains("compact_view"));
+    }
 }
