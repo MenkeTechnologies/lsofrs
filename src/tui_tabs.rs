@@ -145,21 +145,25 @@ struct HoverState {
     row: Option<u16>,
     col: Option<u16>,
     since: Option<Instant>,
+    right_click: bool,
 }
 
 impl HoverState {
-    /// Returns true when hover has been on the same row for >= 1s and < 4s.
-    /// Right-click tooltips bypass this (handled separately, no auto-hide).
+    /// Returns true when hover tooltip should be visible.
+    /// 1s delay before showing, 3s visible window (auto-hide at 4s) for non-right-click.
+    /// Right-click tooltips persist indefinitely (no auto-hide).
     fn ready(&self) -> bool {
         self.since
             .map(|t| {
                 let ms = t.elapsed().as_millis();
-                (1000..4000).contains(&ms)
+                let visible = ms >= 1000;
+                let expired = !self.right_click && ms >= 4000;
+                visible && !expired
             })
             .unwrap_or(false)
     }
 
-    /// Update position. Resets timer on any movement (matches iftoprs behavior).
+    /// Update position. Resets timer on any movement, clears right_click.
     fn move_to(&mut self, col: u16, row: u16) {
         let new_pos = (col, row);
         let old_pos = self.col.zip(self.row);
@@ -167,7 +171,16 @@ impl HoverState {
             self.row = Some(row);
             self.col = Some(col);
             self.since = Some(Instant::now());
+            self.right_click = false;
         }
+    }
+
+    /// Right-click: instant display by setting timestamp 2s in the past.
+    fn right_click_at(&mut self, col: u16, row: u16) {
+        self.row = Some(row);
+        self.col = Some(col);
+        self.since = Some(Instant::now() - Duration::from_secs(2));
+        self.right_click = true;
     }
 
     /// Clear hover state.
@@ -368,7 +381,13 @@ struct TabbedTui {
     frozen_order: Vec<FrozenKey>,
     // Compact view toggle
     compact_view: bool,
-    // Cached elapsed string for bottom bar tooltip
+    // Bottom bar segment x-ranges: (start_x, end_x, segment_name)
+    bar_segments: Vec<(u16, u16, String)>,
+    // Cached file-type breakdown for bottom-bar tooltip
+    file_type_counts: Vec<(String, usize)>,
+    // Cached listening/established counts for net tooltip
+    total_listening: usize,
+    total_established: usize,
 }
 
 impl TabbedTui {
@@ -413,6 +432,10 @@ impl TabbedTui {
             sort_frozen: prefs.sort_frozen,
             frozen_order: Vec::new(),
             compact_view: prefs.compact_view,
+            bar_segments: Vec::new(),
+            file_type_counts: Vec::new(),
+            total_listening: 0,
+            total_established: 0,
         }
     }
 
@@ -802,6 +825,126 @@ impl TabbedTui {
         lines
     }
 
+    /// Find which bottom-bar segment the given x column falls in.
+    fn bar_segment_at(&self, col: u16) -> Option<&str> {
+        for (start, end, name) in &self.bar_segments {
+            if col >= *start && col < *end {
+                return Some(name.as_str());
+            }
+        }
+        None
+    }
+
+    /// Per-segment tooltip for the bottom bar, matching iftoprs pattern.
+    fn bottom_segment_tooltip(&self, segment: &str, state: &TuiState) -> Vec<(String, String)> {
+        match segment {
+            "procs" => {
+                let mut lines = vec![("\u{25b6} Processes".into(), self.total_procs.to_string())];
+                let top5 = self.top_mode.top_n_by_fds(5);
+                if !top5.is_empty() {
+                    lines.push(("  Top by FDs".into(), String::new()));
+                    for (cmd, pid, fds) in &top5 {
+                        let label = if cmd.len() > 16 { &cmd[..16] } else { cmd };
+                        lines.push((format!("  {label}"), format!("PID:{pid} FDs:{fds}")));
+                    }
+                }
+                let users = self.top_mode.user_breakdown();
+                if !users.is_empty() {
+                    lines.push(("  Users".into(), String::new()));
+                    for (user, count) in users.iter().take(5) {
+                        lines.push((format!("  {user}"), format!("{count} procs")));
+                    }
+                }
+                lines
+            }
+            "files" => {
+                let mut lines = vec![("\u{25b6} Open Files".into(), self.total_files.to_string())];
+                for (ft, count) in &self.file_type_counts {
+                    lines.push((format!("  {ft}"), count.to_string()));
+                }
+                lines
+            }
+            "net" => {
+                vec![
+                    ("\u{25b6} Network".into(), String::new()),
+                    ("  TCP".into(), self.total_tcp.to_string()),
+                    ("  UDP".into(), self.total_udp.to_string()),
+                    ("  Unix".into(), self.total_unix.to_string()),
+                    ("  Pipe".into(), self.total_pipes.to_string()),
+                    ("  Listening".into(), self.total_listening.to_string()),
+                    ("  Established".into(), self.total_established.to_string()),
+                ]
+            }
+            "interval" => {
+                vec![
+                    ("\u{25b6} Interval".into(), format!("{}s", state.interval)),
+                    ("  Change".into(), "1-9 or </> keys".to_string()),
+                ]
+            }
+            "status" => {
+                vec![
+                    (
+                        "\u{25b6} Status".into(),
+                        if state.paused { "paused" } else { "running" }.to_string(),
+                    ),
+                    ("  Toggle".into(), "p key".to_string()),
+                ]
+            }
+            "filter" => {
+                let mut lines = vec![(
+                    "\u{25b6} Filter".into(),
+                    self.screen_filter.as_deref().unwrap_or("none").to_string(),
+                )];
+                lines.push(("  Matched".into(), format!("{} procs", self.total_procs)));
+                lines.push(("  Edit".into(), "/ key".to_string()));
+                lines
+            }
+            "frozen" => {
+                vec![
+                    ("\u{25b6} Frozen".into(), "sort order locked".to_string()),
+                    ("  Toggle".into(), "F key".to_string()),
+                ]
+            }
+            "compact" => {
+                vec![
+                    ("\u{25b6} Compact".into(), "compact view active".to_string()),
+                    ("  Toggle".into(), "o key".to_string()),
+                ]
+            }
+            "pinned" => {
+                let mut lines = vec![(
+                    "\u{25b6} Pinned".into(),
+                    format!("{} PIDs", self.pinned.len()),
+                )];
+                let mut pids: Vec<i32> = self.pinned.iter().copied().collect();
+                pids.sort();
+                for pid in pids.iter().take(10) {
+                    lines.push(("  PID".into(), pid.to_string()));
+                }
+                if pids.len() > 10 {
+                    lines.push(("  ...".into(), format!("+{} more", pids.len() - 10)));
+                }
+                lines
+            }
+            "time" => {
+                let now = chrono::Local::now();
+                vec![
+                    (
+                        "\u{25b6} Time".into(),
+                        now.format("%Y-%m-%d %H:%M:%S").to_string(),
+                    ),
+                    ("  Timezone".into(), now.format("%Z").to_string()),
+                    ("  Platform".into(), std::env::consts::OS.to_string()),
+                    (
+                        "  Version".into(),
+                        format!("v{}", env!("CARGO_PKG_VERSION")),
+                    ),
+                ]
+            }
+            _ => self.build_bottom_tooltip(state, ""),
+        }
+    }
+
     /// Copy selected row info to clipboard.
     fn copy_selected(&mut self) {
         let idx = match self.selected() {
@@ -1009,13 +1152,22 @@ impl TabbedTui {
         self.total_udp = 0;
         self.total_unix = 0;
         self.total_pipes = 0;
+        self.total_listening = 0;
+        self.total_established = 0;
+        let mut ft_map: HashMap<String, usize> = HashMap::new();
         for p in &procs {
             for f in &p.files {
+                *ft_map.entry(f.file_type.as_str().to_string()).or_default() += 1;
                 match f.file_type {
                     FileType::IPv4 | FileType::IPv6 => {
                         if let Some(ref si) = f.socket_info {
                             if si.protocol == "TCP" {
                                 self.total_tcp += 1;
+                                if matches!(si.tcp_state, Some(TcpState::Listen)) {
+                                    self.total_listening += 1;
+                                } else if matches!(si.tcp_state, Some(TcpState::Established)) {
+                                    self.total_established += 1;
+                                }
                             } else if si.protocol == "UDP" {
                                 self.total_udp += 1;
                             }
@@ -1027,6 +1179,9 @@ impl TabbedTui {
                 }
             }
         }
+        let mut ft_pairs: Vec<(String, usize)> = ft_map.into_iter().collect();
+        ft_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        self.file_type_counts = ft_pairs;
 
         // All tabs share the same gathered process list — no redundant gathering
         self.top_mode.update_from_procs(&procs);
@@ -1491,10 +1646,11 @@ fn draw_bottom_bar(
     sort_frozen: bool,
     compact_view: bool,
     pin_count: usize,
-) {
+) -> Vec<(u16, u16, String)> {
     let t = &state.theme;
     let dim_s = Style::default().fg(t.dim_fg);
     let bar_s = Style::default().fg(t.dim_fg).bg(t.row_alt_bg);
+    let sep_char = " \u{2502} ";
 
     // Separator line (row h-2)
     let sep_y = area.y;
@@ -1507,37 +1663,83 @@ fn draw_bottom_bar(
     for x in area.x..area.x + area.width {
         set_cell(buf, x, info_y, " ", bar_s);
     }
-    let running_str = if state.paused { "paused" } else { "running" };
-    let mut status = format!(
-        " procs:{} \u{2502} files:{} \u{2502} tcp:{} udp:{} unix:{} pipe:{} \u{2502} {}s \u{2502} {}",
-        total_procs,
-        total_files,
-        total_tcp,
-        total_udp,
-        total_unix,
-        total_pipes,
-        state.interval,
-        running_str,
+
+    let mut segments: Vec<(u16, u16, String)> = Vec::new();
+    let mut cx = area.x + 1; // start after leading space
+
+    // Helper: write a segment text, record range, advance cursor
+    macro_rules! seg {
+        ($name:expr, $text:expr) => {{
+            let text: &str = &$text;
+            let start = cx;
+            set_str(
+                buf,
+                cx,
+                info_y,
+                text,
+                bar_s,
+                area.width.saturating_sub(cx - area.x),
+            );
+            cx += text.len() as u16;
+            segments.push((start, cx, $name.to_string()));
+        }};
+    }
+    macro_rules! sep {
+        () => {{
+            set_str(
+                buf,
+                cx,
+                info_y,
+                sep_char,
+                bar_s,
+                area.width.saturating_sub(cx - area.x),
+            );
+            cx += sep_char.len() as u16;
+        }};
+    }
+
+    seg!("procs", format!("procs:{}", total_procs));
+    sep!();
+    seg!("files", format!("files:{}", total_files));
+    sep!();
+    seg!(
+        "net",
+        format!(
+            "tcp:{} udp:{} unix:{} pipe:{}",
+            total_tcp, total_udp, total_unix, total_pipes
+        )
     );
+    sep!();
+    seg!("interval", format!("{}s", state.interval));
+    sep!();
+    let running_str = if state.paused { "paused" } else { "running" };
+    seg!("status", running_str);
+
     if let Some(f) = screen_filter {
-        status.push_str(&format!(" \u{2502} filter:{}", f));
+        sep!();
+        seg!("filter", format!("filter:{}", f));
     }
     if sort_frozen {
-        status.push_str(" \u{2502} frozen");
+        sep!();
+        seg!("frozen", "frozen");
     }
     if compact_view {
-        status.push_str(" \u{2502} compact");
+        sep!();
+        seg!("compact", "compact");
     }
     if pin_count > 0 {
-        status.push_str(&format!(" \u{2502} \u{2605}{}", pin_count));
+        sep!();
+        seg!("pinned", format!("\u{2605}{}", pin_count));
     }
-    set_str(buf, area.x, info_y, &status, bar_s, area.width);
 
     // Right-aligned date/time
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     let ts = format!(" {now} ");
     let tx = area.x + area.width.saturating_sub(ts.len() as u16);
     set_str(buf, tx, info_y, &ts, bar_s, ts.len() as u16);
+    segments.push((tx, tx + ts.len() as u16, "time".to_string()));
+
+    segments
 }
 
 // ── Simple tab renderers ──────────────────────────────────────────────────────
@@ -2921,7 +3123,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
 
             // Bottom 2 rows: separator + status
             if h > 3 + margin * 2 {
-                draw_bottom_bar(
+                tui.bar_segments = draw_bottom_bar(
                     frame.buffer_mut(),
                     Rect {
                         x: inner_x,
@@ -2975,9 +3177,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 draw_tooltip(frame.buffer_mut(), size, &state.theme, &tui.tooltip);
             }
 
-            // Hover tooltip overlay (auto after 1s)
+            // Hover tooltip overlay (auto after 1s, suppressed when modals active)
             if tui.hover.ready()
                 && !tui.tooltip.active
+                && !tui.show_theme_chooser
+                && !tui.show_theme_editor
+                && !tui.filter_state.active
+                && !state.show_help
                 && let Some(hover_row) = tui.hover.row
             {
                 let hover_col = tui.hover.col.unwrap_or(0);
@@ -3042,8 +3248,12 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                     }
                 } else if hover_row >= h.saturating_sub(2 + hover_margin) {
-                    // Hover on bottom bar → verbose system tooltip
-                    let lines = tui.build_bottom_tooltip(&state, "");
+                    // Hover on bottom bar → per-segment tooltip
+                    let lines = if let Some(seg) = tui.bar_segment_at(hover_col) {
+                        tui.bottom_segment_tooltip(seg, &state)
+                    } else {
+                        tui.build_bottom_tooltip(&state, "")
+                    };
                     if !lines.is_empty() {
                         let hover_tt = Tooltip {
                             active: true,
@@ -3653,6 +3863,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             let y = mouse.row;
                             let margin = if state.show_border { 1u16 } else { 0 };
 
+                            // Set hover right-click state (instant display, no auto-hide)
+                            tui.hover.right_click_at(x, y);
+
                             // Right-click on tab bar → tab description tooltip
                             if y == margin {
                                 if let Some(tab) = tab_at_x(x) {
@@ -3671,7 +3884,11 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             let h = terminal.get_frame().area().height;
                             let bottom_y = h.saturating_sub(2 + margin);
                             if y >= bottom_y && y < h.saturating_sub(margin) {
-                                let lines = tui.build_bottom_tooltip(&state, "");
+                                let lines = if let Some(seg) = tui.bar_segment_at(x) {
+                                    tui.bottom_segment_tooltip(seg, &state)
+                                } else {
+                                    tui.build_bottom_tooltip(&state, "")
+                                };
                                 tui.tooltip = Tooltip {
                                     active: true,
                                     x,
@@ -4606,6 +4823,37 @@ mod tests {
     }
 
     #[test]
+    fn hover_state_right_click_instant() {
+        let mut h = HoverState::default();
+        h.right_click_at(10, 5);
+        assert!(h.right_click);
+        assert!(h.ready()); // instant (2s in past)
+        assert_eq!(h.row, Some(5));
+        assert_eq!(h.col, Some(10));
+    }
+
+    #[test]
+    fn hover_state_right_click_no_auto_hide() {
+        let h = HoverState {
+            row: Some(5),
+            col: Some(10),
+            since: Some(Instant::now() - Duration::from_millis(10000)),
+            right_click: true,
+        };
+        // Right-click tooltips never auto-hide
+        assert!(h.ready());
+    }
+
+    #[test]
+    fn hover_state_move_clears_right_click() {
+        let mut h = HoverState::default();
+        h.right_click_at(10, 5);
+        assert!(h.right_click);
+        h.move_to(15, 5);
+        assert!(!h.right_click); // cleared on move
+    }
+
+    #[test]
     fn tabbed_tui_new_features() {
         let tui = TabbedTui::new(0, &config::Prefs::default());
         assert!(tui.pinned.is_empty());
@@ -4777,6 +5025,90 @@ mod tests {
         }
         assert!(line.contains("frozen"));
         assert!(line.contains("compact"));
+    }
+
+    #[test]
+    fn draw_bottom_bar_returns_segments() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        let area = Rect::new(0, 0, 120, 2);
+        let mut buf = Buffer::empty(area);
+        let segs = draw_bottom_bar(
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &None, false, false, 0,
+        );
+        let names: Vec<&str> = segs.iter().map(|(_, _, n)| n.as_str()).collect();
+        assert!(names.contains(&"procs"));
+        assert!(names.contains(&"files"));
+        assert!(names.contains(&"net"));
+        assert!(names.contains(&"interval"));
+        assert!(names.contains(&"status"));
+        assert!(names.contains(&"time"));
+        // Ranges should be non-overlapping and ordered
+        for w in segs.windows(2) {
+            assert!(
+                w[0].1 <= w[1].0,
+                "segments overlap: {:?} vs {:?}",
+                w[0],
+                w[1]
+            );
+        }
+    }
+
+    #[test]
+    fn draw_bottom_bar_segments_with_extras() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        let area = Rect::new(0, 0, 160, 2);
+        let mut buf = Buffer::empty(area);
+        let filter = Some("nginx".to_string());
+        let segs = draw_bottom_bar(
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &filter, true, true, 3,
+        );
+        let names: Vec<&str> = segs.iter().map(|(_, _, n)| n.as_str()).collect();
+        assert!(names.contains(&"filter"));
+        assert!(names.contains(&"frozen"));
+        assert!(names.contains(&"compact"));
+        assert!(names.contains(&"pinned"));
+    }
+
+    #[test]
+    fn bottom_segment_tooltip_all_segments() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        for seg in &[
+            "procs", "files", "net", "interval", "status", "filter", "frozen", "compact", "pinned",
+            "time",
+        ] {
+            let lines = tui.bottom_segment_tooltip(seg, &state);
+            assert!(
+                !lines.is_empty(),
+                "segment '{}' should produce tooltip",
+                seg
+            );
+            // First line should have ▶ header
+            assert!(
+                lines[0].0.contains('\u{25b6}'),
+                "segment '{}' tooltip should have ▶ header, got '{}'",
+                seg,
+                lines[0].0
+            );
+        }
+    }
+
+    #[test]
+    fn bar_segment_at_hit_test() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.bar_segments = vec![
+            (1, 10, "procs".into()),
+            (13, 22, "files".into()),
+            (25, 60, "net".into()),
+        ];
+        assert_eq!(tui.bar_segment_at(5), Some("procs"));
+        assert_eq!(tui.bar_segment_at(15), Some("files"));
+        assert_eq!(tui.bar_segment_at(30), Some("net"));
+        assert_eq!(tui.bar_segment_at(0), None);
+        assert_eq!(tui.bar_segment_at(11), None);
     }
 
     #[test]
