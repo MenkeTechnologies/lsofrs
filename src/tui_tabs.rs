@@ -368,7 +368,6 @@ struct TabbedTui {
     // Compact view toggle
     compact_view: bool,
     // Cached elapsed string for bottom bar tooltip
-    elapsed_str: String,
 }
 
 impl TabbedTui {
@@ -413,7 +412,6 @@ impl TabbedTui {
             sort_frozen: prefs.sort_frozen,
             frozen_order: Vec::new(),
             compact_view: prefs.compact_view,
-            elapsed_str: String::new(),
         }
     }
 
@@ -1478,7 +1476,6 @@ fn draw_bottom_bar(
     total_udp: usize,
     total_unix: usize,
     total_pipes: usize,
-    elapsed: &str,
     screen_filter: &Option<String>,
     sort_frozen: bool,
     compact_view: bool,
@@ -1525,12 +1522,11 @@ fn draw_bottom_bar(
     }
     set_str(buf, area.x, info_y, &status, bar_s, area.width);
 
-    // Right-aligned elapsed time
-    if !elapsed.is_empty() {
-        let e = format!(" {} ", elapsed);
-        let ex = area.x + area.width.saturating_sub(e.len() as u16);
-        set_str(buf, ex, info_y, &e, bar_s, e.len() as u16);
-    }
+    // Right-aligned date/time
+    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let ts = format!(" {now} ");
+    let tx = area.x + area.width.saturating_sub(ts.len() as u16);
+    set_str(buf, tx, info_y, &ts, bar_s, ts.len() as u16);
 }
 
 // ── Simple tab renderers ──────────────────────────────────────────────────────
@@ -2766,7 +2762,6 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         tui.active = Tab::ALL[tab_idx as usize];
     }
     let mut running = true;
-    let start_time = Instant::now();
     // Track modal regions for mouse hit-testing
     let mut chooser_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
     let mut editor_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
@@ -2776,21 +2771,6 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
             state.iteration += 1;
             tui.update_all(filter);
         }
-
-        let elapsed_secs = start_time.elapsed().as_secs();
-        let elapsed_str = if elapsed_secs >= 3600 {
-            format!(
-                "{}h{:02}m{:02}s",
-                elapsed_secs / 3600,
-                (elapsed_secs % 3600) / 60,
-                elapsed_secs % 60
-            )
-        } else if elapsed_secs >= 60 {
-            format!("{}m{:02}s", elapsed_secs / 60, elapsed_secs % 60)
-        } else {
-            format!("{}s", elapsed_secs)
-        };
-        tui.elapsed_str = elapsed_str.clone();
 
         let _ = terminal.draw(|frame| {
             let size = frame.area();
@@ -2945,7 +2925,6 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     tui.total_udp,
                     tui.total_unix,
                     tui.total_pipes,
-                    &elapsed_str,
                     &tui.screen_filter,
                     tui.sort_frozen,
                     tui.compact_view,
@@ -3669,8 +3648,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             let h = terminal.get_frame().area().height;
                             let bottom_y = h.saturating_sub(2 + margin);
                             if y >= bottom_y && y < h.saturating_sub(margin) {
-                                let lines =
-                                    tui.build_bottom_tooltip(&state, &tui.elapsed_str.clone());
+                                let lines = tui.build_bottom_tooltip(&state, "");
                                 tui.tooltip = Tooltip {
                                     active: true,
                                     x,
@@ -4080,7 +4058,7 @@ mod tests {
         let area = Rect::new(0, 0, 80, 2);
         let mut buf = Buffer::empty(area);
         draw_bottom_bar(
-            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &None, false, false, 0,
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &None, false, false, 0,
         );
     }
 
@@ -4462,7 +4440,7 @@ mod tests {
         let mut buf = Buffer::empty(area);
         let filter = Some("nginx".to_string());
         draw_bottom_bar(
-            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &filter, false, false, 0,
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &filter, false, false, 0,
         );
         let mut line = String::new();
         for x in 0..120u16 {
@@ -4767,7 +4745,7 @@ mod tests {
         let area = Rect::new(0, 0, 120, 2);
         let mut buf = Buffer::empty(area);
         draw_bottom_bar(
-            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &None, true, true, 3,
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &None, true, true, 3,
         );
         let mut line = String::new();
         for x in 0..120u16 {
