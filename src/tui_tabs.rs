@@ -769,7 +769,6 @@ impl TabbedTui {
                     "running".to_string()
                 },
             ),
-            ("Iteration".into(), state.iteration.to_string()),
         ];
         if let Some(ref f) = self.screen_filter {
             lines.push(("Filter".into(), f.clone()));
@@ -1468,13 +1467,12 @@ fn draw_bottom_bar(
     }
     let running_str = if state.paused { "paused" } else { "running" };
     let mut status = format!(
-        " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {} \u{2502} #{}",
+        " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {}",
         total_procs,
         total_files,
         state.theme.display_name(),
         state.interval,
         running_str,
-        state.iteration,
     );
     if let Some(f) = screen_filter {
         status.push_str(&format!(" \u{2502} filter:{}", f));
@@ -3353,6 +3351,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         KeyCode::Char('c') => {
                             tui.show_theme_chooser = !tui.show_theme_chooser;
                             tui.theme_chooser_idx = state.theme_idx;
+                            tui.theme_before_chooser = state.theme_idx;
                             break;
                         }
                         KeyCode::Char('C') => {
