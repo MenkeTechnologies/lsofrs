@@ -760,27 +760,37 @@ impl TabbedTui {
     }
 
     /// Build tooltip for the bottom status bar.
-    fn build_bottom_tooltip(&self, state: &TuiState, elapsed: &str) -> Vec<(String, String)> {
+    fn build_bottom_tooltip(&self, state: &TuiState, _elapsed: &str) -> Vec<(String, String)> {
         let mut lines = vec![
             ("Processes".into(), self.total_procs.to_string()),
-            ("Files".into(), self.total_files.to_string()),
+            ("Open files".into(), self.total_files.to_string()),
+            ("TCP sockets".into(), self.total_tcp.to_string()),
+            ("UDP sockets".into(), self.total_udp.to_string()),
+            ("Unix sockets".into(), self.total_unix.to_string()),
+            ("Pipes".into(), self.total_pipes.to_string()),
             ("Theme".into(), state.theme.display_name().to_string()),
             ("Interval".into(), format!("{}s", state.interval)),
-            ("Uptime".into(), elapsed.to_string()),
+            (
+                "Border".into(),
+                if state.show_border { "on" } else { "off" }.to_string(),
+            ),
             (
                 "Status".into(),
-                if state.paused {
-                    "paused".to_string()
-                } else {
-                    "running".to_string()
-                },
+                if state.paused { "paused" } else { "running" }.to_string(),
             ),
+            ("Active tab".into(), self.active.label().to_string()),
+            ("Listening ports".into(), self.port_rows.len().to_string()),
+            ("Stale FDs".into(), self.stale_rows.len().to_string()),
+            ("Pipe chains".into(), self.pipe_rows.len().to_string()),
         ];
         if let Some(ref f) = self.screen_filter {
             lines.push(("Filter".into(), f.clone()));
         }
         if self.sort_frozen {
-            lines.push(("Sort".into(), "frozen".to_string()));
+            lines.push(("Sort order".into(), "frozen".to_string()));
+        }
+        if self.compact_view {
+            lines.push(("View".into(), "compact".to_string()));
         }
         if !self.pinned.is_empty() {
             lines.push(("Pinned".into(), format!("{} PIDs", self.pinned.len())));
