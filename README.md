@@ -343,61 +343,41 @@ Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **F
 
 ## // PERFORMANCE
 
-Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~550 processes / ~5800 open files):
+Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~900 processes / ~8000 open files, rayon parallel gathering):
 
 ### All Open Files (default)
 
-| Tool | Mean | Min–Max | User CPU | Sys CPU |
-|------|------|---------|----------|---------|
-| **lsofrs** (Rust) | **73 ms** | 50–117 ms | 17 ms | 32 ms |
-| lsof 4.91 (C) | 274 ms | 225–344 ms | 108 ms | 100 ms |
-| lsofng (C) | 5630 ms | 5223–8302 ms | 109 ms | 116 ms |
-
-| vs | Speedup |
-|----|---------|
-| lsof (system) | **3.7x** faster |
-| lsofng | **76.8x** faster |
+| Tool | Mean | Min–Max | Speedup |
+|------|------|---------|---------|
+| **lsofrs** (Rust) | **58 ms** | 40–111 ms | — |
+| lsof 4.91 (C) | 5,555 ms | 5,194–8,343 ms | **95x** slower |
+| lsofng (C) | 13,202 ms | 11,299–16,336 ms | **226x** slower |
 
 ### Network Connections (`-i TCP`)
 
-| Tool | Mean | Min–Max | User CPU | Sys CPU |
-|------|------|---------|----------|---------|
-| **lsofrs** | **89 ms** | 30–307 ms | 4 ms | 14 ms |
-| lsof 4.91 | 157 ms | 105–345 ms | 69 ms | 20 ms |
-| lsofng | 5246 ms | 5103–5602 ms | 70 ms | 21 ms |
-
-| vs | Speedup |
-|----|---------|
-| lsof | **1.8x** faster |
-| lsofng | **58.9x** faster |
+| Tool | Mean | Min–Max | Speedup |
+|------|------|---------|---------|
+| **lsofrs** | **9 ms** | 9–10 ms | — |
+| lsof 4.91 | 5,117 ms | 5,098–5,229 ms | **555x** slower |
+| lsofng | 10,520 ms | 10,097–13,792 ms | **1,141x** slower |
 
 ### Terse Output (`-t`, PIDs only)
 
-| Tool | Mean | Min–Max | User CPU | Sys CPU |
-|------|------|---------|----------|---------|
-| **lsofrs** | **46 ms** | 18–124 ms | 4 ms | 14 ms |
-| lsof 4.91 | 211 ms | 139–474 ms | 53 ms | 90 ms |
-| lsofng | 253 ms | 172–492 ms | 52 ms | 104 ms |
-
-| vs | Speedup |
-|----|---------|
-| lsof | **4.6x** faster |
-| lsofng | **5.5x** faster |
+| Tool | Mean | Min–Max | Speedup |
+|------|------|---------|---------|
+| **lsofrs** | **14 ms** | 12–16 ms | — |
+| lsofng | 149 ms | 133–216 ms | **10x** slower |
+| lsof 4.91 | 273 ms | 249–298 ms | **19x** slower |
 
 ### Structured Output (`-J` JSON / `-F` field)
 
-| Tool | Mean | Min–Max | User CPU | Sys CPU |
-|------|------|---------|----------|---------|
-| **lsofrs** `-J` | **126 ms** | 63–223 ms | 16 ms | 36 ms |
-| lsof `-F pcfn` | 231 ms | 186–488 ms | 89 ms | 89 ms |
-| lsofng `-J` | 244 ms | 159–414 ms | 59 ms | 103 ms |
+| Tool | Mean | Min–Max | Speedup |
+|------|------|---------|---------|
+| **lsofrs** `-J` | **41 ms** | 40–42 ms | — |
+| lsofng `-J` | 164 ms | 142–336 ms | **4x** slower |
+| lsof `-F pcfn` | 5,552 ms | 5,171–7,391 ms | **134x** slower |
 
-| vs | Speedup |
-|----|---------|
-| lsof | **1.8x** faster |
-| lsofng | **1.9x** faster |
-
-Most wall-clock time is spent in kernel syscalls (`proc_pidinfo`), which are identical between implementations. The Rust version's advantage comes from zero-copy FFI, efficient memory allocation, and lower user/system CPU overhead (6.4x less user CPU than lsof, 3.1x less system CPU).
+The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI structs gives lsofrs a **95–1,141x** advantage over traditional lsof implementations.
 
 ---
 
