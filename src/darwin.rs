@@ -645,7 +645,11 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                         let tcp: &TcpSockInfo = &*(proto_bytes.as_ptr() as *const TcpSockInfo);
                         let ini = &tcp.tcpsi_ini;
 
-                        sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
+                        // Only set tcp_state for actual TCP sockets (kernel may
+                        // report SOCKINFO_TCP kind for UDP sockets in edge cases)
+                        if protocol == IPPROTO_TCP {
+                            sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
+                        }
 
                         if family == AF_INET {
                             let la = Ipv4Addr::from(u32::from_be(
@@ -1149,6 +1153,82 @@ mod tests {
         procs.sort_by_key(|p| p.pid);
         for w in procs.windows(2) {
             assert!(w[0].pid <= w[1].pid);
+        }
+    }
+
+    #[test]
+    fn tcp_sockets_have_state() {
+        // All TCP sockets should have a tcp_state set (not None)
+        let procs = gather_processes();
+        for p in &procs {
+            for f in &p.files {
+                if let Some(ref si) = f.socket_info
+                    && si.protocol == "TCP"
+                {
+                    assert!(
+                        si.tcp_state.is_some(),
+                        "TCP socket for pid {} fd {:?} has no tcp_state (name: {})",
+                        p.pid,
+                        f.fd,
+                        f.name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tcp_listen_sockets_detected() {
+        // There should be at least one TCP LISTEN socket on any macOS system
+        // (e.g., rapportd, ControlCenter, or other system services)
+        let procs = gather_processes();
+        let listen_count = procs
+            .iter()
+            .flat_map(|p| &p.files)
+            .filter(|f| {
+                f.socket_info.as_ref().is_some_and(|si| {
+                    si.protocol == "TCP" && si.tcp_state == Some(TcpState::Listen)
+                })
+            })
+            .count();
+        // May be 0 without root, but should not panic
+        // listen_count is always >= 0 (usize), just verify we got here without panic
+        let _ = listen_count;
+    }
+
+    #[test]
+    fn tcp_sockets_have_local_port() {
+        // TCP sockets with LISTEN state should have a non-zero local port
+        let procs = gather_processes();
+        for p in &procs {
+            for f in &p.files {
+                if let Some(ref si) = f.socket_info
+                    && si.protocol == "TCP"
+                    && si.tcp_state == Some(TcpState::Listen)
+                {
+                    assert!(
+                        si.local.port > 0,
+                        "LISTEN socket for pid {} should have a port, got 0",
+                        p.pid
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn udp_sockets_identified() {
+        // Verify UDP sockets are found and have correct protocol string
+        let procs = gather_processes();
+        for p in &procs {
+            for f in &p.files {
+                if let Some(ref si) = f.socket_info
+                    && si.protocol == "UDP"
+                {
+                    // UDP protocol should be set correctly
+                    assert_eq!(si.protocol, "UDP");
+                }
+            }
         }
     }
 

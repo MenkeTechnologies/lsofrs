@@ -699,6 +699,88 @@ fn ports_mode_no_crash() {
 }
 
 #[test]
+fn ports_mode_has_header() {
+    let out = lsofrs().arg("--ports").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Should have a header with PROTO and PORT columns
+    assert!(
+        stdout.contains("PROTO") || stdout.contains("PORT") || stdout.contains("proto"),
+        "ports output should have column headers"
+    );
+}
+
+#[test]
+fn ports_mode_shows_tcp() {
+    let out = lsofrs().arg("--ports").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // On most systems there's at least one listening TCP port
+    // (without root we may not see all, but the output format should be correct)
+    if stdout.lines().count() > 1 {
+        // Data rows should contain TCP or UDP
+        let has_proto = stdout
+            .lines()
+            .skip(1)
+            .any(|l| l.contains("TCP") || l.contains("UDP"));
+        assert!(
+            has_proto,
+            "ports data rows should contain TCP or UDP protocol"
+        );
+    }
+}
+
+#[test]
+fn ports_json_has_port_field() {
+    let out = lsofrs().args(["--ports", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    // If there are ports, check structure
+    if let Some(ports) = parsed.get("listening_ports").and_then(|v| v.as_array()) {
+        for port in ports {
+            assert!(
+                port.get("port").is_some(),
+                "port entry missing 'port' field"
+            );
+            assert!(
+                port.get("protocol").is_some() || port.get("proto").is_some(),
+                "port entry missing protocol field"
+            );
+            assert!(port.get("pid").is_some(), "port entry missing 'pid' field");
+        }
+    }
+}
+
+#[test]
+fn inet_tcp_shows_state() {
+    // Verify that -i TCP output includes TCP state indicators
+    let out = lsofrs().args(["-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // If there are TCP connections visible, they should have state
+    let data_lines: Vec<&str> = stdout
+        .lines()
+        .skip(1)
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    if data_lines.len() > 2 {
+        // At least some lines should have TCP state like (LISTEN), (ESTABLISHED), etc.
+        let has_state = data_lines
+            .iter()
+            .any(|l| l.contains("LISTEN") || l.contains("ESTABLISHED") || l.contains("CLOSE"));
+        // Not guaranteed without root, but if we see TCP entries they should have state
+        let has_tcp = data_lines.iter().any(|l| l.contains("TCP"));
+        if has_tcp {
+            assert!(
+                has_state,
+                "TCP connections should have state (LISTEN, ESTABLISHED, etc.)"
+            );
+        }
+    }
+}
+
+#[test]
 fn ports_mode_with_user() {
     let out = lsofrs()
         .args(["--ports", "-u", &whoami()])
