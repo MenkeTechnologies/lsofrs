@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.3.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.4.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
@@ -107,6 +107,26 @@ lsofrs -c '/nginx|apache/'       # regex command match
 ---
 
 ## // ADVANCED MODES
+
+### Unified TUI (`--tui`)
+
+Full-screen tabbed dashboard with all modes in one interface. 7 clickable tabs, 31 color themes, mouse support, hover/right-click tooltips, theme chooser + editor, config persistence.
+
+```bash
+lsofrs --tui                     # launch TUI (restores last tab/theme)
+lsofrs --tui --theme matrix      # launch with Matrix theme
+sudo lsofrs --tui                # full visibility (all processes)
+```
+
+**Tabs**: TOP | SUMMARY | PORTS | TREE | NET-MAP | PIPES | STALE — click or press Tab/1-7 to switch.
+
+**Bottom bar**: `▶▶▶ LSOFRS ◀◀◀ │ procs:N │ files:N │ tcp:N udp:N unix:N pipe:N │ rate:Ns │ theme:Name │ paused:no │ h=help │ HH:MM:SS` — each `│` segment is a hover zone with verbose tooltips.
+
+**Mouse**: click tabs, scroll rows, right-click for detailed tooltips (PID, FD breakdown, kill hints, copy hints), hover 1s for auto-tooltips.
+
+**Theme chooser** (`c`): browse 31 themes with color swatches, live preview as you scroll, Enter to apply + save.
+
+**Theme editor** (`C`): create custom 6-color palettes, adjust values 0-255, name and save to `~/.lsofrs.conf`.
 
 ### Top-N Dashboard (`--top`)
 
@@ -270,9 +290,9 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 
 ## // INTERACTIVE CONTROLS
 
-All live TUI modes (`--top`, `--summary -r`, and future modes) share a common keybinding framework via the `TuiMode` trait.
+All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
 
-**Common keys** (available in all live modes):
+**Common keys**:
 
 | Key | Action |
 |-----|--------|
@@ -280,7 +300,29 @@ All live TUI modes (`--top`, `--summary -r`, and future modes) share a common ke
 | `<`/`>` | Fine-adjust refresh interval (±1s) |
 | `p` | Pause/resume data collection |
 | `?`/`h` | Toggle help overlay |
+| `c` | Open theme chooser (31 themes with swatches) |
+| `C` | Open theme editor (custom 6-color palettes) |
+| `x` | Toggle border |
+| `t` | Toggle compact/expanded view |
+| `o` | Freeze/unfreeze sort order |
+| `/` | Filter popup (regex search) |
+| `0` | Clear filter |
+| `j`/`k`/`↑`/`↓` | Navigate rows |
+| `F` | Pin/unpin selected row |
+| `y` | Copy selected row to clipboard |
+| `e` | Export current tab to file |
 | `q`/`Esc`/`Ctrl-C` | Quit |
+
+**`--tui` additional keys**:
+
+| Key | Action |
+|-----|--------|
+| `Tab`/`→` | Next tab |
+| `BackTab`/`←` | Previous tab |
+| `1`-`7` | Jump to tab by number |
+| Click tab | Switch to clicked tab |
+| Right-click row | Verbose tooltip (PID, FDs, kill hints) |
+| Hover 1s | Auto-tooltip (disappears on mouse move) |
 
 **`--top` additional keys**:
 
@@ -315,7 +357,10 @@ src/
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
-├── tui_app.rs   # Shared TUI framework (TuiMode trait, crossterm)
+├── tui_app.rs   # Shared TUI framework (TuiMode trait, ratatui)
+├── tui_tabs.rs  # Unified tabbed TUI (--tui) with 7 tabs, mouse, tooltips
+├── theme.rs     # 31 color themes + custom theme support
+├── config.rs    # TOML config persistence (~/.lsofrs.conf)
 ├── top.rs       # Live top-N FD dashboard (TuiMode)
 ├── watch.rs     # File watch — monitor opens/closes over time
 ├── stale.rs     # Stale FD finder — deleted files still held open
