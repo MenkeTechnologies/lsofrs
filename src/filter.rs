@@ -24,6 +24,8 @@ pub struct Filter {
     pub nfs_only: bool,
     pub unix_socket: bool,
     pub files: Vec<String>,
+    pub dir: Option<String>,         // +d: one level
+    pub dir_recurse: Option<String>, // +D: recursive
     pub and_mode: bool,
     pub terse: bool,
 }
@@ -48,6 +50,8 @@ impl Filter {
             nfs_only: args.nfs,
             unix_socket: args.unix_socket,
             files: args.files.clone(),
+            dir: args.dir.clone(),
+            dir_recurse: args.dir_recurse.clone(),
             and_mode: args.and_mode,
             terse: args.terse,
         };
@@ -322,6 +326,35 @@ impl Filter {
             }
         }
 
+        // +d DIR: files directly in directory (one level, no deeper subdirs)
+        if let Some(ref dir) = self.dir {
+            let prefix = if dir.ends_with('/') {
+                dir.clone()
+            } else {
+                format!("{dir}/")
+            };
+            if !file.name.starts_with(&prefix) {
+                return false;
+            }
+            // One level only: no additional '/' after the prefix
+            let rest = &file.name[prefix.len()..];
+            if rest.contains('/') {
+                return false;
+            }
+        }
+
+        // +D DIR: files recursively under directory
+        if let Some(ref dir) = self.dir_recurse {
+            let prefix = if dir.ends_with('/') {
+                dir.clone()
+            } else {
+                format!("{dir}/")
+            };
+            if !file.name.starts_with(&prefix) && file.name != *dir {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -444,6 +477,8 @@ mod tests {
             nfs_only: false,
             unix_socket: false,
             files: vec![],
+            dir: None,
+            dir_recurse: None,
             and_mode: false,
             terse: false,
         }
@@ -1179,5 +1214,62 @@ mod tests {
         assert!(f.matches_process(&make_proc(1, 501, 42, "x")));
         assert!(!f.matches_process(&make_proc(1, 501, 99, "x"))); // pgid mismatch
         assert!(!f.matches_process(&make_proc(1, 0, 42, "x"))); // uid mismatch
+    }
+
+    // ── +d / +D directory filter tests ──────────────────────────────
+
+    #[test]
+    fn dir_filter_one_level() {
+        let mut f = empty_filter();
+        f.dir = Some("/var/log".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/auth.log")));
+        // Subdirectory should NOT match (one level only)
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/log/nginx/access.log")));
+        // Different directory
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/other")));
+        // Partial name match
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/logs/x")));
+    }
+
+    #[test]
+    fn dir_filter_trailing_slash() {
+        let mut f = empty_filter();
+        f.dir = Some("/var/log/".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/log/nginx/access.log")));
+    }
+
+    #[test]
+    fn dir_recurse_filter() {
+        let mut f = empty_filter();
+        f.dir_recurse = Some("/var/log".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/nginx/access.log")));
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/a/b/c/d.log")));
+        // Different directory
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/other")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/logs/x")));
+    }
+
+    #[test]
+    fn dir_recurse_matches_dir_itself() {
+        let mut f = empty_filter();
+        f.dir_recurse = Some("/var/log".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Dir, "/var/log")));
+    }
+
+    #[test]
+    fn from_args_dir_flag() {
+        let args = Args::parse_from(["lsofrs", "--dir", "/var/log"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.dir.as_deref(), Some("/var/log"));
+    }
+
+    #[test]
+    fn from_args_dir_recurse_flag() {
+        let args = Args::parse_from(["lsofrs", "--dir-recurse", "/var/log"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.dir_recurse.as_deref(), Some("/var/log"));
     }
 }

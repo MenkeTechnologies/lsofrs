@@ -37,6 +37,8 @@ _arguments -C -s -S \
   '--pipe-chain[trace pipe/socket IPC between processes]' \
   '--csv[CSV output format]' \
   '--net-map[network connections grouped by remote host]' \
+  '--dir[list open files in directory (one level)]:directory:_directories' \
+  '--dir-recurse[recursively list open files in directory]:directory:_directories' \
   '--tui[unified TUI with tabs for all modes]' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0

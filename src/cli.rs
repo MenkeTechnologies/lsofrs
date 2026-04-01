@@ -152,6 +152,14 @@ pub struct Args {
     #[arg(long = "theme", default_value = "neon-sprawl")]
     pub theme_name: String,
 
+    /// List open files in directory (one level)
+    #[arg(long = "dir", alias = "+d")]
+    pub dir: Option<String>,
+
+    /// Recursively list open files in directory
+    #[arg(long = "dir-recurse", alias = "+D")]
+    pub dir_recurse: Option<String>,
+
     /// Files/directories to search
     pub files: Vec<String>,
 }
@@ -204,6 +212,8 @@ impl Args {
 
 {cyan}  ── FILES & DIRECTORIES ───────────────────────────{reset}
 {green}   FILE...           {reset}list processes using these files
+{green}   --dir DIR         {reset}list open files in DIR {magenta}(one level, like +d){reset}
+{green}   --dir-recurse DIR {reset}recursively list open files in DIR {magenta}(like +D){reset}
 
 {cyan}  ── DISPLAY ───────────────────────────────────────{reset}
 {green}   -F [FIELDS]       {reset}select output fields; -F ? for help
