@@ -132,7 +132,7 @@ impl ThemeName {
 
     /// Parse from CLI string (case-insensitive, dashes optional).
     pub fn from_str_loose(s: &str) -> Self {
-        match s.to_ascii_lowercase().replace('-', "").as_str() {
+        match s.to_ascii_lowercase().replace(['-', ' ', '_'], "").as_str() {
             "neonsprawl" | "neon" => Self::NeonSprawl,
             "classic" | "plain" => Self::Classic,
             "solarflare" | "solar" => Self::SolarFlare,
