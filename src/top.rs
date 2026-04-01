@@ -133,6 +133,42 @@ impl TopMode {
     pub fn visible_count(&self) -> usize {
         self.entries.len().min(self.show_n)
     }
+
+    /// Get tooltip info for a displayed row (after sorting).
+    pub fn get_tooltip_lines(&self, idx: usize) -> Vec<(String, String)> {
+        let mut sorted = self.entries.clone();
+        sort_entries(&mut sorted, self.sort_col, self.reverse);
+        let display: Vec<&TopEntry> = sorted.iter().take(self.show_n).collect();
+        match display.get(idx) {
+            Some(e) => {
+                let delta_str = match e.prev_fd_count {
+                    Some(prev) if e.fd_count > prev => format!("+{}", e.fd_count - prev),
+                    Some(prev) if e.fd_count < prev => format!("-{}", prev - e.fd_count),
+                    Some(_) => "0 (stable)".to_string(),
+                    None => "new".to_string(),
+                };
+                vec![
+                    ("PID".into(), e.pid.to_string()),
+                    ("User".into(), e.username()),
+                    ("Command".into(), e.command.clone()),
+                    ("Total FDs".into(), e.fd_count.to_string()),
+                    ("REG".into(), e.reg_count.to_string()),
+                    ("SOCK".into(), e.sock_count.to_string()),
+                    ("PIPE".into(), e.pipe_count.to_string()),
+                    ("OTHER".into(), e.other_count.to_string()),
+                    ("Delta".into(), delta_str),
+                    ("PPID".into(), e.ppid.to_string()),
+                    ("PGID".into(), e.pgid.to_string()),
+                ]
+            }
+            None => vec![],
+        }
+    }
+
+    /// Total entries count (before show_n limit).
+    pub fn entry_count(&self) -> usize {
+        self.entries.len()
+    }
 }
 
 impl TuiMode for TopMode {

@@ -216,6 +216,18 @@ impl Tab {
     fn index(self) -> usize {
         Tab::ALL.iter().position(|&t| t == self).unwrap_or(0)
     }
+
+    fn description(self) -> &'static str {
+        match self {
+            Tab::Top => "Top N processes sorted by FD count",
+            Tab::Summary => "Aggregate file type breakdown and per-user stats",
+            Tab::Ports => "Listening TCP/UDP ports",
+            Tab::Stale => "Deleted/stale file descriptors",
+            Tab::Tree => "Process tree with FD counts",
+            Tab::NetMap => "Network connections grouped by remote host",
+            Tab::PipeChain => "IPC pipes/Unix sockets shared between processes",
+        }
+    }
 }
 
 /// Hit-test the tab bar: given an x coordinate, return which tab was clicked.
@@ -241,6 +253,7 @@ struct PortRow {
     pid: i32,
     user: String,
     command: String,
+    tcp_state: Option<String>,
 }
 
 struct StaleRow {
@@ -250,13 +263,22 @@ struct StaleRow {
     file_type: String,
     size: Option<u64>,
     name: String,
+    device: String,
+    inode: String,
 }
 
 struct TreeRow {
     indent: usize,
     pid: i32,
+    ppid: i32,
+    pgid: i32,
     user: String,
     fd_count: usize,
+    reg_count: usize,
+    sock_count: usize,
+    pipe_count: usize,
+    other_count: usize,
+    net_count: usize,
     command: String,
     connector: String,
 }
@@ -266,13 +288,16 @@ struct NetMapRow {
     count: usize,
     protocols: String,
     ports: String,
+    ports_full: String,
     processes: String,
+    state_breakdown: String,
 }
 
 struct PipeRow {
     kind: String,
     id: String,
     endpoints: String,
+    endpoint_details: Vec<(i32, String, String)>, // (pid, command, fd)
 }
 
 /// Key for frozen sort order — identifies a row uniquely per tab.
@@ -338,6 +363,8 @@ struct TabbedTui {
     frozen_order: Vec<FrozenKey>,
     // Compact view toggle
     compact_view: bool,
+    // Cached elapsed string for bottom bar tooltip
+    elapsed_str: String,
 }
 
 impl TabbedTui {
@@ -378,6 +405,7 @@ impl TabbedTui {
             sort_frozen: prefs.sort_frozen,
             frozen_order: Vec::new(),
             compact_view: prefs.compact_view,
+            elapsed_str: String::new(),
         }
     }
 
@@ -394,6 +422,19 @@ impl TabbedTui {
             Tab::NetMap => self.net_map_rows.len(),
             Tab::PipeChain => self.pipe_rows.len(),
             _ => 0,
+        }
+    }
+
+    /// Row count for a given tab (for tooltips).
+    fn row_count_for(&self, tab: Tab) -> usize {
+        match tab {
+            Tab::Top => self.top_mode.entry_count(),
+            Tab::Summary => self.summary_mode.data_row_count(),
+            Tab::Ports => self.port_rows.len(),
+            Tab::Stale => self.stale_rows.len(),
+            Tab::Tree => self.tree_rows.len(),
+            Tab::NetMap => self.net_map_rows.len(),
+            Tab::PipeChain => self.pipe_rows.len(),
         }
     }
 
@@ -603,26 +644,33 @@ impl TabbedTui {
         }
     }
 
-    /// Build tooltip lines for a right-click on a simple tab row.
+    /// Build tooltip lines for a right-click on a tab row.
     fn build_tooltip(&self, idx: usize) -> Vec<(String, String)> {
         match self.active {
+            Tab::Top => self.top_mode.get_tooltip_lines(idx),
+            Tab::Summary => self.summary_mode.get_tooltip_lines(idx),
             Tab::Ports => {
                 if let Some(r) = self.port_rows.get(idx) {
-                    vec![
+                    let mut lines = vec![
                         ("Protocol".into(), r.proto.clone()),
+                        ("Local".into(), format!("{}:{}", r.addr, r.port)),
                         ("Address".into(), r.addr.clone()),
                         ("Port".into(), r.port.to_string()),
-                        ("PID".into(), r.pid.to_string()),
-                        ("User".into(), r.user.clone()),
-                        ("Command".into(), r.command.clone()),
-                    ]
+                    ];
+                    if let Some(ref st) = r.tcp_state {
+                        lines.push(("TCP State".into(), st.clone()));
+                    }
+                    lines.push(("PID".into(), r.pid.to_string()));
+                    lines.push(("User".into(), r.user.clone()));
+                    lines.push(("Command".into(), r.command.clone()));
+                    lines
                 } else {
                     vec![]
                 }
             }
             Tab::Stale => {
                 if let Some(r) = self.stale_rows.get(idx) {
-                    vec![
+                    let mut lines = vec![
                         ("PID".into(), r.pid.to_string()),
                         ("User".into(), r.user.clone()),
                         ("FD".into(), r.fd.clone()),
@@ -631,18 +679,33 @@ impl TabbedTui {
                             "Size".into(),
                             r.size.map(|s| s.to_string()).unwrap_or_default(),
                         ),
-                        ("Name".into(), r.name.clone()),
-                    ]
+                        ("Full Path".into(), r.name.clone()),
+                    ];
+                    if !r.device.is_empty() {
+                        lines.push(("Device".into(), r.device.clone()));
+                    }
+                    if !r.inode.is_empty() {
+                        lines.push(("Inode".into(), r.inode.clone()));
+                    }
+                    lines
                 } else {
                     vec![]
                 }
             }
             Tab::Tree => {
                 if let Some(r) = self.tree_rows.get(idx) {
+                    let type_str = format!(
+                        "REG:{} SOCK:{} PIPE:{} OTHER:{}",
+                        r.reg_count, r.sock_count, r.pipe_count, r.other_count
+                    );
                     vec![
                         ("PID".into(), r.pid.to_string()),
+                        ("PPID".into(), r.ppid.to_string()),
+                        ("PGID".into(), r.pgid.to_string()),
                         ("User".into(), r.user.clone()),
                         ("FDs".into(), r.fd_count.to_string()),
+                        ("Breakdown".into(), type_str),
+                        ("Net Conns".into(), r.net_count.to_string()),
                         ("Command".into(), r.command.clone()),
                     ]
                 } else {
@@ -651,30 +714,76 @@ impl TabbedTui {
             }
             Tab::NetMap => {
                 if let Some(r) = self.net_map_rows.get(idx) {
-                    vec![
+                    let mut lines = vec![
                         ("Host".into(), r.host.clone()),
                         ("Connections".into(), r.count.to_string()),
                         ("Protocols".into(), r.protocols.clone()),
-                        ("Ports".into(), r.ports.clone()),
+                        ("Ports".into(), r.ports_full.clone()),
                         ("Processes".into(), r.processes.clone()),
-                    ]
+                    ];
+                    if !r.state_breakdown.is_empty() {
+                        lines.push(("States".into(), r.state_breakdown.clone()));
+                    }
+                    lines
                 } else {
                     vec![]
                 }
             }
             Tab::PipeChain => {
                 if let Some(r) = self.pipe_rows.get(idx) {
-                    vec![
-                        ("Type".into(), r.kind.clone()),
-                        ("ID".into(), r.id.clone()),
-                        ("Endpoints".into(), r.endpoints.clone()),
-                    ]
+                    let mut lines =
+                        vec![("Type".into(), r.kind.clone()), ("ID".into(), r.id.clone())];
+                    for (i, (pid, cmd, fd)) in r.endpoint_details.iter().enumerate() {
+                        lines.push((format!("EP {}", i + 1), format!("PID:{pid} {cmd} ({fd})")));
+                    }
+                    lines
                 } else {
                     vec![]
                 }
             }
-            _ => vec![],
         }
+    }
+
+    /// Build tooltip for a tab bar entry.
+    fn build_tab_tooltip(&self, tab: Tab) -> Vec<(String, String)> {
+        vec![
+            ("Tab".into(), tab.label().to_string()),
+            ("Description".into(), tab.description().to_string()),
+            ("Rows".into(), self.row_count_for(tab).to_string()),
+        ]
+    }
+
+    /// Build tooltip for the bottom status bar.
+    fn build_bottom_tooltip(&self, state: &TuiState, elapsed: &str) -> Vec<(String, String)> {
+        let mut lines = vec![
+            ("Processes".into(), self.total_procs.to_string()),
+            ("Files".into(), self.total_files.to_string()),
+            ("Theme".into(), state.theme.display_name().to_string()),
+            ("Interval".into(), format!("{}s", state.interval)),
+            ("Uptime".into(), elapsed.to_string()),
+            (
+                "Status".into(),
+                if state.paused {
+                    "paused".to_string()
+                } else {
+                    "running".to_string()
+                },
+            ),
+            ("Iteration".into(), state.iteration.to_string()),
+        ];
+        if let Some(ref f) = self.screen_filter {
+            lines.push(("Filter".into(), f.clone()));
+        }
+        if self.sort_frozen {
+            lines.push(("Sort".into(), "frozen".to_string()));
+        }
+        if !self.pinned.is_empty() {
+            lines.push(("Pinned".into(), format!("{} PIDs", self.pinned.len())));
+        }
+        if self.compact_view {
+            lines.push(("View".into(), "compact".to_string()));
+        }
+        lines
     }
 
     /// Copy selected row info to clipboard.
@@ -926,6 +1035,7 @@ impl TabbedTui {
                         .addr
                         .map(|a| a.to_string())
                         .unwrap_or_else(|| "*".to_string());
+                    let tcp_state = si.tcp_state.as_ref().map(|s| s.as_str().to_string());
                     self.port_rows.push(PortRow {
                         proto,
                         addr,
@@ -933,6 +1043,7 @@ impl TabbedTui {
                         pid: p.pid,
                         user: user.clone(),
                         command: p.command.clone(),
+                        tcp_state,
                     });
                 }
             }
@@ -960,6 +1071,8 @@ impl TabbedTui {
                         file_type: f.file_type.as_str().to_string(),
                         size: f.size,
                         name: f.full_name(),
+                        device: f.device_str(),
+                        inode: f.node_str(),
                     });
                 }
             }
@@ -968,23 +1081,70 @@ impl TabbedTui {
 
     fn update_tree(&mut self, procs: &[Process]) {
         self.tree_rows.clear();
-        let mut nodes: HashMap<i32, (i32, String, u32, usize, Vec<i32>)> = HashMap::new();
+        // Store (ppid, pgid, cmd, uid, fds, reg, sock, pipe, other, net, children)
+        #[allow(clippy::type_complexity)]
+        let mut nodes: HashMap<
+            i32,
+            (
+                i32,
+                i32,
+                String,
+                u32,
+                usize,
+                usize,
+                usize,
+                usize,
+                usize,
+                usize,
+                Vec<i32>,
+            ),
+        > = HashMap::new();
         for p in procs {
+            let mut reg = 0usize;
+            let mut sock = 0usize;
+            let mut pipe = 0usize;
+            let mut other = 0usize;
+            let mut net = 0usize;
+            for f in &p.files {
+                match f.file_type {
+                    FileType::Reg | FileType::Dir | FileType::Chr => reg += 1,
+                    FileType::IPv4 | FileType::IPv6 | FileType::Unix | FileType::Sock => {
+                        sock += 1;
+                        if matches!(f.file_type, FileType::IPv4 | FileType::IPv6) {
+                            net += 1;
+                        }
+                    }
+                    FileType::Pipe => pipe += 1,
+                    _ => other += 1,
+                }
+            }
             nodes.insert(
                 p.pid,
-                (p.ppid, p.command.clone(), p.uid, p.files.len(), Vec::new()),
+                (
+                    p.ppid,
+                    p.pgid,
+                    p.command.clone(),
+                    p.uid,
+                    p.files.len(),
+                    reg,
+                    sock,
+                    pipe,
+                    other,
+                    net,
+                    Vec::new(),
+                ),
             );
         }
         let pids: Vec<i32> = nodes.keys().copied().collect();
         for &pid in &pids {
             let ppid = nodes[&pid].0;
             if ppid != pid && nodes.contains_key(&ppid) {
-                let children = &mut nodes.get_mut(&ppid).unwrap().4;
+                let children = &mut nodes.get_mut(&ppid).unwrap().10;
                 children.push(pid);
             }
         }
         for v in nodes.values_mut() {
-            v.4.sort();
+            v.10.sort();
         }
         let mut roots: Vec<i32> = nodes
             .iter()
@@ -993,14 +1153,32 @@ impl TabbedTui {
             .collect();
         roots.sort();
 
+        #[allow(clippy::type_complexity)]
         fn walk(
-            nodes: &HashMap<i32, (i32, String, u32, usize, Vec<i32>)>,
+            nodes: &HashMap<
+                i32,
+                (
+                    i32,
+                    i32,
+                    String,
+                    u32,
+                    usize,
+                    usize,
+                    usize,
+                    usize,
+                    usize,
+                    usize,
+                    Vec<i32>,
+                ),
+            >,
             pid: i32,
             depth: usize,
             is_last: bool,
             rows: &mut Vec<TreeRow>,
         ) {
-            let Some((_, cmd, uid, fds, ref children)) = nodes.get(&pid).cloned() else {
+            let Some((ppid, pgid, cmd, uid, fds, reg, sock, pipe, other, net, ref children)) =
+                nodes.get(&pid).cloned()
+            else {
                 return;
             };
             let connector = if depth == 0 {
@@ -1016,8 +1194,15 @@ impl TabbedTui {
             rows.push(TreeRow {
                 indent: depth,
                 pid,
+                ppid,
+                pgid,
                 user,
                 fd_count: fds,
+                reg_count: reg,
+                sock_count: sock,
+                pipe_count: pipe,
+                other_count: other,
+                net_count: net,
                 command: cmd,
                 connector,
             });
@@ -1038,6 +1223,7 @@ impl TabbedTui {
             ports: BTreeSet<u16>,
             processes: Vec<(i32, String)>,
             count: usize,
+            states: HashMap<String, usize>,
         }
         let mut groups: HashMap<String, RG> = HashMap::new();
         for p in procs {
@@ -1068,6 +1254,7 @@ impl TabbedTui {
                     ports: BTreeSet::new(),
                     processes: Vec::new(),
                     count: 0,
+                    states: HashMap::new(),
                 });
                 g.count += 1;
                 if !si.protocol.is_empty() {
@@ -1075,6 +1262,9 @@ impl TabbedTui {
                 }
                 if fport > 0 {
                     g.ports.insert(fport);
+                }
+                if let Some(ref st) = si.tcp_state {
+                    *g.states.entry(st.as_str().to_string()).or_insert(0) += 1;
                 }
                 if !g.processes.iter().any(|(pid, _)| *pid == p.pid) {
                     g.processes.push((p.pid, p.command.clone()));
@@ -1096,12 +1286,24 @@ impl TabbedTui {
                     .map(|p| p.to_string())
                     .collect::<Vec<_>>()
                     .join(",");
+                let ports_full = g
+                    .ports
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let mut state_parts: Vec<String> =
+                    g.states.iter().map(|(s, c)| format!("{s}:{c}")).collect();
+                state_parts.sort();
+                let state_breakdown = state_parts.join(", ");
                 NetMapRow {
                     host: g.host,
                     count: g.count,
                     protocols: g.protocols.into_iter().collect::<Vec<_>>().join(","),
                     ports: ports_str,
+                    ports_full,
                     processes: procs_str,
+                    state_breakdown,
                 }
             })
             .collect();
@@ -1132,10 +1334,12 @@ impl TabbedTui {
                     .map(|(pid, cmd, fd)| format!("{pid}/{cmd}({fd})"))
                     .collect::<Vec<_>>()
                     .join(" <-> ");
+                let endpoint_details: Vec<(i32, String, String)> = eps.clone();
                 PipeRow {
                     kind,
                     id,
                     endpoints: ep_str,
+                    endpoint_details,
                 }
             })
             .collect();
@@ -2552,6 +2756,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         } else {
             format!("{}s", elapsed_secs)
         };
+        tui.elapsed_str = elapsed_str.clone();
 
         let _ = terminal.draw(|frame| {
             let size = frame.area();
@@ -2748,26 +2953,64 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 && let Some(hover_row) = tui.hover.row
             {
                 let hover_col = tui.hover.col.unwrap_or(0);
-                if hover_row >= tui.content_area_y
+                let hover_margin = if bdr { 1u16 } else { 0u16 };
+
+                // Hover on tab bar → tab description
+                if hover_row == hover_margin {
+                    if let Some(tab) = tab_at_x(hover_col) {
+                        let lines = tui.build_tab_tooltip(tab);
+                        let hover_tt = Tooltip {
+                            active: true,
+                            x: hover_col,
+                            y: hover_row,
+                            lines,
+                        };
+                        draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                    }
+                } else if hover_row >= tui.content_area_y
                     && hover_row < tui.content_area_y + tui.content_area_h
-                    && matches!(
-                        tui.active,
-                        Tab::Ports | Tab::Stale | Tab::Tree | Tab::NetMap | Tab::PipeChain
-                    )
                 {
                     let data_row_offset =
                         (hover_row - tui.content_area_y).saturating_sub(3) as usize;
-                    let idx = tui.scroll() + data_row_offset;
-                    if idx < tui.row_count() {
-                        let lines = tui.build_tooltip(idx);
-                        if !lines.is_empty() {
-                            let hover_tt = Tooltip {
-                                active: true,
-                                x: hover_col,
-                                y: hover_row,
-                                lines,
-                            };
-                            draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                    match tui.active {
+                        Tab::Top => {
+                            let lines = tui.build_tooltip(data_row_offset);
+                            if !lines.is_empty() {
+                                let hover_tt = Tooltip {
+                                    active: true,
+                                    x: hover_col,
+                                    y: hover_row,
+                                    lines,
+                                };
+                                draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                            }
+                        }
+                        Tab::Summary => {
+                            let lines = tui.build_tooltip(data_row_offset);
+                            if !lines.is_empty() {
+                                let hover_tt = Tooltip {
+                                    active: true,
+                                    x: hover_col,
+                                    y: hover_row,
+                                    lines,
+                                };
+                                draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                            }
+                        }
+                        Tab::Ports | Tab::Stale | Tab::Tree | Tab::NetMap | Tab::PipeChain => {
+                            let idx = tui.scroll() + data_row_offset;
+                            if idx < tui.row_count() {
+                                let lines = tui.build_tooltip(idx);
+                                if !lines.is_empty() {
+                                    let hover_tt = Tooltip {
+                                        active: true,
+                                        x: hover_col,
+                                        y: hover_row,
+                                        lines,
+                                    };
+                                    draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                                }
+                            }
                         }
                     }
                 }
@@ -3367,31 +3610,86 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         MouseEventKind::Down(MouseButton::Right) => {
                             let x = mouse.column;
                             let y = mouse.row;
+                            let margin = if state.show_border { 1u16 } else { 0 };
+
+                            // Right-click on tab bar → tab description tooltip
+                            if y == margin {
+                                if let Some(tab) = tab_at_x(x) {
+                                    let lines = tui.build_tab_tooltip(tab);
+                                    tui.tooltip = Tooltip {
+                                        active: true,
+                                        x,
+                                        y,
+                                        lines,
+                                    };
+                                }
+                                break;
+                            }
+
+                            // Right-click on bottom bar (last 2 rows)
+                            let h = terminal.get_frame().area().height;
+                            let bottom_y = h.saturating_sub(2 + margin);
+                            if y >= bottom_y && y < h.saturating_sub(margin) {
+                                let lines =
+                                    tui.build_bottom_tooltip(&state, &tui.elapsed_str.clone());
+                                tui.tooltip = Tooltip {
+                                    active: true,
+                                    x,
+                                    y,
+                                    lines,
+                                };
+                                break;
+                            }
+
                             // Right-click in content area → tooltip
                             if y >= tui.content_area_y
                                 && y < tui.content_area_y + tui.content_area_h
-                                && matches!(
-                                    tui.active,
-                                    Tab::Ports
-                                        | Tab::Stale
-                                        | Tab::Tree
-                                        | Tab::NetMap
-                                        | Tab::PipeChain
-                                )
                             {
                                 let data_row_offset =
                                     (y - tui.content_area_y).saturating_sub(3) as usize;
-                                let idx = tui.scroll() + data_row_offset;
-                                if idx < tui.row_count() {
-                                    tui.set_selected(Some(idx));
-                                    let lines = tui.build_tooltip(idx);
-                                    if !lines.is_empty() {
-                                        tui.tooltip = Tooltip {
-                                            active: true,
-                                            x,
-                                            y,
-                                            lines,
-                                        };
+                                match tui.active {
+                                    Tab::Top => {
+                                        // Top tab: row offset maps to sorted entry
+                                        let idx = data_row_offset;
+                                        let lines = tui.build_tooltip(idx);
+                                        if !lines.is_empty() {
+                                            tui.tooltip = Tooltip {
+                                                active: true,
+                                                x,
+                                                y,
+                                                lines,
+                                            };
+                                        }
+                                    }
+                                    Tab::Summary => {
+                                        let lines = tui.build_tooltip(data_row_offset);
+                                        if !lines.is_empty() {
+                                            tui.tooltip = Tooltip {
+                                                active: true,
+                                                x,
+                                                y,
+                                                lines,
+                                            };
+                                        }
+                                    }
+                                    Tab::Ports
+                                    | Tab::Stale
+                                    | Tab::Tree
+                                    | Tab::NetMap
+                                    | Tab::PipeChain => {
+                                        let idx = tui.scroll() + data_row_offset;
+                                        if idx < tui.row_count() {
+                                            tui.set_selected(Some(idx));
+                                            let lines = tui.build_tooltip(idx);
+                                            if !lines.is_empty() {
+                                                tui.tooltip = Tooltip {
+                                                    active: true,
+                                                    x,
+                                                    y,
+                                                    lines,
+                                                };
+                                            }
+                                        }
                                     }
                                 }
                                 break;
@@ -3592,6 +3890,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
             PortRow {
                 proto: "TCP".to_string(),
@@ -3600,6 +3899,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
         ];
         render_ports(
@@ -3626,6 +3926,8 @@ mod tests {
             file_type: "REG".to_string(),
             size: Some(1024),
             name: "/tmp/foo (deleted)".to_string(),
+            device: String::new(),
+            inode: String::new(),
         }];
         render_stale(
             &mut buf,
@@ -3648,16 +3950,30 @@ mod tests {
             TreeRow {
                 indent: 0,
                 pid: 1,
+                ppid: 0,
+                pgid: 1,
                 user: "root".to_string(),
                 fd_count: 10,
+                reg_count: 5,
+                sock_count: 3,
+                pipe_count: 1,
+                other_count: 1,
+                net_count: 2,
                 command: "init".to_string(),
                 connector: String::new(),
             },
             TreeRow {
                 indent: 1,
                 pid: 100,
+                ppid: 1,
+                pgid: 100,
                 user: "root".to_string(),
                 fd_count: 5,
+                reg_count: 3,
+                sock_count: 1,
+                pipe_count: 0,
+                other_count: 1,
+                net_count: 1,
                 command: "bash".to_string(),
                 connector: "|-- ".to_string(),
             },
@@ -4129,6 +4445,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
             PortRow {
                 proto: "TCP".to_string(),
@@ -4137,6 +4454,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
         ];
         render_ports(
@@ -4164,6 +4482,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
             PortRow {
                 proto: "TCP".to_string(),
@@ -4172,6 +4491,7 @@ mod tests {
                 pid: 100,
                 user: "root".to_string(),
                 command: "nginx".to_string(),
+                tcp_state: Some("LISTEN".to_string()),
             },
         ];
         render_ports(
@@ -4307,6 +4627,7 @@ mod tests {
             pid: 100,
             user: "root".to_string(),
             command: "nginx".to_string(),
+            tcp_state: Some("LISTEN".to_string()),
         }];
         render_ports(
             &mut buf,
@@ -4332,6 +4653,7 @@ mod tests {
             pid: 100,
             user: "root".to_string(),
             command: "nginx".to_string(),
+            tcp_state: Some("LISTEN".to_string()),
         }];
         let mut pinned = HashSet::new();
         pinned.insert(100);
@@ -4350,6 +4672,8 @@ mod tests {
             file_type: "REG".to_string(),
             size: Some(1024),
             name: "/tmp/foo (deleted)".to_string(),
+            device: String::new(),
+            inode: String::new(),
         }];
         render_stale(
             &mut buf,
@@ -4373,7 +4697,9 @@ mod tests {
             count: 5,
             protocols: "TCP".to_string(),
             ports: "80,443".to_string(),
+            ports_full: "80, 443".to_string(),
             processes: "nginx/100".to_string(),
+            state_breakdown: "ESTABLISHED:3, LISTEN:2".to_string(),
         }];
         render_net_map(&mut buf, area, &theme, &rows, 0, None, true);
     }
@@ -4387,6 +4713,10 @@ mod tests {
             kind: "pipe".to_string(),
             id: "0xabc".to_string(),
             endpoints: "bash/100(3u) <-> cat/200(0r)".to_string(),
+            endpoint_details: vec![
+                (100, "bash".to_string(), "3u".to_string()),
+                (200, "cat".to_string(), "0r".to_string()),
+            ],
         }];
         render_pipes(&mut buf, area, &theme, &rows, 0, None, true);
     }

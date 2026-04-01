@@ -313,6 +313,89 @@ impl SummaryLiveMode {
             total_files: 0,
         }
     }
+
+    /// Build tooltip for a row in the summary view.
+    /// Layout: row 0 = summary line, row 1 = blank, row 2 = section header "type breakdown",
+    /// row 3 = blank, rows 4..4+types = type rows, then blank, section header "top procs",
+    /// blank, header row, proc rows, blank, section header "per-user", blank, header, user rows.
+    pub fn get_tooltip_lines(&self, content_row: usize) -> Vec<(String, String)> {
+        // Row 0: summary line (Processes: N, Open files: N)
+        // Row 1: blank
+        // Row 2: "-- File type breakdown --"
+        // Row 3: blank
+        // Rows 4..4+type_count: type entries
+        let type_count = self.type_stats.len().min(15);
+        let type_start = 4;
+        let type_end = type_start + type_count;
+
+        if content_row >= type_start && content_row < type_end {
+            let idx = content_row - type_start;
+            if let Some(ts) = self.type_stats.get(idx) {
+                let pct = if self.total_files > 0 {
+                    ts.count as f64 / self.total_files as f64 * 100.0
+                } else {
+                    0.0
+                };
+                return vec![
+                    ("Type".into(), ts.type_name.clone()),
+                    ("Count".into(), ts.count.to_string()),
+                    ("Percentage".into(), format!("{pct:.1}%")),
+                ];
+            }
+        }
+
+        // After types: blank, section header, blank, header row, then proc rows
+        let proc_section_start = type_end + 1; // blank
+        // proc_section_start: blank line
+        // proc_section_start + 1: section header
+        // proc_section_start + 2: blank
+        // proc_section_start + 3: column header row
+        let proc_data_start = proc_section_start + 3;
+        let proc_count = self.proc_stats.len().min(TOP_N);
+        let proc_end = proc_data_start + proc_count;
+
+        if content_row >= proc_data_start && content_row < proc_end {
+            let idx = content_row - proc_data_start;
+            if let Some(ps) = self.proc_stats.get(idx) {
+                let username = users::get_user_by_uid(ps.uid)
+                    .map(|u| u.name().to_string_lossy().into_owned())
+                    .unwrap_or_else(|| ps.uid.to_string());
+                return vec![
+                    ("PID".into(), ps.pid.to_string()),
+                    ("Command".into(), ps.command.clone()),
+                    ("User".into(), username),
+                    ("FD Count".into(), ps.fd_count.to_string()),
+                ];
+            }
+        }
+
+        // After procs: blank, section header, blank, header row, user rows
+        let user_section_start = proc_end + 1; // blank
+        let user_data_start = user_section_start + 3;
+        let user_count = self.user_stats.len().min(20);
+        let user_end = user_data_start + user_count;
+
+        if content_row >= user_data_start && content_row < user_end {
+            let idx = content_row - user_data_start;
+            if let Some(us) = self.user_stats.get(idx) {
+                return vec![
+                    ("User".into(), us.username.clone()),
+                    ("UID".into(), us.uid.to_string()),
+                    ("Processes".into(), us.proc_count.to_string()),
+                    ("Files".into(), us.file_count.to_string()),
+                ];
+            }
+        }
+
+        vec![]
+    }
+
+    /// Total data row count for display purposes.
+    pub fn data_row_count(&self) -> usize {
+        self.type_stats.len().min(15)
+            + self.proc_stats.len().min(TOP_N)
+            + self.user_stats.len().min(20)
+    }
 }
 
 impl TuiMode for SummaryLiveMode {
