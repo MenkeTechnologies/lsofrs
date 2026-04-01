@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod cli;
+#[cfg(target_os = "macos")]
 mod darwin;
 mod delta;
 mod filter;
@@ -107,8 +108,20 @@ fn main() {
     output::print_processes(&procs, &theme, args.show_pgid, args.show_ppid, None);
 }
 
+pub fn gather_processes() -> Vec<types::Process> {
+    #[cfg(target_os = "macos")]
+    {
+        darwin::gather_processes()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        eprintln!("lsofrs: only macOS is currently supported");
+        Vec::new()
+    }
+}
+
 fn gather_and_filter(filter: &Filter) -> Vec<types::Process> {
-    let mut procs = darwin::gather_processes();
+    let mut procs = gather_processes();
 
     procs.retain(|p| filter.matches_process(p));
     for p in &mut procs {

@@ -125,7 +125,7 @@ pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
     while running {
         if !state.paused {
             iteration += 1;
-            let mut procs = crate::darwin::gather_processes();
+            let mut procs = crate::gather_processes();
             procs.retain(|p| filter.matches_process(p));
             for p in &mut procs {
                 p.files.retain(|f| filter.matches_file(f));

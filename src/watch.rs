@@ -52,7 +52,7 @@ pub fn run_watch(path: &str, interval: u64, theme: &Theme) {
             entry.gone = true;
         }
 
-        let procs = crate::darwin::gather_processes();
+        let procs = crate::gather_processes();
 
         for p in &procs {
             for f in &p.files {

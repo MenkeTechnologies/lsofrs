@@ -11,7 +11,6 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
-use crate::darwin;
 use crate::output::Theme;
 const STATUS_EXISTING: u8 = 0;
 const STATUS_NEW: u8 = 1;
@@ -34,7 +33,7 @@ pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
 
     loop {
         // Gather process info
-        let procs = darwin::gather_processes();
+        let procs = crate::gather_processes();
         let target = procs.iter().find(|p| p.pid == target_pid);
 
         // Mark all as unseen

@@ -10,7 +10,6 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
-use crate::darwin;
 use crate::filter::Filter;
 use crate::output::Theme;
 use crate::types::*;
@@ -70,7 +69,7 @@ pub fn run_monitor(
                 state.term_cols = cols;
             }
 
-            let mut procs = darwin::gather_processes();
+            let mut procs = crate::gather_processes();
 
             // Apply filters
             procs.retain(|p| filter.matches_process(p));
