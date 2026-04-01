@@ -122,20 +122,7 @@ lsofrs --top -r 5                # refresh every 5 seconds
 lsofrs --top -u root             # top FD consumers for root
 ```
 
-**Controls**:
-
-| Key | Action |
-|-----|--------|
-| `s` | Cycle sort column (FDs→PID→USER→REG→SOCK→PIPE→OTHER→DELTA→CMD) |
-| `r` | Reverse sort order |
-| `+`/`-` | Show more/fewer processes (±5) |
-| `1`-`9` | Set refresh interval (seconds) |
-| `<`/`>` | Fine-adjust refresh interval (±1s) |
-| `p` | Pause/resume data collection |
-| `b` | Toggle distribution bar column |
-| `d` | Toggle delta column |
-| `?`/`h` | Toggle help overlay |
-| `q`/`Esc`/`Ctrl-C` | Quit |
+**Top-specific keys**: `s` cycle sort, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#-interactive-controls) for common keys.
 
 ### File Watch (`--watch FILE`)
 
@@ -245,10 +232,11 @@ lsofrs --leak-detect -u wizard   # monitor only wizard's processes
 
 ### Summary / Statistics (`--summary`)
 
-Aggregate FD breakdown with bar charts, top processes, per-user totals.
+Aggregate FD breakdown with bar charts, top processes, per-user totals. Add `-r N` for live auto-refreshing TUI mode.
 
 ```bash
-lsofrs --summary                 # text report
+lsofrs --summary                 # text report (single-shot)
+lsofrs --summary -r 2            # live TUI, refresh every 2s
 lsofrs --summary --json          # JSON report
 lsofrs --summary -i              # network-only summary
 ```
@@ -283,6 +271,34 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 
 ---
 
+## // INTERACTIVE CONTROLS
+
+All live TUI modes (`--top`, `--summary -r`, and future modes) share a common keybinding framework powered by [ratatui](https://ratatui.rs).
+
+**Common keys** (available in all live modes):
+
+| Key | Action |
+|-----|--------|
+| `1`-`9` | Set refresh interval (seconds) |
+| `<`/`>` | Fine-adjust refresh interval (±1s) |
+| `p` | Pause/resume data collection |
+| `?`/`h` | Toggle help overlay |
+| `q`/`Esc`/`Ctrl-C` | Quit |
+
+**`--top` additional keys**:
+
+| Key | Action |
+|-----|--------|
+| `s` | Cycle sort column (FDs→PID→USER→REG→SOCK→PIPE→OTHER→DELTA→CMD) |
+| `r` | Reverse sort order |
+| `+`/`-` | Show more/fewer processes (±5) |
+| `b` | Toggle distribution bar column |
+| `d` | Toggle delta column |
+
+Non-TTY (piped) output always does a single-shot print and exits — no TUI, no key handling.
+
+---
+
 ## // ARCHITECTURE
 
 ```
@@ -302,7 +318,8 @@ src/
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
-├── top.rs       # Live top-N FD dashboard with delta tracking
+├── tui_app.rs   # Shared ratatui TUI framework (TuiMode trait)
+├── top.rs       # Live top-N FD dashboard (TuiMode)
 ├── watch.rs     # File watch — monitor opens/closes over time
 ├── stale.rs     # Stale FD finder — deleted files still held open
 ├── ports.rs     # Listening ports summary (like ss -tlnp)
@@ -335,7 +352,7 @@ Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **F
 - **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.
 - **Parallel gathering**: Per-PID FD enumeration parallelized with rayon.
 - **Streaming output**: Processes are gathered, filtered, and printed in a single pass.
-- **crossterm for TUI**: Alternate screen buffer, raw mode, cursor control — no ncurses dependency.
+- **ratatui TUI framework**: Shared `TuiMode` trait — all live modes get common keybindings, alternate screen, and atomic frame rendering via ratatui.
 - **serde for JSON**: Derive-based serialization, no hand-rolled escaping.
 - **clap for CLI**: Derive-based argument parsing with full help generation.
 
