@@ -1378,6 +1378,15 @@ fn draw_theme_editor(
     (x0, y0, bw, bh)
 }
 
+/// Save current TUI state to config file
+fn save_prefs(state: &TuiState) {
+    let mut prefs = config::load();
+    prefs.theme = Some(state.theme.display_name().to_string());
+    prefs.refresh_rate = Some(state.interval);
+    prefs.show_border = state.show_border;
+    config::save(&prefs);
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
@@ -1399,6 +1408,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = TuiState::new_pub(interval, theme.clone());
     let prefs = config::load();
+    state.show_border = prefs.show_border;
     let mut tui = TabbedTui::new(state.theme_idx, &prefs);
     let mut running = true;
     let start_time = Instant::now();
@@ -1433,27 +1443,53 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
             }
 
             let h = size.height;
+            let w = size.width;
+            let bdr = state.show_border;
+            let margin = if bdr { 1u16 } else { 0u16 };
 
-            // Row 0: tab bar
+            // Optional double-line border around the entire terminal
+            if bdr && w > 2 && h > 2 {
+                let buf = frame.buffer_mut();
+                let border_style = Style::default().fg(state.theme.dim_fg);
+                set_cell(buf, 0, 0, "╔", border_style);
+                for x in 1..w - 1 {
+                    set_cell(buf, x, 0, "═", border_style);
+                }
+                set_cell(buf, w - 1, 0, "╗", border_style);
+                set_cell(buf, 0, h - 1, "╚", border_style);
+                for x in 1..w - 1 {
+                    set_cell(buf, x, h - 1, "═", border_style);
+                }
+                set_cell(buf, w - 1, h - 1, "╝", border_style);
+                for y in 1..h - 1 {
+                    set_cell(buf, 0, y, "║", border_style);
+                    set_cell(buf, w - 1, y, "║", border_style);
+                }
+            }
+
+            let inner_x = margin;
+            let inner_w = w.saturating_sub(margin * 2);
+
+            // Tab bar
             draw_tab_bar(
                 frame.buffer_mut(),
                 Rect {
-                    x: 0,
-                    y: 0,
-                    width: size.width,
+                    x: inner_x,
+                    y: margin,
+                    width: inner_w,
                     height: 1,
                 },
                 tui.active,
                 &state.theme,
             );
 
-            // Row 1..(h-2): content
-            if h > 4 {
+            // Content area
+            if h > 4 + margin * 2 {
                 let content_area = Rect {
-                    x: 0,
-                    y: 1,
-                    width: size.width,
-                    height: h.saturating_sub(3),
+                    x: inner_x,
+                    y: margin + 1,
+                    width: inner_w,
+                    height: h.saturating_sub(3 + margin * 2),
                 };
                 match tui.active {
                     Tab::Top => {
@@ -1500,13 +1536,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
             }
 
             // Bottom 2 rows: separator + status
-            if h > 3 {
+            if h > 3 + margin * 2 {
                 draw_bottom_bar(
                     frame.buffer_mut(),
                     Rect {
-                        x: 0,
-                        y: h - 2,
-                        width: size.width,
+                        x: inner_x,
+                        y: h - 2 - margin,
+                        width: inner_w,
                         height: 2,
                     },
                     &state,
@@ -1717,6 +1753,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                 tui.show_theme_chooser = false;
                                 let mut prefs = config::load();
                                 prefs.theme = Some(state.theme.display_name().to_string());
+                                prefs.refresh_rate = Some(state.interval);
                                 prefs.active_custom_theme = tui.active_custom_theme.clone();
                                 config::save(&prefs);
                             }
@@ -1817,14 +1854,22 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                         KeyCode::Char(d @ '8'..='9') => {
                             state.interval = (d as u64) - b'0' as u64;
+                            save_prefs(&state);
                             break;
                         }
                         KeyCode::Char('<') | KeyCode::Char('[') => {
                             state.interval = state.interval.saturating_sub(1).max(1);
+                            save_prefs(&state);
                             break;
                         }
                         KeyCode::Char('>') | KeyCode::Char(']') => {
                             state.interval = (state.interval + 1).min(60);
+                            save_prefs(&state);
+                            break;
+                        }
+                        KeyCode::Char('x') => {
+                            state.show_border = !state.show_border;
+                            save_prefs(&state);
                             break;
                         }
                         _ => {}

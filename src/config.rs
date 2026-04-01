@@ -22,6 +22,8 @@ pub struct Prefs {
     pub theme: Option<String>,
     #[serde(default = "default_refresh")]
     pub refresh_rate: Option<u64>,
+    #[serde(default = "default_true")]
+    pub show_border: bool,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub custom_themes: HashMap<String, CustomThemeColors>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -32,11 +34,16 @@ fn default_refresh() -> Option<u64> {
     Some(1)
 }
 
+fn default_true() -> bool {
+    true
+}
+
 impl Default for Prefs {
     fn default() -> Self {
         Prefs {
             theme: None,
             refresh_rate: Some(1),
+            show_border: true,
             custom_themes: HashMap::new(),
             active_custom_theme: None,
         }

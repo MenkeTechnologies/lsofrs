@@ -26,6 +26,7 @@ pub struct TuiState {
     pub paused: bool,
     pub iteration: u64,
     pub show_help: bool,
+    pub show_border: bool,
     pub theme: LsofTheme,
     pub theme_idx: usize,
 }
@@ -41,6 +42,7 @@ impl TuiState {
             paused: false,
             iteration: 0,
             show_help: false,
+            show_border: true,
             theme,
             theme_idx,
         }
