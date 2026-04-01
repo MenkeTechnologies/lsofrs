@@ -79,6 +79,12 @@ fn main() {
         return;
     }
 
+    // Summary live mode (--summary with -r)
+    if args.summary && args.repeat.is_some() {
+        summary::run_summary_live(&filter, interval, &theme);
+        return;
+    }
+
     // Repeat mode (with optional delta)
     if args.repeat.is_some() {
         run_repeat(&args, &filter, &theme, interval);

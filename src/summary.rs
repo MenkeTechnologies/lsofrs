@@ -2,7 +2,14 @@
 
 use std::collections::HashMap;
 use std::io::{self, Write};
+use std::time::Duration;
 
+use crossterm::{
+    cursor, execute,
+    terminal::{self, ClearType},
+};
+
+use crate::filter::Filter;
 use crate::output::Theme;
 use crate::types::*;
 
@@ -103,40 +110,48 @@ pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
     }
 }
 
-fn print_summary_text(
+/// Render summary text into a String buffer (for both single-shot and live mode)
+#[allow(clippy::too_many_arguments)]
+fn render_summary_text(
     total_procs: usize,
     total_files: usize,
     types: &[TypeStats],
     procs: &[ProcStats],
     users: &[UserStats],
     theme: &Theme,
-) {
-    let out = io::stdout();
-    let mut out = out.lock();
+    iteration: Option<u64>,
+    interval: Option<u64>,
+) -> String {
+    use std::fmt::Write as FmtWrite;
+    let mut buf = String::with_capacity(2048);
+    let r = theme.reset();
 
     // Header
+    if let (Some(iter), Some(int)) = (iteration, interval) {
+        let _ = writeln!(
+            buf,
+            "{bold}{hdr} lsofrs summary — refresh {int}s — #{iter} — q to quit {r}",
+            bold = theme.bold(),
+            hdr = theme.hdr_bg(),
+        );
+    } else {
+        let _ = writeln!(buf, "{bold}═══ lsofrs summary ═══{r}", bold = theme.bold());
+    }
+    let _ = writeln!(buf);
     let _ = writeln!(
-        out,
-        "\n{bold}═══ lsofrs summary ═══{reset}\n",
-        bold = theme.bold(),
-        reset = theme.reset(),
-    );
-    let _ = writeln!(
-        out,
-        "  {cyan}Processes:{reset} {:<10}  {yellow}Open files:{reset} {}",
+        buf,
+        "  {cyan}Processes:{r} {:<10}  {yellow}Open files:{r} {}",
         fmt_num(total_procs),
         fmt_num(total_files),
         cyan = theme.cyan(),
         yellow = theme.yellow(),
-        reset = theme.reset(),
     );
 
     // Type breakdown
     let _ = writeln!(
-        out,
-        "\n{bold}── File type breakdown ──{reset}\n",
-        bold = theme.bold(),
-        reset = theme.reset(),
+        buf,
+        "\n{bold}── File type breakdown ──{r}\n",
+        bold = theme.bold()
     );
 
     let max_count = types.first().map(|t| t.count).unwrap_or(1);
@@ -149,15 +164,14 @@ fn print_summary_text(
                 0.0
             };
             let bar_len = (other as f64 / max_count as f64 * BAR_MAX as f64) as usize;
-            let bar: String = "█".repeat(bar_len);
             let _ = writeln!(
-                out,
-                "  {dim}(other){reset}  {:>8}  {:>5.1}%  {green}{bar}{reset}",
+                buf,
+                "  {dim}(other){r}  {:>8}  {:>5.1}%  {green}{}{r}",
                 fmt_num(other),
                 pct,
+                "█".repeat(bar_len),
                 dim = theme.dim(),
                 green = theme.green(),
-                reset = theme.reset(),
             );
             break;
         }
@@ -167,36 +181,33 @@ fn print_summary_text(
             0.0
         };
         let bar_len = (ts.count as f64 / max_count as f64 * BAR_MAX as f64) as usize;
-        let bar: String = "█".repeat(bar_len);
         let _ = writeln!(
-            out,
-            "  {blue}{:<6}{reset}  {:>8}  {:>5.1}%  {green}{bar}{reset}",
+            buf,
+            "  {blue}{:<6}{r}  {:>8}  {:>5.1}%  {green}{}{r}",
             ts.type_name,
             fmt_num(ts.count),
             pct,
+            "█".repeat(bar_len),
             blue = theme.blue(),
             green = theme.green(),
-            reset = theme.reset(),
         );
     }
 
     // Top processes
     let _ = writeln!(
-        out,
-        "\n{bold}── Top {TOP_N} processes by FD count ──{reset}\n",
-        bold = theme.bold(),
-        reset = theme.reset(),
+        buf,
+        "\n{bold}── Top {TOP_N} processes by FD count ──{r}\n",
+        bold = theme.bold()
     );
     let _ = writeln!(
-        out,
-        "  {hdr}{bold}{:>7}  {:<15}  {:<8}  {:>8}{reset}",
+        buf,
+        "  {hdr}{bold}{:>7}  {:<15}  {:<8}  {:>8}{r}",
         "PID",
         "COMMAND",
         "USER",
         "FDs",
         hdr = theme.hdr_bg(),
         bold = theme.bold(),
-        reset = theme.reset(),
     );
     for ps in procs.iter().take(TOP_N) {
         let username = users::get_user_by_uid(ps.uid)
@@ -207,40 +218,38 @@ fn print_summary_text(
         } else {
             &ps.command
         };
+        let user = if username.len() > 8 {
+            &username[..8]
+        } else {
+            &username
+        };
         let _ = writeln!(
-            out,
-            "  {mag}{:>7}{reset}  {cyan}{:<15}{reset}  {yellow}{:<8}{reset}  {:>8}",
+            buf,
+            "  {mag}{:>7}{r}  {cyan}{:<15}{r}  {yellow}{:<8}{r}  {:>8}",
             ps.pid,
             cmd,
-            if username.len() > 8 {
-                &username[..8]
-            } else {
-                &username
-            },
+            user,
             fmt_num(ps.fd_count),
             mag = theme.magenta(),
             cyan = theme.cyan(),
             yellow = theme.yellow(),
-            reset = theme.reset(),
         );
     }
 
     // Per-user totals
     let _ = writeln!(
-        out,
-        "\n{bold}── Per-user totals ──{reset}\n",
-        bold = theme.bold(),
-        reset = theme.reset(),
+        buf,
+        "\n{bold}── Per-user totals ──{r}\n",
+        bold = theme.bold()
     );
     let _ = writeln!(
-        out,
-        "  {hdr}{bold}{:<10}  {:>8}  {:>8}{reset}",
+        buf,
+        "  {hdr}{bold}{:<10}  {:>8}  {:>8}{r}",
         "USER",
         "PROCS",
         "FILES",
         hdr = theme.hdr_bg(),
         bold = theme.bold(),
-        reset = theme.reset(),
     );
     for us in users.iter().take(20) {
         let uname = if us.username.len() > 10 {
@@ -249,17 +258,164 @@ fn print_summary_text(
             &us.username
         };
         let _ = writeln!(
-            out,
-            "  {yellow}{:<10}{reset}  {:>8}  {:>8}",
+            buf,
+            "  {yellow}{:<10}{r}  {:>8}  {:>8}",
             uname,
             fmt_num(us.proc_count),
             fmt_num(us.file_count),
             yellow = theme.yellow(),
-            reset = theme.reset(),
         );
     }
 
-    let _ = writeln!(out);
+    let _ = writeln!(buf);
+    buf
+}
+
+fn print_summary_text(
+    total_procs: usize,
+    total_files: usize,
+    types: &[TypeStats],
+    procs: &[ProcStats],
+    users: &[UserStats],
+    theme: &Theme,
+) {
+    let buf = render_summary_text(
+        total_procs,
+        total_files,
+        types,
+        procs,
+        users,
+        theme,
+        None,
+        None,
+    );
+    let out = io::stdout();
+    let mut out = out.lock();
+    let _ = out.write_all(buf.as_bytes());
+    let _ = out.flush();
+}
+
+/// Live summary mode — auto-refresh in alternate screen with key handling
+pub fn run_summary_live(filter: &Filter, interval: u64, theme: &Theme) {
+    let use_alt = theme.is_tty;
+    if use_alt {
+        let _ = execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide);
+        let _ = terminal::enable_raw_mode();
+    }
+
+    let mut iteration = 0u64;
+    let mut running = true;
+
+    while running {
+        iteration += 1;
+
+        let mut procs = crate::gather_processes();
+        procs.retain(|p| filter.matches_process(p));
+        for p in &mut procs {
+            p.files.retain(|f| filter.matches_file(f));
+        }
+
+        // Compute stats (same as print_summary)
+        let mut type_map: HashMap<String, usize> = HashMap::new();
+        let mut user_map: HashMap<u32, (String, usize, usize)> = HashMap::new();
+        let mut proc_stats: Vec<ProcStats> = Vec::new();
+        let mut total_files = 0usize;
+
+        for p in &procs {
+            let fd_count = p.files.len();
+            total_files += fd_count;
+            for f in &p.files {
+                *type_map
+                    .entry(f.file_type.as_str().to_string())
+                    .or_insert(0) += 1;
+            }
+            let entry = user_map
+                .entry(p.uid)
+                .or_insert_with(|| (p.username(), 0, 0));
+            entry.1 += 1;
+            entry.2 += fd_count;
+            proc_stats.push(ProcStats {
+                pid: p.pid,
+                command: p.command.clone(),
+                uid: p.uid,
+                fd_count,
+            });
+        }
+
+        proc_stats.sort_by(|a, b| b.fd_count.cmp(&a.fd_count).then(a.pid.cmp(&b.pid)));
+        let mut type_stats: Vec<TypeStats> = type_map
+            .into_iter()
+            .map(|(type_name, count)| TypeStats { type_name, count })
+            .collect();
+        type_stats.sort_by(|a, b| b.count.cmp(&a.count).then(a.type_name.cmp(&b.type_name)));
+        let mut user_stats: Vec<UserStats> = user_map
+            .into_iter()
+            .map(|(uid, (username, proc_count, file_count))| UserStats {
+                uid,
+                username,
+                proc_count,
+                file_count,
+            })
+            .collect();
+        user_stats.sort_by(|a, b| b.file_count.cmp(&a.file_count).then(a.uid.cmp(&b.uid)));
+
+        let mut buf = render_summary_text(
+            procs.len(),
+            total_files,
+            &type_stats,
+            &proc_stats,
+            &user_stats,
+            theme,
+            Some(iteration),
+            Some(interval),
+        );
+
+        if use_alt {
+            buf = buf.replace('\n', "\r\n");
+        }
+
+        let out = io::stdout();
+        let mut out = out.lock();
+        if use_alt {
+            let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+        }
+        let _ = out.write_all(buf.as_bytes());
+        let _ = out.flush();
+        drop(out);
+
+        if !use_alt {
+            break;
+        }
+
+        // Poll keys during interval
+        let deadline = std::time::Instant::now() + Duration::from_secs(interval);
+        while std::time::Instant::now() < deadline {
+            if crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false)
+                && let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read()
+            {
+                let quit = match key.code {
+                    crossterm::event::KeyCode::Char('q') | crossterm::event::KeyCode::Esc => true,
+                    crossterm::event::KeyCode::Char('c')
+                        if key
+                            .modifiers
+                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                    {
+                        true
+                    }
+                    _ => false,
+                };
+                if quit {
+                    running = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    if use_alt {
+        let _ = terminal::disable_raw_mode();
+        let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+    }
 }
 
 fn print_summary_json(
