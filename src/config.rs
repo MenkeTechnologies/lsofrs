@@ -30,6 +30,12 @@ pub struct Prefs {
     pub custom_themes: HashMap<String, CustomThemeColors>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_custom_theme: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pinned_pids: Vec<i32>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sort_frozen: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub compact_view: bool,
 }
 
 fn default_refresh() -> Option<u64> {
@@ -49,6 +55,9 @@ impl Default for Prefs {
             active_tab: None,
             custom_themes: HashMap::new(),
             active_custom_theme: None,
+            pinned_pids: Vec::new(),
+            sort_frozen: false,
+            compact_view: false,
         }
     }
 }

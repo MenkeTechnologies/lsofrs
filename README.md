@@ -32,12 +32,26 @@ If a process has a file descriptor, `lsofrs` sees it.
 
 ---
 
-## // SCREENSHOT
+## // SCREENSHOTS
 
-![lsofrs --help](screenshot.png)
+### Help (`-h`)
+![lsofrs --help](screenshots/help.png)
+
+### Unified TUI (`--tui`) — 7 clickable tabs, 31 themes, mouse support
+
+| TOP tab | PORTS tab |
+|---------|-----------|
+| ![TOP](screenshots/top.png) | ![PORTS](screenshots/ports.png) |
+
+| SUMMARY tab | TREE tab |
+|-------------|----------|
+| ![SUMMARY](screenshots/summary.png) | ![TREE](screenshots/tree.png) |
+
+| NET-MAP tab | PIPES tab |
+|-------------|-----------|
+| ![NET-MAP](screenshots/netmap.png) | ![PIPES](screenshots/pipes.png) |
 
 ---
-
 
 ## // JACK IN — BUILD FROM SOURCE
 

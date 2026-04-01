@@ -1,6 +1,6 @@
 //! Unified tabbed TUI — single `--tui` flag launches all modes as tabs
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
 
@@ -138,6 +138,45 @@ struct Tooltip {
     lines: Vec<(String, String)>,
 }
 
+// ── Hover state for timed tooltips ────────────────────────────────────────────
+
+#[derive(Default)]
+struct HoverState {
+    row: Option<u16>,
+    col: Option<u16>,
+    since: Option<Instant>,
+}
+
+impl HoverState {
+    /// Returns true when hover has been on the same row for >= 1s and < 4s.
+    fn ready(&self) -> bool {
+        self.since
+            .map(|t| {
+                let ms = t.elapsed().as_millis();
+                (1000..4000).contains(&ms)
+            })
+            .unwrap_or(false)
+    }
+
+    /// Update position. Resets timer if row changed.
+    fn move_to(&mut self, col: u16, row: u16) {
+        if self.row != Some(row) {
+            self.row = Some(row);
+            self.col = Some(col);
+            self.since = Some(Instant::now());
+        } else {
+            self.col = Some(col);
+        }
+    }
+
+    /// Clear hover state.
+    fn clear(&mut self) {
+        self.row = None;
+        self.col = None;
+        self.since = None;
+    }
+}
+
 // ── Tab enum ──────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -236,6 +275,14 @@ struct PipeRow {
     endpoints: String,
 }
 
+/// Key for frozen sort order — identifies a row uniquely per tab.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum FrozenKey {
+    Pid(i32),
+    HostCount(String, usize),
+    PipeId(String, String),
+}
+
 // ── Tabbed TUI state ─────────────────────────────────────────────────────────
 
 struct TabbedTui {
@@ -282,6 +329,15 @@ struct TabbedTui {
     // Content area y for mouse hit-testing
     content_area_y: u16,
     content_area_h: u16,
+    // Hover tooltip state
+    hover: HoverState,
+    // Pinned PIDs (★ prefix, float to top)
+    pinned: HashSet<i32>,
+    // Freeze sort order
+    sort_frozen: bool,
+    frozen_order: Vec<FrozenKey>,
+    // Compact view toggle
+    compact_view: bool,
 }
 
 impl TabbedTui {
@@ -317,6 +373,11 @@ impl TabbedTui {
             sort_reverse: false,
             content_area_y: 0,
             content_area_h: 0,
+            hover: HoverState::default(),
+            pinned: prefs.pinned_pids.iter().copied().collect(),
+            sort_frozen: prefs.sort_frozen,
+            frozen_order: Vec::new(),
+            compact_view: prefs.compact_view,
         }
     }
 
@@ -412,6 +473,134 @@ impl TabbedTui {
         self.set_selected(Some(last));
         let visible = self.content_area_h.saturating_sub(4) as usize;
         self.set_scroll(last.saturating_sub(visible.saturating_sub(1)));
+    }
+
+    /// Get the PID of the selected row (if applicable).
+    fn selected_pid(&self) -> Option<i32> {
+        let idx = self.selected()?;
+        match self.active {
+            Tab::Ports => self.port_rows.get(idx).map(|r| r.pid),
+            Tab::Stale => self.stale_rows.get(idx).map(|r| r.pid),
+            Tab::Tree => self.tree_rows.get(idx).map(|r| r.pid),
+            _ => None,
+        }
+    }
+
+    /// Get the PID at a given data row index for the current tab.
+    fn pid_at(&self, idx: usize) -> Option<i32> {
+        match self.active {
+            Tab::Ports => self.port_rows.get(idx).map(|r| r.pid),
+            Tab::Stale => self.stale_rows.get(idx).map(|r| r.pid),
+            Tab::Tree => self.tree_rows.get(idx).map(|r| r.pid),
+            _ => None,
+        }
+    }
+
+    /// Toggle pin on the selected item's PID.
+    fn toggle_pin(&mut self) {
+        if let Some(pid) = self.selected_pid() {
+            if self.pinned.contains(&pid) {
+                self.pinned.remove(&pid);
+                self.set_status(format!("Unpinned PID {pid}"));
+            } else {
+                self.pinned.insert(pid);
+                self.set_status(format!("Pinned PID {pid}"));
+            }
+            self.save_pinned();
+        } else {
+            self.set_status("Select a row with a PID first");
+        }
+    }
+
+    /// Persist pinned PIDs to config.
+    fn save_pinned(&self) {
+        let mut prefs = config::load();
+        prefs.pinned_pids = self.pinned.iter().copied().collect();
+        prefs.pinned_pids.sort();
+        config::save(&prefs);
+    }
+
+    /// Get frozen keys for current tab data.
+    fn current_frozen_keys(&self) -> Vec<FrozenKey> {
+        match self.active {
+            Tab::Ports => self
+                .port_rows
+                .iter()
+                .map(|r| FrozenKey::Pid(r.pid))
+                .collect(),
+            Tab::Stale => self
+                .stale_rows
+                .iter()
+                .map(|r| FrozenKey::Pid(r.pid))
+                .collect(),
+            Tab::Tree => self
+                .tree_rows
+                .iter()
+                .map(|r| FrozenKey::Pid(r.pid))
+                .collect(),
+            Tab::NetMap => self
+                .net_map_rows
+                .iter()
+                .map(|r| FrozenKey::HostCount(r.host.clone(), r.count))
+                .collect(),
+            Tab::PipeChain => self
+                .pipe_rows
+                .iter()
+                .map(|r| FrozenKey::PipeId(r.kind.clone(), r.id.clone()))
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Apply frozen sort order — reorder rows to match saved order.
+    fn apply_frozen_order(&mut self) {
+        if !self.sort_frozen || self.frozen_order.is_empty() {
+            return;
+        }
+        let key_to_pos: HashMap<FrozenKey, usize> = self
+            .frozen_order
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (k.clone(), i))
+            .collect();
+        let max_pos = self.frozen_order.len();
+        match self.active {
+            Tab::Ports => self
+                .port_rows
+                .sort_by_key(|r| *key_to_pos.get(&FrozenKey::Pid(r.pid)).unwrap_or(&max_pos)),
+            Tab::Stale => self
+                .stale_rows
+                .sort_by_key(|r| *key_to_pos.get(&FrozenKey::Pid(r.pid)).unwrap_or(&max_pos)),
+            Tab::Tree => {} // Tree has natural order
+            Tab::NetMap => self.net_map_rows.sort_by_key(|r| {
+                *key_to_pos
+                    .get(&FrozenKey::HostCount(r.host.clone(), r.count))
+                    .unwrap_or(&max_pos)
+            }),
+            Tab::PipeChain => self.pipe_rows.sort_by_key(|r| {
+                *key_to_pos
+                    .get(&FrozenKey::PipeId(r.kind.clone(), r.id.clone()))
+                    .unwrap_or(&max_pos)
+            }),
+            _ => {}
+        }
+    }
+
+    /// Apply pin sort — pinned items float to top.
+    fn apply_pin_sort(&mut self) {
+        if self.pinned.is_empty() {
+            return;
+        }
+        match self.active {
+            Tab::Ports => self
+                .port_rows
+                .sort_by_key(|r| if self.pinned.contains(&r.pid) { 0 } else { 1 }),
+            Tab::Stale => self
+                .stale_rows
+                .sort_by_key(|r| if self.pinned.contains(&r.pid) { 0 } else { 1 }),
+            Tab::Tree => {} // Don't reorder tree
+            _ => {}
+        }
     }
 
     /// Build tooltip lines for a right-click on a simple tab row.
@@ -703,6 +892,14 @@ impl TabbedTui {
         self.update_tree(&procs);
         self.update_net_map(&procs);
         self.update_pipes(&procs);
+
+        // Apply pin sort (pinned items float to top)
+        self.apply_pin_sort();
+
+        // Apply frozen sort order if enabled
+        if self.sort_frozen {
+            self.apply_frozen_order();
+        }
     }
 
     fn update_ports(&mut self, procs: &[Process]) {
@@ -960,6 +1157,9 @@ impl TabbedTui {
             ("y", "copy selected"),
             ("r", "reverse sort"),
             ("f", "cycle refresh rate"),
+            ("F", "pin/unpin selected PID"),
+            ("o", "freeze/unfreeze sort order"),
+            ("t", "toggle compact/expanded view"),
         ];
         match self.active {
             Tab::Top => keys.extend(self.top_mode.help_keys()),
@@ -1035,6 +1235,7 @@ fn draw_tab_bar(buf: &mut Buffer, area: Rect, active: Tab, theme: &LsofTheme) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_bottom_bar(
     buf: &mut Buffer,
     area: Rect,
@@ -1043,6 +1244,9 @@ fn draw_bottom_bar(
     total_files: usize,
     elapsed: &str,
     screen_filter: &Option<String>,
+    sort_frozen: bool,
+    compact_view: bool,
+    pin_count: usize,
 ) {
     let t = &state.theme;
     let dim_s = Style::default().fg(t.dim_fg);
@@ -1072,6 +1276,15 @@ fn draw_bottom_bar(
     if let Some(f) = screen_filter {
         status.push_str(&format!(" \u{2502} filter:{}", f));
     }
+    if sort_frozen {
+        status.push_str(" \u{2502} frozen");
+    }
+    if compact_view {
+        status.push_str(" \u{2502} compact");
+    }
+    if pin_count > 0 {
+        status.push_str(&format!(" \u{2502} \u{2605}{}", pin_count));
+    }
     set_str(buf, area.x, info_y, &status, bar_s, area.width);
 
     // Right-aligned elapsed time
@@ -1084,6 +1297,7 @@ fn draw_bottom_bar(
 
 // ── Simple tab renderers ──────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn render_ports(
     buf: &mut Buffer,
     area: Rect,
@@ -1091,6 +1305,8 @@ fn render_ports(
     rows: &[PortRow],
     scroll: usize,
     selected: Option<usize>,
+    pinned: &HashSet<i32>,
+    compact: bool,
 ) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
@@ -1122,13 +1338,19 @@ fn render_ports(
         for x in area.x..area.x + area.width {
             set_cell(buf, x, row, " ", hdr_s);
         }
-        let hdr = format!(
-            "{:<5}  {:<15}  {:>5}  {:>7}  {:<8}  COMMAND",
-            "PROTO", "LOCAL ADDR", "PORT", "PID", "USER"
-        );
+        let hdr = if compact {
+            format!("{:>5}  {:>7}  COMMAND", "PORT", "PID")
+        } else {
+            format!(
+                "{:<5}  {:<15}  {:>5}  {:>7}  {:<8}  COMMAND",
+                "PROTO", "LOCAL ADDR", "PORT", "PID", "USER"
+            )
+        };
         set_str(buf, cx, row, &hdr, hdr_s, w);
         row += 1;
     }
+
+    let pin_s = Style::default().fg(Color::Indexed(220));
 
     for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
@@ -1147,62 +1369,95 @@ fn render_ports(
                 set_cell(buf, x, row, " ", alt_s);
             }
         }
-        let user = if r.user.len() > 8 {
-            &r.user[..8]
-        } else {
-            &r.user
-        };
+        // Pin indicator
+        if pinned.contains(&r.pid) {
+            set_str(buf, area.x, row, "\u{2605}", pin_s.patch(alt_s), 2);
+        }
         let cmd = if r.command.len() > 20 {
             &r.command[..20]
         } else {
             &r.command
         };
 
-        set_str(
-            buf,
-            cx,
-            row,
-            &format!("{:<5}", r.proto),
-            type_s.patch(alt_s),
-            5,
-        );
-        set_str(
-            buf,
-            cx + 7,
-            row,
-            &format!("{:<15}", r.addr),
-            dim_s.patch(alt_s),
-            15,
-        );
-        set_str(
-            buf,
-            cx + 24,
-            row,
-            &format!("{:>5}", r.port),
-            bold_s.patch(alt_s),
-            5,
-        );
-        set_str(
-            buf,
-            cx + 31,
-            row,
-            &format!("{:>7}", r.pid),
-            pid_s.patch(alt_s),
-            7,
-        );
-        set_str(
-            buf,
-            cx + 40,
-            row,
-            &format!("{:<8}", user),
-            user_s.patch(alt_s),
-            8,
-        );
-        set_str(buf, cx + 50, row, cmd, cmd_s.patch(alt_s), 20);
+        if compact {
+            // Compact: PORT PID COMMAND
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:>5}", r.port),
+                bold_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 7,
+                row,
+                &format!("{:>7}", r.pid),
+                pid_s.patch(alt_s),
+                7,
+            );
+            set_str(
+                buf,
+                cx + 16,
+                row,
+                cmd,
+                cmd_s.patch(alt_s),
+                w.saturating_sub(18),
+            );
+        } else {
+            let user = if r.user.len() > 8 {
+                &r.user[..8]
+            } else {
+                &r.user
+            };
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:<5}", r.proto),
+                type_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 7,
+                row,
+                &format!("{:<15}", r.addr),
+                dim_s.patch(alt_s),
+                15,
+            );
+            set_str(
+                buf,
+                cx + 24,
+                row,
+                &format!("{:>5}", r.port),
+                bold_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 31,
+                row,
+                &format!("{:>7}", r.pid),
+                pid_s.patch(alt_s),
+                7,
+            );
+            set_str(
+                buf,
+                cx + 40,
+                row,
+                &format!("{:<8}", user),
+                user_s.patch(alt_s),
+                8,
+            );
+            set_str(buf, cx + 50, row, cmd, cmd_s.patch(alt_s), 20);
+        }
         row += 1;
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_stale(
     buf: &mut Buffer,
     area: Rect,
@@ -1210,6 +1465,8 @@ fn render_stale(
     rows: &[StaleRow],
     scroll: usize,
     selected: Option<usize>,
+    pinned: &HashSet<i32>,
+    compact: bool,
 ) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
@@ -1248,13 +1505,19 @@ fn render_stale(
         for x in area.x..area.x + area.width {
             set_cell(buf, x, row, " ", hdr_s);
         }
-        let hdr = format!(
-            "{:>7}  {:<8}  {:<5}  {:<5}  {:>8}  NAME",
-            "PID", "USER", "FD", "TYPE", "SIZE"
-        );
+        let hdr = if compact {
+            format!("{:>7}  NAME", "PID")
+        } else {
+            format!(
+                "{:>7}  {:<8}  {:<5}  {:<5}  {:>8}  NAME",
+                "PID", "USER", "FD", "TYPE", "SIZE"
+            )
+        };
         set_str(buf, cx, row, &hdr, hdr_s, w);
         row += 1;
     }
+
+    let pin_s = Style::default().fg(Color::Indexed(220));
 
     for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
@@ -1273,66 +1536,94 @@ fn render_stale(
                 set_cell(buf, x, row, " ", alt_s);
             }
         }
-        let user = if r.user.len() > 8 {
-            &r.user[..8]
-        } else {
-            &r.user
-        };
-        let size_str = r.size.map(|s| s.to_string()).unwrap_or_default();
-        let name = if r.name.len() as u16 > w.saturating_sub(50) {
-            &r.name[..w.saturating_sub(50) as usize]
-        } else {
-            &r.name
-        };
+        if pinned.contains(&r.pid) {
+            set_str(buf, area.x, row, "\u{2605}", pin_s.patch(alt_s), 2);
+        }
 
-        set_str(
-            buf,
-            cx,
-            row,
-            &format!("{:>7}", r.pid),
-            pid_s.patch(alt_s),
-            7,
-        );
-        set_str(
-            buf,
-            cx + 9,
-            row,
-            &format!("{:<8}", user),
-            user_s.patch(alt_s),
-            8,
-        );
-        set_str(
-            buf,
-            cx + 19,
-            row,
-            &format!("{:<5}", r.fd),
-            dim_s.patch(alt_s),
-            5,
-        );
-        set_str(
-            buf,
-            cx + 26,
-            row,
-            &format!("{:<5}", r.file_type),
-            type_s.patch(alt_s),
-            5,
-        );
-        set_str(
-            buf,
-            cx + 33,
-            row,
-            &format!("{:>8}", size_str),
-            dim_s.patch(alt_s),
-            8,
-        );
-        set_str(
-            buf,
-            cx + 43,
-            row,
-            name,
-            del_s.patch(alt_s),
-            w.saturating_sub(45),
-        );
+        if compact {
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:>7}", r.pid),
+                pid_s.patch(alt_s),
+                7,
+            );
+            let name = if r.name.len() as u16 > w.saturating_sub(12) {
+                &r.name[..w.saturating_sub(12) as usize]
+            } else {
+                &r.name
+            };
+            set_str(
+                buf,
+                cx + 9,
+                row,
+                name,
+                del_s.patch(alt_s),
+                w.saturating_sub(11),
+            );
+        } else {
+            let user = if r.user.len() > 8 {
+                &r.user[..8]
+            } else {
+                &r.user
+            };
+            let size_str = r.size.map(|s| s.to_string()).unwrap_or_default();
+            let name = if r.name.len() as u16 > w.saturating_sub(50) {
+                &r.name[..w.saturating_sub(50) as usize]
+            } else {
+                &r.name
+            };
+
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:>7}", r.pid),
+                pid_s.patch(alt_s),
+                7,
+            );
+            set_str(
+                buf,
+                cx + 9,
+                row,
+                &format!("{:<8}", user),
+                user_s.patch(alt_s),
+                8,
+            );
+            set_str(
+                buf,
+                cx + 19,
+                row,
+                &format!("{:<5}", r.fd),
+                dim_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 26,
+                row,
+                &format!("{:<5}", r.file_type),
+                type_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 33,
+                row,
+                &format!("{:>8}", size_str),
+                dim_s.patch(alt_s),
+                8,
+            );
+            set_str(
+                buf,
+                cx + 43,
+                row,
+                name,
+                del_s.patch(alt_s),
+                w.saturating_sub(45),
+            );
+        }
         row += 1;
     }
 }
@@ -1344,6 +1635,7 @@ fn render_tree(
     rows: &[TreeRow],
     scroll: usize,
     selected: Option<usize>,
+    pinned: &HashSet<i32>,
 ) {
     let hdr_s = Style::default()
         .fg(theme.header_fg)
@@ -1374,6 +1666,8 @@ fn render_tree(
         row += 1;
     }
 
+    let pin_s = Style::default().fg(Color::Indexed(220));
+
     for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
@@ -1384,6 +1678,9 @@ fn render_tree(
             for x in area.x..area.x + area.width {
                 set_cell(buf, x, row, " ", sel_s);
             }
+        }
+        if pinned.contains(&r.pid) {
+            set_str(buf, area.x, row, "\u{2605}", pin_s, 2);
         }
         let indent_str = "    ".repeat(r.indent);
         let prefix = format!("{}{}", indent_str, r.connector);
@@ -1422,6 +1719,7 @@ fn render_net_map(
     rows: &[NetMapRow],
     scroll: usize,
     selected: Option<usize>,
+    compact: bool,
 ) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
@@ -1453,10 +1751,14 @@ fn render_net_map(
         for x in area.x..area.x + area.width {
             set_cell(buf, x, row, " ", hdr_s);
         }
-        let hdr = format!(
-            "{:<20}  {:>5}  {:<9}  {:<10}  PROCESSES",
-            "REMOTE HOST", "CONNS", "PROTOCOLS", "PORTS"
-        );
+        let hdr = if compact {
+            format!("{:<20}  {:>5}  PROCESSES", "REMOTE HOST", "CONNS")
+        } else {
+            format!(
+                "{:<20}  {:>5}  {:<9}  {:<10}  PROCESSES",
+                "REMOTE HOST", "CONNS", "PROTOCOLS", "PORTS"
+            )
+        };
         set_str(buf, cx, row, &hdr, hdr_s, w);
         row += 1;
     }
@@ -1483,45 +1785,72 @@ fn render_net_map(
         } else {
             &r.host
         };
-        set_str(
-            buf,
-            cx,
-            row,
-            &format!("{:<20}", host),
-            pid_s.patch(alt_s),
-            20,
-        );
-        set_str(
-            buf,
-            cx + 22,
-            row,
-            &format!("{:>5}", r.count),
-            bold_s.patch(alt_s),
-            5,
-        );
-        set_str(
-            buf,
-            cx + 29,
-            row,
-            &format!("{:<9}", r.protocols),
-            type_s.patch(alt_s),
-            9,
-        );
-        set_str(
-            buf,
-            cx + 40,
-            row,
-            &format!("{:<10}", r.ports),
-            dim_s.patch(alt_s),
-            10,
-        );
-        let proc_w = w.saturating_sub(52);
-        let procs = if r.processes.len() as u16 > proc_w {
-            &r.processes[..proc_w as usize]
+
+        if compact {
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:<20}", host),
+                pid_s.patch(alt_s),
+                20,
+            );
+            set_str(
+                buf,
+                cx + 22,
+                row,
+                &format!("{:>5}", r.count),
+                bold_s.patch(alt_s),
+                5,
+            );
+            let proc_w = w.saturating_sub(30);
+            let procs = if r.processes.len() as u16 > proc_w {
+                &r.processes[..proc_w as usize]
+            } else {
+                &r.processes
+            };
+            set_str(buf, cx + 29, row, procs, cmd_s.patch(alt_s), proc_w);
         } else {
-            &r.processes
-        };
-        set_str(buf, cx + 52, row, procs, cmd_s.patch(alt_s), proc_w);
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:<20}", host),
+                pid_s.patch(alt_s),
+                20,
+            );
+            set_str(
+                buf,
+                cx + 22,
+                row,
+                &format!("{:>5}", r.count),
+                bold_s.patch(alt_s),
+                5,
+            );
+            set_str(
+                buf,
+                cx + 29,
+                row,
+                &format!("{:<9}", r.protocols),
+                type_s.patch(alt_s),
+                9,
+            );
+            set_str(
+                buf,
+                cx + 40,
+                row,
+                &format!("{:<10}", r.ports),
+                dim_s.patch(alt_s),
+                10,
+            );
+            let proc_w = w.saturating_sub(52);
+            let procs = if r.processes.len() as u16 > proc_w {
+                &r.processes[..proc_w as usize]
+            } else {
+                &r.processes
+            };
+            set_str(buf, cx + 52, row, procs, cmd_s.patch(alt_s), proc_w);
+        }
         row += 1;
     }
 }
@@ -1533,6 +1862,7 @@ fn render_pipes(
     rows: &[PipeRow],
     scroll: usize,
     selected: Option<usize>,
+    compact: bool,
 ) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
@@ -1569,7 +1899,11 @@ fn render_pipes(
         for x in area.x..area.x + area.width {
             set_cell(buf, x, row, " ", hdr_s);
         }
-        let hdr = format!("{:<6}  {:<20}  ENDPOINTS", "TYPE", "IDENTIFIER");
+        let hdr = if compact {
+            "ENDPOINTS".to_string()
+        } else {
+            format!("{:<6}  {:<20}  ENDPOINTS", "TYPE", "IDENTIFIER")
+        };
         set_str(buf, cx, row, &hdr, hdr_s, w);
         row += 1;
     }
@@ -1591,30 +1925,41 @@ fn render_pipes(
                 set_cell(buf, x, row, " ", alt_s);
             }
         }
-        let id = if r.id.len() > 20 { &r.id[..20] } else { &r.id };
-        set_str(
-            buf,
-            cx,
-            row,
-            &format!("{:<6}", r.kind),
-            type_s.patch(alt_s),
-            6,
-        );
-        set_str(
-            buf,
-            cx + 8,
-            row,
-            &format!("{:<20}", id),
-            dim_s.patch(alt_s),
-            20,
-        );
-        let ep_w = w.saturating_sub(30);
-        let eps = if r.endpoints.len() as u16 > ep_w {
-            &r.endpoints[..ep_w as usize]
+
+        if compact {
+            let ep_w = w.saturating_sub(2);
+            let eps = if r.endpoints.len() as u16 > ep_w {
+                &r.endpoints[..ep_w as usize]
+            } else {
+                &r.endpoints
+            };
+            set_str(buf, cx, row, eps, cmd_s.patch(alt_s), ep_w);
         } else {
-            &r.endpoints
-        };
-        set_str(buf, cx + 30, row, eps, cmd_s.patch(alt_s), ep_w);
+            let id = if r.id.len() > 20 { &r.id[..20] } else { &r.id };
+            set_str(
+                buf,
+                cx,
+                row,
+                &format!("{:<6}", r.kind),
+                type_s.patch(alt_s),
+                6,
+            );
+            set_str(
+                buf,
+                cx + 8,
+                row,
+                &format!("{:<20}", id),
+                dim_s.patch(alt_s),
+                20,
+            );
+            let ep_w = w.saturating_sub(30);
+            let eps = if r.endpoints.len() as u16 > ep_w {
+                &r.endpoints[..ep_w as usize]
+            } else {
+                &r.endpoints
+            };
+            set_str(buf, cx + 30, row, eps, cmd_s.patch(alt_s), ep_w);
+        }
         row += 1;
     }
 }
@@ -2301,6 +2646,8 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         &tui.port_rows,
                         scroll,
                         selected,
+                        &tui.pinned,
+                        tui.compact_view,
                     ),
                     Tab::Stale => render_stale(
                         frame.buffer_mut(),
@@ -2309,6 +2656,8 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         &tui.stale_rows,
                         scroll,
                         selected,
+                        &tui.pinned,
+                        tui.compact_view,
                     ),
                     Tab::Tree => render_tree(
                         frame.buffer_mut(),
@@ -2317,6 +2666,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         &tui.tree_rows,
                         scroll,
                         selected,
+                        &tui.pinned,
                     ),
                     Tab::NetMap => render_net_map(
                         frame.buffer_mut(),
@@ -2325,6 +2675,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         &tui.net_map_rows,
                         scroll,
                         selected,
+                        tui.compact_view,
                     ),
                     Tab::PipeChain => render_pipes(
                         frame.buffer_mut(),
@@ -2333,6 +2684,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         &tui.pipe_rows,
                         scroll,
                         selected,
+                        tui.compact_view,
                     ),
                 }
             }
@@ -2352,6 +2704,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     tui.total_files,
                     &elapsed_str,
                     &tui.screen_filter,
+                    tui.sort_frozen,
+                    tui.compact_view,
+                    tui.pinned.len(),
                 );
             }
 
@@ -2382,9 +2737,40 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 draw_filter_popup(frame.buffer_mut(), size, &state.theme, &tui);
             }
 
-            // Tooltip overlay
+            // Tooltip overlay (right-click)
             if tui.tooltip.active {
                 draw_tooltip(frame.buffer_mut(), size, &state.theme, &tui.tooltip);
+            }
+
+            // Hover tooltip overlay (auto after 1s)
+            if tui.hover.ready()
+                && !tui.tooltip.active
+                && let Some(hover_row) = tui.hover.row
+            {
+                let hover_col = tui.hover.col.unwrap_or(0);
+                if hover_row >= tui.content_area_y
+                    && hover_row < tui.content_area_y + tui.content_area_h
+                    && matches!(
+                        tui.active,
+                        Tab::Ports | Tab::Stale | Tab::Tree | Tab::NetMap | Tab::PipeChain
+                    )
+                {
+                    let data_row_offset =
+                        (hover_row - tui.content_area_y).saturating_sub(3) as usize;
+                    let idx = tui.scroll() + data_row_offset;
+                    if idx < tui.row_count() {
+                        let lines = tui.build_tooltip(idx);
+                        if !lines.is_empty() {
+                            let hover_tt = Tooltip {
+                                active: true,
+                                x: hover_col,
+                                y: hover_row,
+                                lines,
+                            };
+                            draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                        }
+                    }
+                }
             }
 
             // Status message overlay
@@ -2398,7 +2784,17 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         // Poll events
         let deadline = Instant::now() + Duration::from_secs(state.interval);
         while Instant::now() < deadline {
-            if !event::poll(Duration::from_millis(100)).unwrap_or(false) {
+            // Use shorter poll timeout when hover is pending to show tooltip promptly
+            let poll_ms = if tui.hover.row.is_some() && !tui.hover.ready() {
+                50
+            } else {
+                100
+            };
+            if !event::poll(Duration::from_millis(poll_ms)).unwrap_or(false) {
+                // If hover just became ready, break to re-render with tooltip
+                if tui.hover.ready() {
+                    break;
+                }
                 continue;
             }
             let Ok(ev) = event::read() else {
@@ -2790,6 +3186,43 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             break;
                         }
 
+                        // Pin/bookmark toggle
+                        KeyCode::Char('F') => {
+                            tui.toggle_pin();
+                            break;
+                        }
+
+                        // Freeze sort order
+                        KeyCode::Char('o') => {
+                            tui.sort_frozen = !tui.sort_frozen;
+                            if tui.sort_frozen {
+                                // Capture current order
+                                tui.frozen_order = tui.current_frozen_keys();
+                                tui.set_status("Sort order frozen");
+                            } else {
+                                tui.frozen_order.clear();
+                                tui.set_status("Sort order unfrozen");
+                            }
+                            let mut prefs = config::load();
+                            prefs.sort_frozen = tui.sort_frozen;
+                            config::save(&prefs);
+                            break;
+                        }
+
+                        // Toggle compact/expanded view
+                        KeyCode::Char('t') => {
+                            tui.compact_view = !tui.compact_view;
+                            tui.set_status(if tui.compact_view {
+                                "Compact view"
+                            } else {
+                                "Expanded view"
+                            });
+                            let mut prefs = config::load();
+                            prefs.compact_view = tui.compact_view;
+                            config::save(&prefs);
+                            break;
+                        }
+
                         // Cycle refresh rate
                         KeyCode::Char('f') => {
                             state.interval = match state.interval {
@@ -2835,9 +3268,10 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     }
                 }
                 Event::Mouse(mouse) => {
-                    // Dismiss tooltip on any click
+                    // Dismiss tooltip and hover on any click
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
                         tui.tooltip.active = false;
+                        tui.hover.clear();
                     }
 
                     match mouse.kind {
@@ -2963,6 +3397,27 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                 break;
                             }
                         }
+                        MouseEventKind::Down(MouseButton::Middle) => {
+                            // Middle-click → toggle pin
+                            let y = mouse.row;
+                            if y >= tui.content_area_y
+                                && y < tui.content_area_y + tui.content_area_h
+                                && matches!(tui.active, Tab::Ports | Tab::Stale | Tab::Tree)
+                            {
+                                let data_row_offset =
+                                    (y - tui.content_area_y).saturating_sub(3) as usize;
+                                let idx = tui.scroll() + data_row_offset;
+                                if idx < tui.row_count() {
+                                    tui.set_selected(Some(idx));
+                                    tui.toggle_pin();
+                                }
+                            }
+                            break;
+                        }
+                        MouseEventKind::Moved => {
+                            tui.hover.move_to(mouse.column, mouse.row);
+                            // Need re-render to show/hide hover tooltip
+                        }
                         MouseEventKind::ScrollDown => {
                             tui.select_next();
                             break;
@@ -3055,7 +3510,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_ports(&mut buf, area, &theme, &[], 0, None);
+        render_ports(&mut buf, area, &theme, &[], 0, None, &HashSet::new(), false);
     }
 
     #[test]
@@ -3063,7 +3518,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_stale(&mut buf, area, &theme, &[], 0, None);
+        render_stale(&mut buf, area, &theme, &[], 0, None, &HashSet::new(), false);
     }
 
     #[test]
@@ -3071,7 +3526,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_tree(&mut buf, area, &theme, &[], 0, None);
+        render_tree(&mut buf, area, &theme, &[], 0, None, &HashSet::new());
     }
 
     #[test]
@@ -3079,7 +3534,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_net_map(&mut buf, area, &theme, &[], 0, None);
+        render_net_map(&mut buf, area, &theme, &[], 0, None, false);
     }
 
     #[test]
@@ -3087,7 +3542,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_pipes(&mut buf, area, &theme, &[], 0, None);
+        render_pipes(&mut buf, area, &theme, &[], 0, None, false);
     }
 
     #[test]
@@ -3147,7 +3602,16 @@ mod tests {
                 command: "nginx".to_string(),
             },
         ];
-        render_ports(&mut buf, area, &theme, &rows, 0, None);
+        render_ports(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            0,
+            None,
+            &HashSet::new(),
+            false,
+        );
     }
 
     #[test]
@@ -3163,7 +3627,16 @@ mod tests {
             size: Some(1024),
             name: "/tmp/foo (deleted)".to_string(),
         }];
-        render_stale(&mut buf, area, &theme, &rows, 0, None);
+        render_stale(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            0,
+            None,
+            &HashSet::new(),
+            false,
+        );
     }
 
     #[test]
@@ -3189,7 +3662,7 @@ mod tests {
                 connector: "|-- ".to_string(),
             },
         ];
-        render_tree(&mut buf, area, &theme, &rows, 0, None);
+        render_tree(&mut buf, area, &theme, &rows, 0, None, &HashSet::new());
     }
 
     #[test]
@@ -3251,7 +3724,9 @@ mod tests {
         let state = TuiState::new_pub(2, theme);
         let area = Rect::new(0, 0, 80, 2);
         let mut buf = Buffer::empty(area);
-        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &None);
+        draw_bottom_bar(
+            &mut buf, area, &state, 42, 1337, "5s", &None, false, false, 0,
+        );
     }
 
     #[test]
@@ -3631,7 +4106,9 @@ mod tests {
         let area = Rect::new(0, 0, 120, 2);
         let mut buf = Buffer::empty(area);
         let filter = Some("nginx".to_string());
-        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &filter);
+        draw_bottom_bar(
+            &mut buf, area, &state, 42, 1337, "5s", &filter, false, false, 0,
+        );
         let mut line = String::new();
         for x in 0..120u16 {
             line.push_str(buf[(x, 1)].symbol());
@@ -3662,7 +4139,16 @@ mod tests {
                 command: "nginx".to_string(),
             },
         ];
-        render_ports(&mut buf, area, &theme, &rows, 0, Some(1));
+        render_ports(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            0,
+            Some(1),
+            &HashSet::new(),
+            false,
+        );
     }
 
     #[test]
@@ -3688,6 +4174,268 @@ mod tests {
                 command: "nginx".to_string(),
             },
         ];
-        render_ports(&mut buf, area, &theme, &rows, 1, None);
+        render_ports(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            1,
+            None,
+            &HashSet::new(),
+            false,
+        );
+    }
+
+    // ── New feature tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn hover_state_default() {
+        let h = HoverState::default();
+        assert!(h.row.is_none());
+        assert!(h.since.is_none());
+        assert!(!h.ready());
+    }
+
+    #[test]
+    fn hover_state_move_resets_timer() {
+        let mut h = HoverState::default();
+        h.move_to(10, 5);
+        assert_eq!(h.row, Some(5));
+        assert_eq!(h.col, Some(10));
+        assert!(!h.ready()); // not ready yet (< 1s)
+        // Move to same row doesn't reset
+        let since1 = h.since;
+        h.move_to(15, 5);
+        assert_eq!(h.since, since1);
+        assert_eq!(h.col, Some(15));
+        // Move to different row resets
+        h.move_to(15, 6);
+        assert_eq!(h.row, Some(6));
+        assert_ne!(h.since, since1);
+    }
+
+    #[test]
+    fn hover_state_ready_after_1s() {
+        let h = HoverState {
+            row: Some(5),
+            since: Some(Instant::now() - Duration::from_millis(1500)),
+            ..Default::default()
+        };
+        assert!(h.ready());
+    }
+
+    #[test]
+    fn hover_state_expires_after_4s() {
+        let h = HoverState {
+            row: Some(5),
+            since: Some(Instant::now() - Duration::from_millis(5000)),
+            ..Default::default()
+        };
+        assert!(!h.ready());
+    }
+
+    #[test]
+    fn hover_state_clear() {
+        let mut h = HoverState::default();
+        h.move_to(10, 5);
+        h.clear();
+        assert!(h.row.is_none());
+        assert!(h.col.is_none());
+        assert!(h.since.is_none());
+    }
+
+    #[test]
+    fn tabbed_tui_new_features() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        assert!(tui.pinned.is_empty());
+        assert!(!tui.sort_frozen);
+        assert!(tui.frozen_order.is_empty());
+        assert!(!tui.compact_view);
+    }
+
+    #[test]
+    fn tabbed_tui_pinned_from_prefs() {
+        let prefs = config::Prefs {
+            pinned_pids: vec![100, 200, 300],
+            ..Default::default()
+        };
+        let tui = TabbedTui::new(0, &prefs);
+        assert_eq!(tui.pinned.len(), 3);
+        assert!(tui.pinned.contains(&100));
+        assert!(tui.pinned.contains(&200));
+        assert!(tui.pinned.contains(&300));
+    }
+
+    #[test]
+    fn tabbed_tui_sort_frozen_from_prefs() {
+        let prefs = config::Prefs {
+            sort_frozen: true,
+            ..Default::default()
+        };
+        let tui = TabbedTui::new(0, &prefs);
+        assert!(tui.sort_frozen);
+    }
+
+    #[test]
+    fn tabbed_tui_compact_from_prefs() {
+        let prefs = config::Prefs {
+            compact_view: true,
+            ..Default::default()
+        };
+        let tui = TabbedTui::new(0, &prefs);
+        assert!(tui.compact_view);
+    }
+
+    #[test]
+    fn frozen_key_equality() {
+        let k1 = FrozenKey::Pid(42);
+        let k2 = FrozenKey::Pid(42);
+        let k3 = FrozenKey::Pid(43);
+        assert_eq!(k1, k2);
+        assert_ne!(k1, k3);
+    }
+
+    #[test]
+    fn render_ports_compact() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![PortRow {
+            proto: "TCP".to_string(),
+            addr: "*".to_string(),
+            port: 80,
+            pid: 100,
+            user: "root".to_string(),
+            command: "nginx".to_string(),
+        }];
+        render_ports(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            0,
+            None,
+            &HashSet::new(),
+            true,
+        );
+    }
+
+    #[test]
+    fn render_ports_with_pin() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![PortRow {
+            proto: "TCP".to_string(),
+            addr: "*".to_string(),
+            port: 80,
+            pid: 100,
+            user: "root".to_string(),
+            command: "nginx".to_string(),
+        }];
+        let mut pinned = HashSet::new();
+        pinned.insert(100);
+        render_ports(&mut buf, area, &theme, &rows, 0, None, &pinned, false);
+    }
+
+    #[test]
+    fn render_stale_compact() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![StaleRow {
+            pid: 42,
+            user: "root".to_string(),
+            fd: "3u".to_string(),
+            file_type: "REG".to_string(),
+            size: Some(1024),
+            name: "/tmp/foo (deleted)".to_string(),
+        }];
+        render_stale(
+            &mut buf,
+            area,
+            &theme,
+            &rows,
+            0,
+            None,
+            &HashSet::new(),
+            true,
+        );
+    }
+
+    #[test]
+    fn render_net_map_compact() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![NetMapRow {
+            host: "192.168.1.1".to_string(),
+            count: 5,
+            protocols: "TCP".to_string(),
+            ports: "80,443".to_string(),
+            processes: "nginx/100".to_string(),
+        }];
+        render_net_map(&mut buf, area, &theme, &rows, 0, None, true);
+    }
+
+    #[test]
+    fn render_pipes_compact() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![PipeRow {
+            kind: "pipe".to_string(),
+            id: "0xabc".to_string(),
+            endpoints: "bash/100(3u) <-> cat/200(0r)".to_string(),
+        }];
+        render_pipes(&mut buf, area, &theme, &rows, 0, None, true);
+    }
+
+    #[test]
+    fn draw_bottom_bar_with_indicators() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        let area = Rect::new(0, 0, 120, 2);
+        let mut buf = Buffer::empty(area);
+        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &None, true, true, 3);
+        let mut line = String::new();
+        for x in 0..120u16 {
+            line.push_str(buf[(x, 1)].symbol());
+        }
+        assert!(line.contains("frozen"));
+        assert!(line.contains("compact"));
+    }
+
+    #[test]
+    fn help_keys_includes_new_features() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        let keys = tui.help_keys();
+        assert!(keys.iter().any(|(k, _)| *k == "F"));
+        assert!(keys.iter().any(|(k, _)| *k == "o"));
+        assert!(keys.iter().any(|(k, _)| *k == "t"));
+    }
+
+    #[test]
+    fn prefs_pinned_pids_roundtrip() {
+        let p = config::Prefs {
+            pinned_pids: vec![100, 200],
+            sort_frozen: true,
+            compact_view: true,
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: config::Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.pinned_pids, vec![100, 200]);
+        assert!(p2.sort_frozen);
+        assert!(p2.compact_view);
+    }
+
+    #[test]
+    fn prefs_empty_pinned_not_serialized() {
+        let p = config::Prefs::default();
+        let s = toml::to_string_pretty(&p).unwrap();
+        assert!(!s.contains("pinned_pids"));
+        assert!(!s.contains("sort_frozen"));
+        assert!(!s.contains("compact_view"));
     }
 }
