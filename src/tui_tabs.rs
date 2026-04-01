@@ -338,6 +338,10 @@ struct TabbedTui {
     // Totals for status bar
     total_procs: usize,
     total_files: usize,
+    total_tcp: usize,
+    total_udp: usize,
+    total_unix: usize,
+    total_pipes: usize,
     // Filter popup (/ key)
     filter_state: FilterState,
     screen_filter: Option<String>,
@@ -391,6 +395,10 @@ impl TabbedTui {
             active_custom_theme: prefs.active_custom_theme.clone(),
             total_procs: 0,
             total_files: 0,
+            total_tcp: 0,
+            total_udp: 0,
+            total_unix: 0,
+            total_pipes: 0,
             filter_state: FilterState::new(),
             screen_filter: None,
             selected_idx: [None; 7],
@@ -988,6 +996,28 @@ impl TabbedTui {
         // Track totals for status bar
         self.total_procs = procs.len();
         self.total_files = procs.iter().map(|p| p.files.len()).sum();
+        self.total_tcp = 0;
+        self.total_udp = 0;
+        self.total_unix = 0;
+        self.total_pipes = 0;
+        for p in &procs {
+            for f in &p.files {
+                match f.file_type {
+                    FileType::IPv4 | FileType::IPv6 => {
+                        if let Some(ref si) = f.socket_info {
+                            if si.protocol == "TCP" {
+                                self.total_tcp += 1;
+                            } else if si.protocol == "UDP" {
+                                self.total_udp += 1;
+                            }
+                        }
+                    }
+                    FileType::Unix => self.total_unix += 1,
+                    FileType::Pipe => self.total_pipes += 1,
+                    _ => {}
+                }
+            }
+        }
 
         // All tabs share the same gathered process list — no redundant gathering
         self.top_mode.update_from_procs(&procs);
@@ -1444,6 +1474,10 @@ fn draw_bottom_bar(
     state: &TuiState,
     total_procs: usize,
     total_files: usize,
+    total_tcp: usize,
+    total_udp: usize,
+    total_unix: usize,
+    total_pipes: usize,
     elapsed: &str,
     screen_filter: &Option<String>,
     sort_frozen: bool,
@@ -1467,10 +1501,13 @@ fn draw_bottom_bar(
     }
     let running_str = if state.paused { "paused" } else { "running" };
     let mut status = format!(
-        " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {}",
+        " procs:{} \u{2502} files:{} \u{2502} tcp:{} udp:{} unix:{} pipe:{} \u{2502} {}s \u{2502} {}",
         total_procs,
         total_files,
-        state.theme.display_name(),
+        total_tcp,
+        total_udp,
+        total_unix,
+        total_pipes,
         state.interval,
         running_str,
     );
@@ -2904,6 +2941,10 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     &state,
                     tui.total_procs,
                     tui.total_files,
+                    tui.total_tcp,
+                    tui.total_udp,
+                    tui.total_unix,
+                    tui.total_pipes,
                     &elapsed_str,
                     &tui.screen_filter,
                     tui.sort_frozen,
@@ -4039,7 +4080,7 @@ mod tests {
         let area = Rect::new(0, 0, 80, 2);
         let mut buf = Buffer::empty(area);
         draw_bottom_bar(
-            &mut buf, area, &state, 42, 1337, "5s", &None, false, false, 0,
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &None, false, false, 0,
         );
     }
 
@@ -4421,7 +4462,7 @@ mod tests {
         let mut buf = Buffer::empty(area);
         let filter = Some("nginx".to_string());
         draw_bottom_bar(
-            &mut buf, area, &state, 42, 1337, "5s", &filter, false, false, 0,
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &filter, false, false, 0,
         );
         let mut line = String::new();
         for x in 0..120u16 {
@@ -4725,7 +4766,9 @@ mod tests {
         let state = TuiState::new_pub(2, theme);
         let area = Rect::new(0, 0, 120, 2);
         let mut buf = Buffer::empty(area);
-        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &None, true, true, 3);
+        draw_bottom_bar(
+            &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, "5s", &None, true, true, 3,
+        );
         let mut line = String::new();
         for x in 0..120u16 {
             line.push_str(buf[(x, 1)].symbol());
