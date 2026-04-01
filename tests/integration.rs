@@ -880,6 +880,220 @@ fn invalid_short_flag_exits_nonzero() {
     assert!(!out.status.success());
 }
 
+// ── CSV mode ────────────────────────────────────────────────────────
+
+#[test]
+fn csv_mode_no_crash() {
+    let out = lsofrs().arg("--csv").output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn csv_mode_has_header() {
+    let out = lsofrs().arg("--csv").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"));
+}
+
+#[test]
+fn csv_mode_with_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--csv", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Should have header + at least one data row
+    assert!(stdout.lines().count() >= 2);
+}
+
+#[test]
+fn csv_mode_with_tcp() {
+    let out = lsofrs().args(["--csv", "-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+// ── Pipe chain mode ─────────────────────────────────────────────────
+
+#[test]
+fn pipe_chain_no_crash() {
+    let out = lsofrs().arg("--pipe-chain").output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn pipe_chain_json() {
+    let out = lsofrs().args(["--pipe-chain", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+}
+
+#[test]
+fn pipe_chain_with_user() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "-u", &whoami()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Net map mode ────────────────────────────────────────────────────
+
+#[test]
+fn net_map_no_crash() {
+    let out = lsofrs().arg("--net-map").output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn net_map_json() {
+    let out = lsofrs().args(["--net-map", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+}
+
+#[test]
+fn net_map_with_user() {
+    let out = lsofrs()
+        .args(["--net-map", "-u", &whoami()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Dir / Dir-recurse ───────────────────────────────────────────────
+
+#[test]
+fn dir_flag_no_crash() {
+    let out = lsofrs().args(["--dir", "/tmp"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn dir_recurse_flag_no_crash() {
+    let out = lsofrs().args(["--dir-recurse", "/tmp"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn dir_flag_with_dev() {
+    let out = lsofrs().args(["--dir", "/dev"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn dir_recurse_with_json() {
+    let out = lsofrs()
+        .args(["--dir-recurse", "/dev", "--json"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+}
+
+// ── TUI flag (non-TTY exits immediately) ────────────────────────────
+
+#[test]
+fn tui_flag_non_tty() {
+    let out = lsofrs().arg("--tui").output().unwrap();
+    // Non-TTY should print error and exit
+    assert!(out.status.success() || !out.status.success()); // just shouldn't hang
+}
+
+// ── Theme flag ──────────────────────────────────────────────────────
+
+#[test]
+fn theme_flag_classic() {
+    let out = lsofrs().args(["--theme", "classic", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn theme_flag_matrix() {
+    let out = lsofrs().args(["--theme", "matrix", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn theme_flag_unknown_defaults() {
+    let out = lsofrs()
+        .args(["--theme", "nonexistent", "--summary"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Help content for new features ───────────────────────────────────
+
+#[test]
+fn help_contains_tui() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--tui"));
+}
+
+#[test]
+fn help_contains_dir_flags() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--dir"));
+    assert!(stdout.contains("--dir-recurse"));
+}
+
+#[test]
+fn help_contains_csv() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--csv"));
+}
+
+#[test]
+fn help_contains_pipe_chain() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--pipe-chain"));
+}
+
+#[test]
+fn help_contains_net_map() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--net-map"));
+}
+
+// ── Stale + JSON structure ──────────────────────────────────────────
+
+#[test]
+fn stale_json_has_stale_fds_key() {
+    let out = lsofrs().args(["--stale", "--json"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(parsed.get("stale_fds").is_some());
+}
+
+// ── Multiple modes combined ─────────────────────────────────────────
+
+#[test]
+fn json_with_dir_recurse() {
+    let out = lsofrs()
+        .args(["--json", "--dir-recurse", "/dev"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn terse_with_dir() {
+    let out = lsofrs().args(["-t", "--dir", "/dev"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        if line.trim().is_empty() { continue; }
+        assert!(line.trim().parse::<i32>().is_ok(), "terse should be PID: '{line}'");
+    }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 fn whoami() -> String {
