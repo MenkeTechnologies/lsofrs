@@ -4582,13 +4582,14 @@ mod tests {
     }
 
     #[test]
-    fn hover_state_expires_after_4s() {
+    fn hover_state_stays_ready_indefinitely() {
         let h = HoverState {
             row: Some(5),
             since: Some(Instant::now() - Duration::from_millis(5000)),
             ..Default::default()
         };
-        assert!(!h.ready());
+        // No auto-hide: tooltip stays as long as mouse is on same row
+        assert!(h.ready());
     }
 
     #[test]
