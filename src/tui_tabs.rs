@@ -139,6 +139,7 @@ struct TabbedTui {
     // Theme chooser modal
     show_theme_chooser: bool,
     theme_chooser_idx: usize,
+    theme_before_chooser: usize, // to revert on Esc
     // Totals for status bar
     total_procs: usize,
     total_files: usize,
@@ -157,6 +158,7 @@ impl TabbedTui {
             pipe_rows: Vec::new(),
             show_theme_chooser: false,
             theme_chooser_idx: theme_idx,
+            theme_before_chooser: theme_idx,
             total_procs: 0,
             total_files: 0,
         }
@@ -1298,33 +1300,55 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 Event::Key(key) => {
                     // Theme chooser intercepts keys when open
                     if tui.show_theme_chooser {
+                        let theme_count = ThemeName::ALL.len();
+                        let mut chooser_changed = true;
                         match key.code {
-                            KeyCode::Esc => {
+                            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('c') => {
                                 tui.show_theme_chooser = false;
                             }
                             KeyCode::Char('j') | KeyCode::Down => {
-                                if tui.theme_chooser_idx + 1 < ThemeName::ALL.len() {
+                                if tui.theme_chooser_idx + 1 < theme_count {
                                     tui.theme_chooser_idx += 1;
                                 }
                             }
                             KeyCode::Char('k') | KeyCode::Up => {
                                 tui.theme_chooser_idx = tui.theme_chooser_idx.saturating_sub(1);
                             }
-                            KeyCode::Enter => {
+                            KeyCode::Home | KeyCode::Char('g') => {
+                                tui.theme_chooser_idx = 0;
+                            }
+                            KeyCode::End | KeyCode::Char('G') => {
+                                tui.theme_chooser_idx = theme_count.saturating_sub(1);
+                            }
+                            KeyCode::PageDown => {
+                                tui.theme_chooser_idx =
+                                    (tui.theme_chooser_idx + 10).min(theme_count - 1);
+                            }
+                            KeyCode::PageUp => {
+                                tui.theme_chooser_idx = tui.theme_chooser_idx.saturating_sub(10);
+                            }
+                            KeyCode::Enter | KeyCode::Char(' ') => {
                                 state.theme_idx = tui.theme_chooser_idx;
                                 state.theme = LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
                                 tui.show_theme_chooser = false;
-                                // Persist theme preference
                                 let mut prefs = config::load();
                                 prefs.theme = Some(state.theme.name.display_name().to_string());
                                 config::save(&prefs);
                             }
-                            KeyCode::Char('q') => {
-                                tui.show_theme_chooser = false;
+                            _ => {
+                                chooser_changed = false;
                             }
-                            _ => {}
                         }
-                        break;
+                        if chooser_changed {
+                            // Live-preview: apply theme as you navigate
+                            if tui.show_theme_chooser && tui.theme_chooser_idx < theme_count {
+                                state.theme_idx = tui.theme_chooser_idx;
+                                state.theme = LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                            }
+                            // Re-render immediately without re-gathering data
+                            break;
+                        }
+                        continue; // unhandled key, stay in event loop
                     }
 
                     // Tab navigation
