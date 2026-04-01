@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsofrs",
-    version = "2.1.0",
+    version = "2.2.0",
     about = "List System Open Files — modern Rust implementation",
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
@@ -160,7 +160,7 @@ impl Args {
 {dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
 {dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
-{cyan}  >> FILE DESCRIPTOR SCANNER v2.1 << {reset}
+{cyan}  >> FILE DESCRIPTOR SCANNER v2.2 << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}
 
 {yellow}  USAGE:{reset} lsofrs [OPTION]... [FILE]...
@@ -217,7 +217,7 @@ impl Args {
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 
 {cyan}  ── INFO ──────────────────────────────────────────{reset}
-{magenta}  v2.1.0 {reset}// {yellow}(c) lsof contributors{reset}
+{magenta}  v2.2.0 {reset}// {yellow}(c) lsof contributors{reset}
 Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );
