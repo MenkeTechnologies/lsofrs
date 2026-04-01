@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsofrs",
-    version = "4.4.0",
+    version = "4.5.0",
     about = "List System Open Files — modern Rust implementation",
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
@@ -152,6 +152,10 @@ pub struct Args {
     #[arg(long = "theme", default_value = "neon-sprawl")]
     pub theme_name: String,
 
+    /// Color output: auto (default), always, never
+    #[arg(long = "color", default_value = "auto")]
+    pub color: String,
+
     /// List open files in directory (one level)
     #[arg(long = "dir", alias = "+d")]
     pub dir: Option<String>,
@@ -188,7 +192,7 @@ impl Args {
 {dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
 {dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
-{cyan}  >> FILE DESCRIPTOR SCANNER v4.4 << {reset}
+{cyan}  >> FILE DESCRIPTOR SCANNER v4.5 << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}
 
 {yellow}  USAGE:{reset} lsofrs [OPTION]... [FILE]...
@@ -223,6 +227,7 @@ impl Args {
 {green}   -t                {reset}terse output {magenta}(PID only){reset}
 {green}   -0                {reset}use NUL field terminator instead of NL
 {green}   +|-w              {reset}enable (+) or suppress (-) warnings {magenta}(default: +){reset}
+{green}   --color MODE      {reset}color output: auto, always, never {magenta}(default: auto){reset}
 
 {cyan}  ── SYSTEM ────────────────────────────────────────{reset}
 {green}   +|-r [SECONDS]    {reset}repeat mode {magenta}(default: 1){reset}
@@ -251,7 +256,7 @@ impl Args {
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 
 {cyan}  ── INFO ──────────────────────────────────────────{reset}
-{magenta}  v4.4.0 {reset}// {yellow}(c) lsof contributors{reset}
+{magenta}  v4.5.0 {reset}// {yellow}(c) lsof contributors{reset}
 Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );

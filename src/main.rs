@@ -48,7 +48,11 @@ fn main() {
         return;
     }
 
-    let is_tty = io::stdout().is_terminal();
+    let is_tty = match args.color.as_str() {
+        "always" => true,
+        "never" => false,
+        _ => io::stdout().is_terminal(), // "auto"
+    };
     let theme = Theme::new(is_tty);
 
     // Load saved preferences; CLI flags override saved values
