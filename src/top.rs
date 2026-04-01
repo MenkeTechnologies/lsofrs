@@ -128,6 +128,11 @@ impl TopMode {
             total_fds: 0,
         }
     }
+
+    /// Number of entries currently displayed (min of show_n and entries).
+    pub fn visible_count(&self) -> usize {
+        self.entries.len().min(self.show_n)
+    }
 }
 
 impl TuiMode for TopMode {

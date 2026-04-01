@@ -25,6 +25,119 @@ use crate::top::TopMode;
 use crate::tui_app::{TuiMode, TuiState, draw_box, draw_help, set_cell, set_str};
 use crate::types::*;
 
+// ── Filter input state ───────────────────────────────────────────────────────
+
+struct FilterState {
+    active: bool,
+    buf: String,
+    cursor: usize,
+    prev: Option<String>,
+}
+
+impl Default for FilterState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FilterState {
+    fn new() -> Self {
+        Self {
+            active: false,
+            buf: String::new(),
+            cursor: 0,
+            prev: None,
+        }
+    }
+    fn open(&mut self, current: &Option<String>) {
+        self.active = true;
+        self.buf = current.clone().unwrap_or_default();
+        self.cursor = self.buf.len();
+        self.prev = current.clone();
+    }
+    fn insert(&mut self, ch: char) {
+        self.buf.insert(self.cursor, ch);
+        self.cursor += ch.len_utf8();
+    }
+    fn backspace(&mut self) {
+        if self.cursor > 0 {
+            let prev = self.buf[..self.cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            self.buf.drain(prev..self.cursor);
+            self.cursor = prev;
+        }
+    }
+    fn delete_word(&mut self) {
+        let s = &self.buf[..self.cursor];
+        let trimmed = s.trim_end();
+        let word_start = trimmed
+            .rfind(char::is_whitespace)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        self.buf.drain(word_start..self.cursor);
+        self.cursor = word_start;
+    }
+    fn home(&mut self) {
+        self.cursor = 0;
+    }
+    fn end(&mut self) {
+        self.cursor = self.buf.len();
+    }
+    fn left(&mut self) {
+        if self.cursor > 0 {
+            self.cursor = self.buf[..self.cursor]
+                .char_indices()
+                .next_back()
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+        }
+    }
+    fn right(&mut self) {
+        if self.cursor < self.buf.len() {
+            self.cursor = self.buf[self.cursor..]
+                .char_indices()
+                .nth(1)
+                .map(|(i, _)| self.cursor + i)
+                .unwrap_or(self.buf.len());
+        }
+    }
+    fn kill_to_end(&mut self) {
+        self.buf.truncate(self.cursor);
+    }
+}
+
+// ── Status message with auto-dismiss ─────────────────────────────────────────
+
+struct StatusMsg {
+    text: String,
+    since: Instant,
+}
+
+impl StatusMsg {
+    fn new(text: String) -> Self {
+        Self {
+            text,
+            since: Instant::now(),
+        }
+    }
+    fn expired(&self) -> bool {
+        self.since.elapsed().as_secs() >= 3
+    }
+}
+
+// ── Tooltip state ────────────────────────────────────────────────────────────
+
+#[derive(Default)]
+struct Tooltip {
+    active: bool,
+    x: u16,
+    y: u16,
+    lines: Vec<(String, String)>,
+}
+
 // ── Tab enum ──────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -153,6 +266,22 @@ struct TabbedTui {
     // Totals for status bar
     total_procs: usize,
     total_files: usize,
+    // Filter popup (/ key)
+    filter_state: FilterState,
+    screen_filter: Option<String>,
+    // Selection per tab
+    selected_idx: [Option<usize>; 7],
+    // Scroll offset per tab (for simple tabs)
+    scroll_offset: [usize; 7],
+    // Right-click tooltip
+    tooltip: Tooltip,
+    // Status message (auto-dismiss)
+    status_msg: Option<StatusMsg>,
+    // Sort reverse for simple tabs
+    sort_reverse: bool,
+    // Content area y for mouse hit-testing
+    content_area_y: u16,
+    content_area_h: u16,
 }
 
 impl TabbedTui {
@@ -179,15 +308,384 @@ impl TabbedTui {
             active_custom_theme: prefs.active_custom_theme.clone(),
             total_procs: 0,
             total_files: 0,
+            filter_state: FilterState::new(),
+            screen_filter: None,
+            selected_idx: [None; 7],
+            scroll_offset: [0; 7],
+            tooltip: Tooltip::default(),
+            status_msg: None,
+            sort_reverse: false,
+            content_area_y: 0,
+            content_area_h: 0,
+        }
+    }
+
+    fn set_status(&mut self, msg: impl Into<String>) {
+        self.status_msg = Some(StatusMsg::new(msg.into()));
+    }
+
+    /// Row count for the current simple tab (not Top/Summary which manage their own).
+    fn row_count(&self) -> usize {
+        match self.active {
+            Tab::Ports => self.port_rows.len(),
+            Tab::Stale => self.stale_rows.len(),
+            Tab::Tree => self.tree_rows.len(),
+            Tab::NetMap => self.net_map_rows.len(),
+            Tab::PipeChain => self.pipe_rows.len(),
+            _ => 0,
+        }
+    }
+
+    fn selected(&self) -> Option<usize> {
+        self.selected_idx[self.active.index()]
+    }
+
+    fn set_selected(&mut self, v: Option<usize>) {
+        self.selected_idx[self.active.index()] = v;
+    }
+
+    fn scroll(&self) -> usize {
+        self.scroll_offset[self.active.index()]
+    }
+
+    fn set_scroll(&mut self, v: usize) {
+        self.scroll_offset[self.active.index()] = v;
+    }
+
+    fn select_next(&mut self) {
+        let max = self.row_count().saturating_sub(1);
+        let sel = match self.selected() {
+            Some(i) => (i + 1).min(max),
+            None => 0,
+        };
+        self.set_selected(Some(sel));
+        let visible = self.content_area_h.saturating_sub(4) as usize;
+        if sel >= self.scroll() + visible {
+            self.set_scroll(sel.saturating_sub(visible.saturating_sub(1)));
+        }
+    }
+
+    fn select_prev(&mut self) {
+        let sel = match self.selected() {
+            Some(i) => i.saturating_sub(1),
+            None => 0,
+        };
+        self.set_selected(Some(sel));
+        if sel < self.scroll() {
+            self.set_scroll(sel);
+        }
+    }
+
+    fn page_down(&mut self) {
+        let half = (self.content_area_h / 2) as usize;
+        let max = self.row_count().saturating_sub(1);
+        let sel = match self.selected() {
+            Some(i) => (i + half).min(max),
+            None => half.min(max),
+        };
+        self.set_selected(Some(sel));
+        let visible = self.content_area_h.saturating_sub(4) as usize;
+        if sel >= self.scroll() + visible {
+            self.set_scroll(sel.saturating_sub(visible.saturating_sub(1)));
+        }
+    }
+
+    fn page_up(&mut self) {
+        let half = (self.content_area_h / 2) as usize;
+        let sel = match self.selected() {
+            Some(i) => i.saturating_sub(half),
+            None => 0,
+        };
+        self.set_selected(Some(sel));
+        if sel < self.scroll() {
+            self.set_scroll(sel);
+        }
+    }
+
+    fn jump_top(&mut self) {
+        self.set_selected(Some(0));
+        self.set_scroll(0);
+    }
+
+    fn jump_bottom(&mut self) {
+        let last = self.row_count().saturating_sub(1);
+        self.set_selected(Some(last));
+        let visible = self.content_area_h.saturating_sub(4) as usize;
+        self.set_scroll(last.saturating_sub(visible.saturating_sub(1)));
+    }
+
+    /// Build tooltip lines for a right-click on a simple tab row.
+    fn build_tooltip(&self, idx: usize) -> Vec<(String, String)> {
+        match self.active {
+            Tab::Ports => {
+                if let Some(r) = self.port_rows.get(idx) {
+                    vec![
+                        ("Protocol".into(), r.proto.clone()),
+                        ("Address".into(), r.addr.clone()),
+                        ("Port".into(), r.port.to_string()),
+                        ("PID".into(), r.pid.to_string()),
+                        ("User".into(), r.user.clone()),
+                        ("Command".into(), r.command.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            Tab::Stale => {
+                if let Some(r) = self.stale_rows.get(idx) {
+                    vec![
+                        ("PID".into(), r.pid.to_string()),
+                        ("User".into(), r.user.clone()),
+                        ("FD".into(), r.fd.clone()),
+                        ("Type".into(), r.file_type.clone()),
+                        (
+                            "Size".into(),
+                            r.size.map(|s| s.to_string()).unwrap_or_default(),
+                        ),
+                        ("Name".into(), r.name.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            Tab::Tree => {
+                if let Some(r) = self.tree_rows.get(idx) {
+                    vec![
+                        ("PID".into(), r.pid.to_string()),
+                        ("User".into(), r.user.clone()),
+                        ("FDs".into(), r.fd_count.to_string()),
+                        ("Command".into(), r.command.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            Tab::NetMap => {
+                if let Some(r) = self.net_map_rows.get(idx) {
+                    vec![
+                        ("Host".into(), r.host.clone()),
+                        ("Connections".into(), r.count.to_string()),
+                        ("Protocols".into(), r.protocols.clone()),
+                        ("Ports".into(), r.ports.clone()),
+                        ("Processes".into(), r.processes.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            Tab::PipeChain => {
+                if let Some(r) = self.pipe_rows.get(idx) {
+                    vec![
+                        ("Type".into(), r.kind.clone()),
+                        ("ID".into(), r.id.clone()),
+                        ("Endpoints".into(), r.endpoints.clone()),
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            _ => vec![],
+        }
+    }
+
+    /// Copy selected row info to clipboard.
+    fn copy_selected(&mut self) {
+        let idx = match self.selected() {
+            Some(i) => i,
+            None => {
+                self.set_status("Select a row first (j/k)");
+                return;
+            }
+        };
+        let text = match self.active {
+            Tab::Ports => self.port_rows.get(idx).map(|r| {
+                format!(
+                    "{}:{} {} PID:{} {}",
+                    r.addr, r.port, r.proto, r.pid, r.command
+                )
+            }),
+            Tab::Stale => self
+                .stale_rows
+                .get(idx)
+                .map(|r| format!("PID:{} {} {} {}", r.pid, r.fd, r.file_type, r.name)),
+            Tab::Tree => self
+                .tree_rows
+                .get(idx)
+                .map(|r| format!("PID:{} {} FDs:{}", r.pid, r.command, r.fd_count)),
+            Tab::NetMap => self
+                .net_map_rows
+                .get(idx)
+                .map(|r| format!("{} conns:{} {}", r.host, r.count, r.processes)),
+            Tab::PipeChain => self
+                .pipe_rows
+                .get(idx)
+                .map(|r| format!("{} {} {}", r.kind, r.id, r.endpoints)),
+            _ => {
+                self.set_status("Copy not supported for this tab");
+                return;
+            }
+        };
+        let text = match text {
+            Some(t) => t,
+            None => {
+                self.set_status("No row to copy");
+                return;
+            }
+        };
+        let result = if cfg!(target_os = "macos") {
+            std::process::Command::new("pbcopy")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(ref mut stdin) = child.stdin {
+                        stdin.write_all(text.as_bytes())?;
+                    }
+                    child.wait()
+                })
+        } else {
+            std::process::Command::new("xclip")
+                .args(["-selection", "clipboard"])
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(ref mut stdin) = child.stdin {
+                        stdin.write_all(text.as_bytes())?;
+                    }
+                    child.wait()
+                })
+        };
+        match result {
+            Ok(_) => self.set_status(format!("Copied: {}", text)),
+            Err(e) => self.set_status(format!("Copy failed: {}", e)),
+        }
+    }
+
+    /// Export current tab data to file.
+    fn export(&mut self) {
+        let tab_name = self.active.label().to_lowercase();
+        let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("lsofrs-export-{}-{}.txt", tab_name, ts);
+        let path = dirs::home_dir()
+            .map(|h| h.join(&filename))
+            .unwrap_or_else(|| std::path::PathBuf::from(&filename));
+
+        let mut lines = Vec::new();
+        lines.push(format!(
+            "LSOFRS EXPORT [{}] -- {}",
+            self.active.label(),
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
+        lines.push(String::new());
+
+        match self.active {
+            Tab::Ports => {
+                lines.push(format!(
+                    "{:<5}  {:<15}  {:>5}  {:>7}  {:<8}  COMMAND",
+                    "PROTO", "ADDR", "PORT", "PID", "USER"
+                ));
+                for r in &self.port_rows {
+                    lines.push(format!(
+                        "{:<5}  {:<15}  {:>5}  {:>7}  {:<8}  {}",
+                        r.proto, r.addr, r.port, r.pid, r.user, r.command
+                    ));
+                }
+            }
+            Tab::Stale => {
+                lines.push(format!(
+                    "{:>7}  {:<8}  {:<5}  {:<5}  {:>8}  NAME",
+                    "PID", "USER", "FD", "TYPE", "SIZE"
+                ));
+                for r in &self.stale_rows {
+                    let sz = r.size.map(|s| s.to_string()).unwrap_or_default();
+                    lines.push(format!(
+                        "{:>7}  {:<8}  {:<5}  {:<5}  {:>8}  {}",
+                        r.pid, r.user, r.fd, r.file_type, sz, r.name
+                    ));
+                }
+            }
+            Tab::Tree => {
+                for r in &self.tree_rows {
+                    let indent = "    ".repeat(r.indent);
+                    lines.push(format!(
+                        "{}{}{:>5} {:<8} {:>4} {}",
+                        indent, r.connector, r.pid, r.user, r.fd_count, r.command
+                    ));
+                }
+            }
+            Tab::NetMap => {
+                lines.push(format!(
+                    "{:<20}  {:>5}  {:<9}  {:<10}  PROCESSES",
+                    "HOST", "CONNS", "PROTOCOLS", "PORTS"
+                ));
+                for r in &self.net_map_rows {
+                    lines.push(format!(
+                        "{:<20}  {:>5}  {:<9}  {:<10}  {}",
+                        r.host, r.count, r.protocols, r.ports, r.processes
+                    ));
+                }
+            }
+            Tab::PipeChain => {
+                lines.push(format!("{:<6}  {:<20}  ENDPOINTS", "TYPE", "IDENTIFIER"));
+                for r in &self.pipe_rows {
+                    lines.push(format!("{:<6}  {:<20}  {}", r.kind, r.id, r.endpoints));
+                }
+            }
+            _ => {
+                lines.push("(use Top/Summary export via their own modes)".into());
+            }
+        }
+
+        match std::fs::write(&path, lines.join("\n")) {
+            Ok(_) => self.set_status(format!("Exported to {}", path.display())),
+            Err(e) => self.set_status(format!("Export failed: {}", e)),
+        }
+    }
+
+    /// Summary info line for the current tab.
+    fn summary_info(&self) -> String {
+        match self.active {
+            Tab::Top => format!(
+                "showing {} procs, {} FDs",
+                self.top_mode.visible_count(),
+                self.total_files
+            ),
+            Tab::Summary => format!("{} procs, {} files", self.total_procs, self.total_files),
+            Tab::Ports => format!("{} listening port(s)", self.port_rows.len()),
+            Tab::Stale => format!("{} stale FD(s)", self.stale_rows.len()),
+            Tab::Tree => format!("{} tree node(s)", self.tree_rows.len()),
+            Tab::NetMap => {
+                let total: usize = self.net_map_rows.iter().map(|r| r.count).sum();
+                format!("{} host(s), {} conn(s)", self.net_map_rows.len(), total)
+            }
+            Tab::PipeChain => format!("{} IPC chain(s)", self.pipe_rows.len()),
         }
     }
 
     fn update_all(&mut self, filter: &Filter) {
+        // Expire status messages
+        if let Some(ref msg) = self.status_msg
+            && msg.expired()
+        {
+            self.status_msg = None;
+        }
+
         // Gather once
         let mut procs = crate::gather_processes();
         procs.retain(|p| filter.matches_process(p));
         for p in &mut procs {
             p.files.retain(|f| filter.matches_file(f));
+        }
+
+        // Apply screen filter (/ key) on top of CLI filter
+        if let Some(ref sf) = self.screen_filter {
+            let lower = sf.to_lowercase();
+            procs.retain(|p| {
+                p.command.to_lowercase().contains(&lower)
+                    || p.pid.to_string().contains(&lower)
+                    || p.username().to_lowercase().contains(&lower)
+            });
         }
 
         // Track totals for status bar
@@ -243,6 +741,9 @@ impl TabbedTui {
             }
         }
         self.port_rows.sort_by_key(|r| r.port);
+        if self.sort_reverse {
+            self.port_rows.reverse();
+        }
     }
 
     fn update_stale(&mut self, procs: &[Process]) {
@@ -450,6 +951,15 @@ impl TabbedTui {
             ("Tab / Right", "next tab"),
             ("BackTab / Left", "previous tab"),
             ("1-7", "jump to tab"),
+            ("/", "filter popup"),
+            ("0", "clear filter"),
+            ("j / k", "select next/prev"),
+            ("Ctrl-D/U", "page down/up"),
+            ("Home / End/G", "jump top/bottom"),
+            ("e", "export to file"),
+            ("y", "copy selected"),
+            ("r", "reverse sort"),
+            ("f", "cycle refresh rate"),
         ];
         match self.active {
             Tab::Top => keys.extend(self.top_mode.help_keys()),
@@ -532,6 +1042,7 @@ fn draw_bottom_bar(
     total_procs: usize,
     total_files: usize,
     elapsed: &str,
+    screen_filter: &Option<String>,
 ) {
     let t = &state.theme;
     let dim_s = Style::default().fg(t.dim_fg);
@@ -549,7 +1060,7 @@ fn draw_bottom_bar(
         set_cell(buf, x, info_y, " ", bar_s);
     }
     let running_str = if state.paused { "paused" } else { "running" };
-    let status = format!(
+    let mut status = format!(
         " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {} \u{2502} #{}",
         total_procs,
         total_files,
@@ -558,6 +1069,9 @@ fn draw_bottom_bar(
         running_str,
         state.iteration,
     );
+    if let Some(f) = screen_filter {
+        status.push_str(&format!(" \u{2502} filter:{}", f));
+    }
     set_str(buf, area.x, info_y, &status, bar_s, area.width);
 
     // Right-aligned elapsed time
@@ -570,7 +1084,14 @@ fn draw_bottom_bar(
 
 // ── Simple tab renderers ──────────────────────────────────────────────────────
 
-fn render_ports(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PortRow]) {
+fn render_ports(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    rows: &[PortRow],
+    scroll: usize,
+    selected: Option<usize>,
+) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
         .add_modifier(Modifier::BOLD);
@@ -609,16 +1130,19 @@ fn render_ports(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PortRow
         row += 1;
     }
 
-    for (i, r) in rows.iter().enumerate() {
+    for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
         }
-        let alt_s = if i % 2 == 1 {
+        let is_selected = selected == Some(i);
+        let alt_s = if is_selected {
+            Style::default().bg(theme.select_bg)
+        } else if i % 2 == 1 {
             Style::default().bg(theme.row_alt_bg)
         } else {
             Style::default()
         };
-        if i % 2 == 1 {
+        if is_selected || i % 2 == 1 {
             for x in area.x..area.x + area.width {
                 set_cell(buf, x, row, " ", alt_s);
             }
@@ -679,7 +1203,14 @@ fn render_ports(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PortRow
     }
 }
 
-fn render_stale(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[StaleRow]) {
+fn render_stale(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    rows: &[StaleRow],
+    scroll: usize,
+    selected: Option<usize>,
+) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
         .add_modifier(Modifier::BOLD);
@@ -725,16 +1256,19 @@ fn render_stale(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[StaleRo
         row += 1;
     }
 
-    for (i, r) in rows.iter().enumerate() {
+    for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
         }
-        let alt_s = if i % 2 == 1 {
+        let is_selected = selected == Some(i);
+        let alt_s = if is_selected {
+            Style::default().bg(theme.select_bg)
+        } else if i % 2 == 1 {
             Style::default().bg(theme.row_alt_bg)
         } else {
             Style::default()
         };
-        if i % 2 == 1 {
+        if is_selected || i % 2 == 1 {
             for x in area.x..area.x + area.width {
                 set_cell(buf, x, row, " ", alt_s);
             }
@@ -803,7 +1337,14 @@ fn render_stale(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[StaleRo
     }
 }
 
-fn render_tree(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[TreeRow]) {
+fn render_tree(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    rows: &[TreeRow],
+    scroll: usize,
+    selected: Option<usize>,
+) {
     let hdr_s = Style::default()
         .fg(theme.header_fg)
         .bg(theme.header_bg)
@@ -833,9 +1374,16 @@ fn render_tree(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[TreeRow]
         row += 1;
     }
 
-    for r in rows {
+    for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
+        }
+        let is_selected = selected == Some(i);
+        if is_selected {
+            let sel_s = Style::default().bg(theme.select_bg);
+            for x in area.x..area.x + area.width {
+                set_cell(buf, x, row, " ", sel_s);
+            }
         }
         let indent_str = "    ".repeat(r.indent);
         let prefix = format!("{}{}", indent_str, r.connector);
@@ -867,7 +1415,14 @@ fn render_tree(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[TreeRow]
     }
 }
 
-fn render_net_map(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[NetMapRow]) {
+fn render_net_map(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    rows: &[NetMapRow],
+    scroll: usize,
+    selected: Option<usize>,
+) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
         .add_modifier(Modifier::BOLD);
@@ -906,16 +1461,19 @@ fn render_net_map(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[NetMa
         row += 1;
     }
 
-    for (i, r) in rows.iter().enumerate() {
+    for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
         }
-        let alt_s = if i % 2 == 1 {
+        let is_selected = selected == Some(i);
+        let alt_s = if is_selected {
+            Style::default().bg(theme.select_bg)
+        } else if i % 2 == 1 {
             Style::default().bg(theme.row_alt_bg)
         } else {
             Style::default()
         };
-        if i % 2 == 1 {
+        if is_selected || i % 2 == 1 {
             for x in area.x..area.x + area.width {
                 set_cell(buf, x, row, " ", alt_s);
             }
@@ -968,7 +1526,14 @@ fn render_net_map(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[NetMa
     }
 }
 
-fn render_pipes(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PipeRow]) {
+fn render_pipes(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    rows: &[PipeRow],
+    scroll: usize,
+    selected: Option<usize>,
+) {
     let bold_s = Style::default()
         .fg(theme.bold_fg)
         .add_modifier(Modifier::BOLD);
@@ -1009,16 +1574,19 @@ fn render_pipes(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PipeRow
         row += 1;
     }
 
-    for (i, r) in rows.iter().enumerate() {
+    for (i, r) in rows.iter().enumerate().skip(scroll) {
         if row >= area.y + area.height {
             break;
         }
-        let alt_s = if i % 2 == 1 {
+        let is_selected = selected == Some(i);
+        let alt_s = if is_selected {
+            Style::default().bg(theme.select_bg)
+        } else if i % 2 == 1 {
             Style::default().bg(theme.row_alt_bg)
         } else {
             Style::default()
         };
-        if i % 2 == 1 {
+        if is_selected || i % 2 == 1 {
             for x in area.x..area.x + area.width {
                 set_cell(buf, x, row, " ", alt_s);
             }
@@ -1049,6 +1617,195 @@ fn render_pipes(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PipeRow
         set_str(buf, cx + 30, row, eps, cmd_s.patch(alt_s), ep_w);
         row += 1;
     }
+}
+
+// ── Filter popup rendering ────────────────────────────────────────────────────
+
+fn draw_filter_popup(buf: &mut Buffer, area: Rect, theme: &LsofTheme, tui: &TabbedTui) {
+    let fs = &tui.filter_state;
+    let bw = 54u16.min(area.width.saturating_sub(4));
+    let bh = 9u16.min(area.height.saturating_sub(2));
+    let bg = theme.help_bg;
+    let bs = Style::default().fg(theme.help_border);
+    let ts = Style::default()
+        .fg(theme.help_title)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD);
+    let input_s = Style::default().fg(theme.help_key).bg(Color::Indexed(235));
+    let hint_s = Style::default().fg(Color::Indexed(240)).bg(bg);
+    let label_s = Style::default().fg(theme.help_val).bg(bg);
+
+    let (x0, y0) = draw_box(buf, area, bw, bh, bg, bs);
+
+    // Title
+    let title = "FILTER PROCESSES";
+    let tlen = title.chars().count() as u16;
+    set_str(
+        buf,
+        x0 + (bw.saturating_sub(tlen)) / 2,
+        y0 + 1,
+        title,
+        ts,
+        bw - 2,
+    );
+
+    // Active filter display
+    let current_val = tui.screen_filter.as_deref().unwrap_or("(none)");
+    set_str(buf, x0 + 2, y0 + 2, "Active: ", label_s, 8);
+    set_str(
+        buf,
+        x0 + 10,
+        y0 + 2,
+        current_val,
+        Style::default().fg(Color::White).bg(bg),
+        bw.saturating_sub(13),
+    );
+
+    // Input field
+    let input_w = bw.saturating_sub(4);
+    let field_y = y0 + 3;
+    for x in x0 + 2..x0 + 2 + input_w {
+        set_cell(buf, x, field_y, " ", input_s);
+    }
+    set_str(buf, x0 + 2, field_y, "> ", input_s, 2);
+
+    let max_visible = (input_w as usize).saturating_sub(3);
+    let buf_len = fs.buf.len();
+    let cursor_pos = fs.cursor;
+
+    let (vis_start, vis_end) = if buf_len <= max_visible {
+        (0, buf_len)
+    } else {
+        let start = cursor_pos.saturating_sub(max_visible);
+        (start, (start + max_visible).min(buf_len))
+    };
+
+    let display_buf = &fs.buf[vis_start..vis_end];
+    set_str(
+        buf,
+        x0 + 4,
+        field_y,
+        display_buf,
+        input_s,
+        input_w.saturating_sub(3),
+    );
+
+    // Block cursor
+    let cursor_x = x0 + 4 + (cursor_pos - vis_start) as u16;
+    if cursor_x < x0 + 2 + input_w {
+        let ch = fs
+            .buf
+            .get(cursor_pos..cursor_pos + 1)
+            .unwrap_or(" ")
+            .chars()
+            .next()
+            .unwrap_or(' ');
+        let cursor_s = Style::default().fg(Color::Indexed(235)).bg(theme.help_key);
+        set_cell(buf, cursor_x, field_y, &ch.to_string(), cursor_s);
+    }
+
+    // Match count
+    let info = format!("{} procs matched", tui.total_procs);
+    set_str(buf, x0 + 2, y0 + 4, &info, hint_s, bw - 4);
+
+    // Hints
+    let hints1 = "Enter=apply  Esc=cancel  ^W=del word";
+    let h1x = x0 + (bw.saturating_sub(hints1.len() as u16)) / 2;
+    set_str(buf, h1x, y0 + 5, hints1, hint_s, bw.saturating_sub(2));
+
+    let hints2 = "^A=home ^E=end ^U=clear ^K=kill";
+    let h2x = x0 + (bw.saturating_sub(hints2.len() as u16)) / 2;
+    set_str(buf, h2x, y0 + 6, hints2, hint_s, bw.saturating_sub(2));
+
+    let hints3 = "0=clear filter (from main view)";
+    let h3x = x0 + (bw.saturating_sub(hints3.len() as u16)) / 2;
+    set_str(buf, h3x, y0 + 7, hints3, hint_s, bw.saturating_sub(2));
+}
+
+// ── Right-click tooltip rendering ────────────────────────────────────────────
+
+fn draw_tooltip(buf: &mut Buffer, area: Rect, theme: &LsofTheme, tt: &Tooltip) {
+    if tt.lines.is_empty() {
+        return;
+    }
+    let max_label = tt.lines.iter().map(|(l, _)| l.len()).max().unwrap_or(0);
+    let max_val = tt.lines.iter().map(|(_, v)| v.len()).max().unwrap_or(0);
+    let inner_w = (max_label + 3 + max_val).max(20);
+    let bw = (inner_w + 4) as u16;
+    let bh = (tt.lines.len() + 2) as u16;
+
+    let x0 = if tt.x + bw + 2 < area.width {
+        tt.x + 1
+    } else {
+        tt.x.saturating_sub(bw + 1)
+    };
+    let y0 = if tt.y + bh + 1 < area.height {
+        tt.y
+    } else {
+        tt.y.saturating_sub(bh)
+    };
+
+    let bg = theme.help_bg;
+    let bs = Style::default().fg(theme.help_border);
+    let label_s = Style::default().fg(theme.help_val).bg(bg);
+    let val_s = Style::default().fg(theme.help_key).bg(bg);
+
+    // Fill + rounded border
+    for y in y0..y0 + bh {
+        for x in x0..x0 + bw {
+            set_cell(buf, x, y, " ", Style::default().bg(bg));
+        }
+    }
+    set_cell(buf, x0, y0, "\u{256d}", bs);
+    set_cell(buf, x0 + bw - 1, y0, "\u{256e}", bs);
+    set_cell(buf, x0, y0 + bh - 1, "\u{2570}", bs);
+    set_cell(buf, x0 + bw - 1, y0 + bh - 1, "\u{256f}", bs);
+    for x in x0 + 1..x0 + bw - 1 {
+        set_cell(buf, x, y0, "\u{2500}", bs);
+        set_cell(buf, x, y0 + bh - 1, "\u{2500}", bs);
+    }
+    for y in y0 + 1..y0 + bh - 1 {
+        set_cell(buf, x0, y, "\u{2502}", bs);
+        set_cell(buf, x0 + bw - 1, y, "\u{2502}", bs);
+    }
+
+    // Content
+    for (i, (label, value)) in tt.lines.iter().enumerate() {
+        let ey = y0 + 1 + i as u16;
+        if ey >= y0 + bh - 1 {
+            break;
+        }
+        set_str(buf, x0 + 2, ey, label, label_s, max_label as u16 + 1);
+        if !value.is_empty() {
+            let vx = x0 + 2 + max_label as u16 + 2;
+            let remaining = bw.saturating_sub(max_label as u16 + 5);
+            set_str(buf, vx, ey, value, val_s, remaining);
+        }
+    }
+}
+
+// ── Status message rendering ─────────────────────────────────────────────────
+
+fn draw_status_msg(buf: &mut Buffer, area: Rect, theme: &LsofTheme, text: &str) {
+    let msg_len = text.chars().count() as u16 + 4;
+    let x0 = (area.width.saturating_sub(msg_len)) / 2;
+    let y0 = area.height.saturating_sub(4);
+    let s = Style::default().fg(Color::Black).bg(theme.help_key);
+    set_str(buf, x0, y0, &format!(" {} ", text), s, msg_len);
+}
+
+// ── Summary info bar rendering ───────────────────────────────────────────────
+
+fn draw_summary_bar(buf: &mut Buffer, area: Rect, theme: &LsofTheme, tui: &TabbedTui) {
+    let info_s = Style::default().fg(theme.dim_fg).bg(theme.header_bg);
+    for x in area.x..area.x + area.width {
+        set_cell(buf, x, area.y, " ", info_s);
+    }
+    let mut text = format!(" {} | {}", tui.active.label(), tui.summary_info());
+    if let Some(ref f) = tui.screen_filter {
+        text.push_str(&format!(" | filter: {}", f));
+    }
+    set_str(buf, area.x, area.y, &text, info_s, area.width);
 }
 
 // ── Custom theme helpers ──────────────────────────────────────────────────────
@@ -1483,14 +2240,34 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 &state.theme,
             );
 
-            // Content area
-            if h > 4 + margin * 2 {
+            // Summary info bar
+            if h > 5 + margin * 2 {
+                draw_summary_bar(
+                    frame.buffer_mut(),
+                    Rect {
+                        x: inner_x,
+                        y: margin + 1,
+                        width: inner_w,
+                        height: 1,
+                    },
+                    &state.theme,
+                    &tui,
+                );
+            }
+
+            // Content area (shifted down by 1 for summary bar)
+            if h > 5 + margin * 2 {
                 let content_area = Rect {
                     x: inner_x,
-                    y: margin + 1,
+                    y: margin + 2,
                     width: inner_w,
-                    height: h.saturating_sub(3 + margin * 2),
+                    height: h.saturating_sub(4 + margin * 2),
                 };
+                tui.content_area_y = content_area.y;
+                tui.content_area_h = content_area.height;
+                let tab_idx = tui.active.index();
+                let scroll = tui.scroll_offset[tab_idx];
+                let selected = tui.selected_idx[tab_idx];
                 match tui.active {
                     Tab::Top => {
                         tui.top_mode
@@ -1507,30 +2284,40 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         content_area,
                         &state.theme,
                         &tui.port_rows,
+                        scroll,
+                        selected,
                     ),
                     Tab::Stale => render_stale(
                         frame.buffer_mut(),
                         content_area,
                         &state.theme,
                         &tui.stale_rows,
+                        scroll,
+                        selected,
                     ),
                     Tab::Tree => render_tree(
                         frame.buffer_mut(),
                         content_area,
                         &state.theme,
                         &tui.tree_rows,
+                        scroll,
+                        selected,
                     ),
                     Tab::NetMap => render_net_map(
                         frame.buffer_mut(),
                         content_area,
                         &state.theme,
                         &tui.net_map_rows,
+                        scroll,
+                        selected,
                     ),
                     Tab::PipeChain => render_pipes(
                         frame.buffer_mut(),
                         content_area,
                         &state.theme,
                         &tui.pipe_rows,
+                        scroll,
+                        selected,
                     ),
                 }
             }
@@ -1549,6 +2336,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     tui.total_procs,
                     tui.total_files,
                     &elapsed_str,
+                    &tui.screen_filter,
                 );
             }
 
@@ -1573,6 +2361,23 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
             if tui.show_theme_editor {
                 editor_rect = draw_theme_editor(frame.buffer_mut(), size, &state.theme, &tui);
             }
+
+            // Filter popup overlay
+            if tui.filter_state.active {
+                draw_filter_popup(frame.buffer_mut(), size, &state.theme, &tui);
+            }
+
+            // Tooltip overlay
+            if tui.tooltip.active {
+                draw_tooltip(frame.buffer_mut(), size, &state.theme, &tui.tooltip);
+            }
+
+            // Status message overlay
+            if let Some(ref msg) = tui.status_msg
+                && !msg.expired()
+            {
+                draw_status_msg(frame.buffer_mut(), size, &state.theme, &msg.text);
+            }
         });
 
         // Poll events
@@ -1587,6 +2392,64 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
 
             match ev {
                 Event::Key(key) => {
+                    // Dismiss tooltip on any key
+                    tui.tooltip.active = false;
+
+                    // Ctrl+C always quits
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('c')
+                    {
+                        running = false;
+                        break;
+                    }
+
+                    // Filter input mode intercepts ALL keys when open
+                    if tui.filter_state.active {
+                        match key.code {
+                            KeyCode::Enter => {
+                                tui.filter_state.active = false;
+                                let f = tui.filter_state.buf.clone();
+                                tui.screen_filter = if f.is_empty() { None } else { Some(f) };
+                                tui.set_status(if tui.screen_filter.is_some() {
+                                    "Filter applied"
+                                } else {
+                                    "Filter cleared"
+                                });
+                            }
+                            KeyCode::Esc => {
+                                tui.filter_state.active = false;
+                                tui.screen_filter = tui.filter_state.prev.clone();
+                            }
+                            KeyCode::Backspace => tui.filter_state.backspace(),
+                            KeyCode::Left => tui.filter_state.left(),
+                            KeyCode::Right => tui.filter_state.right(),
+                            KeyCode::Home => tui.filter_state.home(),
+                            KeyCode::End => tui.filter_state.end(),
+                            KeyCode::Char(ch) => {
+                                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                                    match ch {
+                                        'w' => tui.filter_state.delete_word(),
+                                        'a' => tui.filter_state.home(),
+                                        'e' => tui.filter_state.end(),
+                                        'k' => tui.filter_state.kill_to_end(),
+                                        'u' => {
+                                            tui.filter_state.buf.clear();
+                                            tui.filter_state.cursor = 0;
+                                        }
+                                        _ => {}
+                                    }
+                                } else {
+                                    tui.filter_state.insert(ch);
+                                }
+                                // Live filter preview
+                                let f = tui.filter_state.buf.clone();
+                                tui.screen_filter = if f.is_empty() { None } else { Some(f) };
+                            }
+                            _ => {}
+                        }
+                        break;
+                    }
+
                     // Theme editor intercepts ALL keys when open
                     if tui.show_theme_editor {
                         if tui.editor_naming {
@@ -1803,13 +2666,24 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         break;
                     }
 
+                    // Ctrl+key combos
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        match key.code {
+                            KeyCode::Char('d') => {
+                                tui.page_down();
+                                break;
+                            }
+                            KeyCode::Char('u') => {
+                                tui.page_up();
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+
                     // Common keybindings
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => {
-                            running = false;
-                            break;
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             running = false;
                             break;
                         }
@@ -1845,6 +2719,73 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             tui.show_theme_editor = true;
                             break;
                         }
+
+                        // Filter
+                        KeyCode::Char('/') => {
+                            state.show_help = false;
+                            tui.filter_state.open(&tui.screen_filter);
+                            break;
+                        }
+                        KeyCode::Char('0') => {
+                            tui.screen_filter = None;
+                            tui.set_status("Filter cleared");
+                            break;
+                        }
+
+                        // Navigation
+                        KeyCode::Char('j') | KeyCode::Down => {
+                            tui.select_next();
+                            break;
+                        }
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            tui.select_prev();
+                            break;
+                        }
+                        KeyCode::Home => {
+                            tui.jump_top();
+                            break;
+                        }
+                        KeyCode::End | KeyCode::Char('G') => {
+                            tui.jump_bottom();
+                            break;
+                        }
+
+                        // Export
+                        KeyCode::Char('e') => {
+                            tui.export();
+                            break;
+                        }
+
+                        // Copy
+                        KeyCode::Char('y') => {
+                            tui.copy_selected();
+                            break;
+                        }
+
+                        // Reverse sort
+                        KeyCode::Char('r') => {
+                            tui.sort_reverse = !tui.sort_reverse;
+                            tui.set_status(if tui.sort_reverse {
+                                "Sort: reversed"
+                            } else {
+                                "Sort: normal"
+                            });
+                            break;
+                        }
+
+                        // Cycle refresh rate
+                        KeyCode::Char('f') => {
+                            state.interval = match state.interval {
+                                1 => 2,
+                                2 => 5,
+                                5 => 10,
+                                _ => 1,
+                            };
+                            tui.set_status(format!("Refresh rate: {}s", state.interval));
+                            save_prefs(&state);
+                            break;
+                        }
+
                         KeyCode::Char(d @ '1'..='7') => {
                             let idx = (d as usize) - ('1' as usize);
                             if idx < Tab::ALL.len() {
@@ -1876,69 +2817,142 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     }
                 }
                 Event::Mouse(mouse) => {
-                    if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                        let x = mouse.column;
-                        let y = mouse.row;
+                    // Dismiss tooltip on any click
+                    if matches!(mouse.kind, MouseEventKind::Down(_)) {
+                        tui.tooltip.active = false;
+                    }
 
-                        // Theme editor click handling (takes priority when open)
-                        if tui.show_theme_editor {
-                            let (ex0, ey0, ew, eh) = editor_rect;
-                            if x >= ex0 && x < ex0 + ew && y >= ey0 && y < ey0 + eh {
-                                // Click on a color slot row
-                                let slot_y_start = ey0 + 3;
-                                if y >= slot_y_start && y < slot_y_start + 6 {
-                                    tui.editor_slot = (y - slot_y_start) as usize;
-                                }
-                            } else {
-                                // Click outside editor dismisses it
-                                tui.show_theme_editor = false;
-                            }
-                            break;
-                        }
+                    match mouse.kind {
+                        MouseEventKind::Down(MouseButton::Left) => {
+                            let x = mouse.column;
+                            let y = mouse.row;
 
-                        // Theme chooser click handling (takes priority when open)
-                        if tui.show_theme_chooser {
-                            let (cx0, cy0, cw, ch) = chooser_rect;
-                            if x >= cx0 && x < cx0 + cw && y >= cy0 && y < cy0 + ch {
-                                let custom_names = sorted_custom_names(&tui.custom_themes);
-                                let total_count = ThemeName::ALL.len() + custom_names.len();
-                                // Calculate scroll offset (same logic as draw)
-                                let max_rows = ch as usize;
-                                let scroll = if tui.theme_chooser_idx >= max_rows {
-                                    tui.theme_chooser_idx - max_rows + 1
+                            // Theme editor click handling (takes priority when open)
+                            if tui.show_theme_editor {
+                                let (ex0, ey0, ew, eh) = editor_rect;
+                                if x >= ex0 && x < ex0 + ew && y >= ey0 && y < ey0 + eh {
+                                    let slot_y_start = ey0 + 3;
+                                    if y >= slot_y_start && y < slot_y_start + 6 {
+                                        tui.editor_slot = (y - slot_y_start) as usize;
+                                    }
                                 } else {
-                                    0
-                                };
-                                let clicked_idx = scroll + (y - cy0) as usize;
-                                if clicked_idx < total_count {
-                                    tui.theme_chooser_idx = clicked_idx;
-                                    apply_chooser_selection(
-                                        clicked_idx,
-                                        &mut state,
-                                        &mut tui.active_custom_theme,
-                                        &tui.custom_themes,
-                                        &custom_names,
-                                    );
-                                    tui.show_theme_chooser = false;
-                                    let mut prefs = config::load();
-                                    prefs.theme = Some(state.theme.display_name().to_string());
-                                    prefs.active_custom_theme = tui.active_custom_theme.clone();
-                                    config::save(&prefs);
+                                    tui.show_theme_editor = false;
                                 }
-                            } else {
-                                // Click outside chooser dismisses it
-                                tui.show_theme_chooser = false;
+                                break;
                             }
-                            break;
-                        }
 
-                        // Tab bar click (row 0)
-                        if y == 0 {
-                            if let Some(tab) = tab_at_x(x) {
-                                tui.active = tab;
+                            // Theme chooser click handling
+                            if tui.show_theme_chooser {
+                                let (cx0, cy0, cw, ch) = chooser_rect;
+                                if x >= cx0 && x < cx0 + cw && y >= cy0 && y < cy0 + ch {
+                                    let custom_names = sorted_custom_names(&tui.custom_themes);
+                                    let total_count = ThemeName::ALL.len() + custom_names.len();
+                                    let max_rows = ch as usize;
+                                    let scroll = if tui.theme_chooser_idx >= max_rows {
+                                        tui.theme_chooser_idx - max_rows + 1
+                                    } else {
+                                        0
+                                    };
+                                    let clicked_idx = scroll + (y - cy0) as usize;
+                                    if clicked_idx < total_count {
+                                        tui.theme_chooser_idx = clicked_idx;
+                                        apply_chooser_selection(
+                                            clicked_idx,
+                                            &mut state,
+                                            &mut tui.active_custom_theme,
+                                            &tui.custom_themes,
+                                            &custom_names,
+                                        );
+                                        tui.show_theme_chooser = false;
+                                        let mut prefs = config::load();
+                                        prefs.theme = Some(state.theme.display_name().to_string());
+                                        prefs.active_custom_theme = tui.active_custom_theme.clone();
+                                        config::save(&prefs);
+                                    }
+                                } else {
+                                    tui.show_theme_chooser = false;
+                                }
+                                break;
                             }
+
+                            // Filter popup dismiss
+                            if tui.filter_state.active {
+                                break;
+                            }
+
+                            // Tab bar click
+                            let margin = if state.show_border { 1u16 } else { 0 };
+                            if y == margin {
+                                if let Some(tab) = tab_at_x(x) {
+                                    tui.active = tab;
+                                }
+                                break;
+                            }
+
+                            // Content area row click → select
+                            if y >= tui.content_area_y
+                                && y < tui.content_area_y + tui.content_area_h
+                                && matches!(
+                                    tui.active,
+                                    Tab::Ports
+                                        | Tab::Stale
+                                        | Tab::Tree
+                                        | Tab::NetMap
+                                        | Tab::PipeChain
+                                )
+                            {
+                                // +3 for info line + header row + blank row
+                                let data_row_offset =
+                                    (y - tui.content_area_y).saturating_sub(3) as usize;
+                                let idx = tui.scroll() + data_row_offset;
+                                if idx < tui.row_count() {
+                                    tui.set_selected(Some(idx));
+                                }
+                                break;
+                            }
+                        }
+                        MouseEventKind::Down(MouseButton::Right) => {
+                            let x = mouse.column;
+                            let y = mouse.row;
+                            // Right-click in content area → tooltip
+                            if y >= tui.content_area_y
+                                && y < tui.content_area_y + tui.content_area_h
+                                && matches!(
+                                    tui.active,
+                                    Tab::Ports
+                                        | Tab::Stale
+                                        | Tab::Tree
+                                        | Tab::NetMap
+                                        | Tab::PipeChain
+                                )
+                            {
+                                let data_row_offset =
+                                    (y - tui.content_area_y).saturating_sub(3) as usize;
+                                let idx = tui.scroll() + data_row_offset;
+                                if idx < tui.row_count() {
+                                    tui.set_selected(Some(idx));
+                                    let lines = tui.build_tooltip(idx);
+                                    if !lines.is_empty() {
+                                        tui.tooltip = Tooltip {
+                                            active: true,
+                                            x,
+                                            y,
+                                            lines,
+                                        };
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                        MouseEventKind::ScrollDown => {
+                            tui.select_next();
                             break;
                         }
+                        MouseEventKind::ScrollUp => {
+                            tui.select_prev();
+                            break;
+                        }
+                        _ => {}
                     }
                 }
                 _ => {}
@@ -2022,7 +3036,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_ports(&mut buf, area, &theme, &[]);
+        render_ports(&mut buf, area, &theme, &[], 0, None);
     }
 
     #[test]
@@ -2030,7 +3044,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_stale(&mut buf, area, &theme, &[]);
+        render_stale(&mut buf, area, &theme, &[], 0, None);
     }
 
     #[test]
@@ -2038,7 +3052,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_tree(&mut buf, area, &theme, &[]);
+        render_tree(&mut buf, area, &theme, &[], 0, None);
     }
 
     #[test]
@@ -2046,7 +3060,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_net_map(&mut buf, area, &theme, &[]);
+        render_net_map(&mut buf, area, &theme, &[], 0, None);
     }
 
     #[test]
@@ -2054,7 +3068,7 @@ mod tests {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
         let mut buf = Buffer::empty(area);
-        render_pipes(&mut buf, area, &theme, &[]);
+        render_pipes(&mut buf, area, &theme, &[], 0, None);
     }
 
     #[test]
@@ -2114,7 +3128,7 @@ mod tests {
                 command: "nginx".to_string(),
             },
         ];
-        render_ports(&mut buf, area, &theme, &rows);
+        render_ports(&mut buf, area, &theme, &rows, 0, None);
     }
 
     #[test]
@@ -2130,7 +3144,7 @@ mod tests {
             size: Some(1024),
             name: "/tmp/foo (deleted)".to_string(),
         }];
-        render_stale(&mut buf, area, &theme, &rows);
+        render_stale(&mut buf, area, &theme, &rows, 0, None);
     }
 
     #[test]
@@ -2156,7 +3170,7 @@ mod tests {
                 connector: "|-- ".to_string(),
             },
         ];
-        render_tree(&mut buf, area, &theme, &rows);
+        render_tree(&mut buf, area, &theme, &rows, 0, None);
     }
 
     #[test]
@@ -2218,7 +3232,7 @@ mod tests {
         let state = TuiState::new_pub(2, theme);
         let area = Rect::new(0, 0, 80, 2);
         let mut buf = Buffer::empty(area);
-        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s");
+        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &None);
     }
 
     #[test]
@@ -2375,5 +3389,286 @@ mod tests {
         assert_eq!(tui.editor_cursor, 0);
         assert!(tui.custom_themes.is_empty());
         assert!(tui.active_custom_theme.is_none());
+    }
+
+    // ── New TUI feature tests ─────────────────────────────────────────────
+
+    #[test]
+    fn filter_state_insert_and_backspace() {
+        let mut fs = FilterState::new();
+        fs.insert('h');
+        fs.insert('e');
+        fs.insert('l');
+        assert_eq!(fs.buf, "hel");
+        assert_eq!(fs.cursor, 3);
+        fs.backspace();
+        assert_eq!(fs.buf, "he");
+        assert_eq!(fs.cursor, 2);
+    }
+
+    #[test]
+    fn filter_state_delete_word() {
+        let mut fs = FilterState::new();
+        fs.buf = "hello world".to_string();
+        fs.cursor = fs.buf.len();
+        fs.delete_word();
+        assert_eq!(fs.buf, "hello ");
+    }
+
+    #[test]
+    fn filter_state_home_end() {
+        let mut fs = FilterState::new();
+        fs.buf = "hello".to_string();
+        fs.cursor = 3;
+        fs.home();
+        assert_eq!(fs.cursor, 0);
+        fs.end();
+        assert_eq!(fs.cursor, 5);
+    }
+
+    #[test]
+    fn filter_state_left_right() {
+        let mut fs = FilterState::new();
+        fs.buf = "abc".to_string();
+        fs.cursor = 2;
+        fs.left();
+        assert_eq!(fs.cursor, 1);
+        fs.right();
+        assert_eq!(fs.cursor, 2);
+    }
+
+    #[test]
+    fn filter_state_kill_to_end() {
+        let mut fs = FilterState::new();
+        fs.buf = "hello world".to_string();
+        fs.cursor = 5;
+        fs.kill_to_end();
+        assert_eq!(fs.buf, "hello");
+    }
+
+    #[test]
+    fn filter_state_open() {
+        let mut fs = FilterState::new();
+        let current = Some("test".to_string());
+        fs.open(&current);
+        assert!(fs.active);
+        assert_eq!(fs.buf, "test");
+        assert_eq!(fs.cursor, 4);
+        assert_eq!(fs.prev, Some("test".to_string()));
+    }
+
+    #[test]
+    fn filter_state_open_none() {
+        let mut fs = FilterState::new();
+        fs.open(&None);
+        assert!(fs.active);
+        assert!(fs.buf.is_empty());
+        assert_eq!(fs.cursor, 0);
+    }
+
+    #[test]
+    fn status_msg_expires() {
+        let msg = StatusMsg {
+            text: "test".into(),
+            since: Instant::now() - Duration::from_secs(5),
+        };
+        assert!(msg.expired());
+    }
+
+    #[test]
+    fn status_msg_not_expired() {
+        let msg = StatusMsg::new("test".into());
+        assert!(!msg.expired());
+    }
+
+    #[test]
+    fn tooltip_default() {
+        let tt = Tooltip::default();
+        assert!(!tt.active);
+        assert!(tt.lines.is_empty());
+    }
+
+    #[test]
+    fn tabbed_tui_new_fields() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        assert!(!tui.filter_state.active);
+        assert!(tui.screen_filter.is_none());
+        assert_eq!(tui.selected_idx, [None; 7]);
+        assert_eq!(tui.scroll_offset, [0; 7]);
+        assert!(!tui.tooltip.active);
+        assert!(tui.status_msg.is_none());
+        assert!(!tui.sort_reverse);
+    }
+
+    #[test]
+    fn tabbed_tui_set_status() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.set_status("hello");
+        assert!(tui.status_msg.is_some());
+        assert_eq!(tui.status_msg.as_ref().unwrap().text, "hello");
+    }
+
+    #[test]
+    fn tabbed_tui_selection_per_tab() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.active = Tab::Ports;
+        tui.set_selected(Some(5));
+        assert_eq!(tui.selected(), Some(5));
+        tui.active = Tab::Stale;
+        assert_eq!(tui.selected(), None);
+        tui.set_selected(Some(3));
+        assert_eq!(tui.selected(), Some(3));
+        tui.active = Tab::Ports;
+        assert_eq!(tui.selected(), Some(5));
+    }
+
+    #[test]
+    fn tabbed_tui_scroll_per_tab() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.active = Tab::NetMap;
+        tui.set_scroll(10);
+        assert_eq!(tui.scroll(), 10);
+        tui.active = Tab::Tree;
+        assert_eq!(tui.scroll(), 0);
+    }
+
+    #[test]
+    fn tabbed_tui_summary_info() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.active = Tab::Ports;
+        assert!(tui.summary_info().contains("listening port"));
+        tui.active = Tab::Stale;
+        assert!(tui.summary_info().contains("stale FD"));
+    }
+
+    #[test]
+    fn tabbed_tui_build_tooltip_empty() {
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        // No rows, so tooltip lines should be empty
+        assert!(tui.build_tooltip(0).is_empty());
+    }
+
+    #[test]
+    fn draw_filter_popup_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        draw_filter_popup(&mut buf, area, &theme, &tui);
+    }
+
+    #[test]
+    fn draw_tooltip_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        let tt = Tooltip {
+            active: true,
+            x: 10,
+            y: 10,
+            lines: vec![
+                ("PID".into(), "123".into()),
+                ("Command".into(), "test".into()),
+            ],
+        };
+        draw_tooltip(&mut buf, area, &theme, &tt);
+    }
+
+    #[test]
+    fn draw_tooltip_empty_lines() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        let tt = Tooltip {
+            active: true,
+            x: 10,
+            y: 10,
+            lines: vec![],
+        };
+        draw_tooltip(&mut buf, area, &theme, &tt);
+    }
+
+    #[test]
+    fn draw_status_msg_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        draw_status_msg(&mut buf, area, &theme, "Filter applied");
+    }
+
+    #[test]
+    fn draw_summary_bar_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+        let tui = TabbedTui::new(0, &config::Prefs::default());
+        draw_summary_bar(&mut buf, area, &theme, &tui);
+    }
+
+    #[test]
+    fn draw_bottom_bar_with_filter() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        let area = Rect::new(0, 0, 120, 2);
+        let mut buf = Buffer::empty(area);
+        let filter = Some("nginx".to_string());
+        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s", &filter);
+        let mut line = String::new();
+        for x in 0..120u16 {
+            line.push_str(buf[(x, 1)].symbol());
+        }
+        assert!(line.contains("filter:nginx"));
+    }
+
+    #[test]
+    fn render_ports_with_selection() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![
+            PortRow {
+                proto: "TCP".to_string(),
+                addr: "*".to_string(),
+                port: 80,
+                pid: 100,
+                user: "root".to_string(),
+                command: "nginx".to_string(),
+            },
+            PortRow {
+                proto: "TCP".to_string(),
+                addr: "*".to_string(),
+                port: 443,
+                pid: 100,
+                user: "root".to_string(),
+                command: "nginx".to_string(),
+            },
+        ];
+        render_ports(&mut buf, area, &theme, &rows, 0, Some(1));
+    }
+
+    #[test]
+    fn render_ports_with_scroll() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        let rows = vec![
+            PortRow {
+                proto: "TCP".to_string(),
+                addr: "*".to_string(),
+                port: 80,
+                pid: 100,
+                user: "root".to_string(),
+                command: "nginx".to_string(),
+            },
+            PortRow {
+                proto: "TCP".to_string(),
+                addr: "*".to_string(),
+                port: 443,
+                pid: 100,
+                user: "root".to_string(),
+                command: "nginx".to_string(),
+            },
+        ];
+        render_ports(&mut buf, area, &theme, &rows, 1, None);
     }
 }
