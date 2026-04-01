@@ -27,6 +27,7 @@ pub struct TuiState {
     pub iteration: u64,
     pub show_help: bool,
     pub show_border: bool,
+    pub hover_tooltips: bool,
     pub theme: LsofTheme,
     pub theme_idx: usize,
 }
@@ -43,6 +44,7 @@ impl TuiState {
             iteration: 0,
             show_help: false,
             show_border: true,
+            hover_tooltips: true,
             theme,
             theme_idx,
         }
@@ -298,6 +300,7 @@ pub fn draw_help(buf: &mut Buffer, area: Rect, theme: &LsofTheme, mode_keys: Vec
         ("h / ?", "toggle help"),
         ("c", "theme chooser"),
         ("C", "theme editor"),
+        ("T", "toggle hover tooltips"),
         ("1-9", "set refresh interval"),
         ("< / >", "adjust interval"),
     ];

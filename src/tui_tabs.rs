@@ -3089,6 +3089,7 @@ fn save_prefs(state: &TuiState) {
     prefs.theme = Some(state.theme.display_name().to_string());
     prefs.refresh_rate = Some(state.interval);
     prefs.show_border = state.show_border;
+    prefs.hover_tooltips = state.hover_tooltips;
     config::save(&prefs);
 }
 
@@ -3114,6 +3115,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let mut state = TuiState::new_pub(interval, theme.clone());
     let prefs = config::load();
     state.show_border = prefs.show_border;
+    state.hover_tooltips = prefs.hover_tooltips;
     let mut tui = TabbedTui::new(state.theme_idx, &prefs);
     // Restore saved tab
     if let Some(tab_idx) = prefs.active_tab
@@ -3324,8 +3326,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 draw_tooltip(frame.buffer_mut(), size, &state.theme, &tui.tooltip);
             }
 
-            // Hover tooltip overlay (auto after 1s, suppressed when modals active)
-            if tui.hover.ready()
+            // Hover tooltip overlay (auto after 1s, suppressed when modals active or disabled)
+            if state.hover_tooltips
+                && tui.hover.ready()
                 && !tui.tooltip.active
                 && !tui.show_theme_chooser
                 && !tui.show_theme_editor
@@ -3902,6 +3905,16 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                         KeyCode::Char('x') => {
                             state.show_border = !state.show_border;
+                            save_prefs(&state);
+                            break;
+                        }
+                        KeyCode::Char('T') => {
+                            state.hover_tooltips = !state.hover_tooltips;
+                            tui.set_status(if state.hover_tooltips {
+                                "Hover tooltips enabled"
+                            } else {
+                                "Hover tooltips disabled (right-click still works)"
+                            });
                             save_prefs(&state);
                             break;
                         }

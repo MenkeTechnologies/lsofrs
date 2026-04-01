@@ -36,6 +36,8 @@ pub struct Prefs {
     pub sort_frozen: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compact_view: bool,
+    #[serde(default = "default_true")]
+    pub hover_tooltips: bool,
 }
 
 fn default_refresh() -> Option<u64> {
@@ -58,6 +60,7 @@ impl Default for Prefs {
             pinned_pids: Vec::new(),
             sort_frozen: false,
             compact_view: false,
+            hover_tooltips: true,
         }
     }
 }
@@ -193,6 +196,7 @@ mod tests {
             pinned_pids: vec![100, 200],
             sort_frozen: true,
             compact_view: true,
+            hover_tooltips: false,
             custom_themes: ct,
             active_custom_theme: Some("MyTheme".into()),
         };
