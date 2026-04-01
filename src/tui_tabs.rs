@@ -4064,6 +4064,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                         MouseEventKind::Moved => {
                             tui.hover.move_to(mouse.column, mouse.row);
+                            break; // re-render immediately to hide/show tooltip
                         }
                         MouseEventKind::ScrollDown => {
                             if tui.show_theme_chooser {
