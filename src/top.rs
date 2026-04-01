@@ -1,12 +1,13 @@
 //! Top-N mode — live-sorted processes by FD count, auto-refreshing dashboard
 
-use std::fmt::Write as FmtWrite;
-
 use crossterm::event::KeyEvent;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Modifier, Style};
 
 use crate::filter::Filter;
-use crate::output::Theme;
-use crate::tui_app::{TuiMode, TuiState};
+use crate::theme::LsofTheme;
+use crate::tui_app::{TuiMode, TuiState, set_cell, set_str};
 use crate::types::*;
 
 const DEFAULT_TOP_N: usize = 20;
@@ -72,7 +73,7 @@ impl TopEntry {
     fn delta_val(&self) -> i64 {
         match self.prev_fd_count {
             Some(prev) => self.fd_count as i64 - prev as i64,
-            None => i64::MAX, // "new" sorts to top
+            None => i64::MAX,
         }
     }
 
@@ -80,6 +81,24 @@ impl TopEntry {
         users::get_user_by_uid(self.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| self.uid.to_string())
+    }
+}
+
+impl Clone for TopEntry {
+    fn clone(&self) -> Self {
+        Self {
+            pid: self.pid,
+            ppid: self.ppid,
+            pgid: self.pgid,
+            uid: self.uid,
+            command: self.command.clone(),
+            fd_count: self.fd_count,
+            reg_count: self.reg_count,
+            sock_count: self.sock_count,
+            pipe_count: self.pipe_count,
+            other_count: self.other_count,
+            prev_fd_count: self.prev_fd_count,
+        }
     }
 }
 
@@ -161,12 +180,14 @@ impl TuiMode for TopMode {
         self.total_fds = procs.iter().map(|p| p.files.len()).sum();
     }
 
-    fn render_content(&self, theme: &Theme, state: &TuiState) -> String {
+    fn render(&self, buf: &mut Buffer, area: Rect, theme: &LsofTheme, state: &TuiState) {
         let mut sorted_entries = self.entries.clone();
         sort_entries(&mut sorted_entries, self.sort_col, self.reverse);
         let display: Vec<&TopEntry> = sorted_entries.iter().take(self.show_n).collect();
 
-        render(
+        render_top(
+            buf,
+            area,
             theme,
             &display,
             state.iteration,
@@ -176,18 +197,16 @@ impl TuiMode for TopMode {
             state.interval,
             state.paused,
             self.show_bar,
-            state.show_help,
             self.show_delta,
             self.total_procs,
             self.total_fds,
-        )
+        );
     }
 
     fn handle_key(&mut self, key: KeyEvent, _state: &mut TuiState) -> bool {
         use crossterm::event::KeyCode;
 
         match key.code {
-            // Sort
             KeyCode::Char('s') => {
                 self.sort_col = self.sort_col.next();
                 true
@@ -201,8 +220,6 @@ impl TuiMode for TopMode {
                 self.reverse = !self.reverse;
                 true
             }
-
-            // Adjust count
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 self.show_n = (self.show_n + 5).min(200);
                 true
@@ -211,8 +228,6 @@ impl TuiMode for TopMode {
                 self.show_n = self.show_n.saturating_sub(5).max(5);
                 true
             }
-
-            // Toggles
             KeyCode::Char('b') => {
                 self.show_bar = !self.show_bar;
                 true
@@ -221,7 +236,6 @@ impl TuiMode for TopMode {
                 self.show_delta = !self.show_delta;
                 true
             }
-
             _ => false,
         }
     }
@@ -229,28 +243,19 @@ impl TuiMode for TopMode {
     fn title(&self) -> &str {
         "top"
     }
-}
 
-// Allow cloning for sorted display without mutating the original
-impl Clone for TopEntry {
-    fn clone(&self) -> Self {
-        Self {
-            pid: self.pid,
-            ppid: self.ppid,
-            pgid: self.pgid,
-            uid: self.uid,
-            command: self.command.clone(),
-            fd_count: self.fd_count,
-            reg_count: self.reg_count,
-            sock_count: self.sock_count,
-            pipe_count: self.pipe_count,
-            other_count: self.other_count,
-            prev_fd_count: self.prev_fd_count,
-        }
+    fn help_keys(&self) -> Vec<(&str, &str)> {
+        vec![
+            ("s", "cycle sort"),
+            ("r", "reverse"),
+            ("+/-", "count"),
+            ("b", "bar"),
+            ("d", "delta"),
+        ]
     }
 }
 
-pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
+pub fn run_top(filter: &Filter, interval: u64, theme: &LsofTheme, top_n: usize) {
     let mut mode = TopMode::new(top_n);
     crate::tui_app::run_tui(&mut mode, filter, interval, theme);
 }
@@ -271,154 +276,139 @@ fn sort_entries(entries: &mut [TopEntry], sort_col: SortCol, reverse: bool) {
         if sort_col == SortCol::Pid || sort_col == SortCol::User || sort_col == SortCol::Command {
             if reverse { cmp.reverse() } else { cmp }
         } else {
-            // Numeric columns default descending
             if reverse { cmp } else { cmp.reverse() }
         }
     });
 }
 
 #[allow(clippy::too_many_arguments)]
-fn render(
-    theme: &Theme,
+fn render_top(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
     entries: &[&TopEntry],
-    iteration: u64,
+    _iteration: u64,
     sort_col: SortCol,
     reverse: bool,
     show_n: usize,
-    interval: u64,
+    _interval: u64,
     paused: bool,
     show_bar: bool,
-    show_help: bool,
     show_delta: bool,
     total_procs: usize,
     total_fds: usize,
-) -> String {
-    let mut buf = String::with_capacity(4096);
-    let r = theme.reset();
+) {
+    let mut row = area.y;
 
-    // Title bar
-    let pause_indicator = if paused { " [PAUSED]" } else { "" };
-    let sort_indicator = format!(
-        "sort:{}{}",
-        sort_col.label(),
-        if reverse { "↑" } else { "↓" }
-    );
-    let _ = writeln!(
-        buf,
-        "{bold}{hdr} lsofrs top — {procs} procs, {fds} FDs — {int}s — #{iter}{pause} — {sort} {r}",
-        bold = theme.bold(),
-        hdr = theme.hdr_bg(),
-        procs = total_procs,
-        fds = total_fds,
-        int = interval,
-        iter = iteration,
-        pause = pause_indicator,
-        sort = sort_indicator,
-    );
+    // Styles from theme
+    let pid_s = Style::default().fg(theme.pid_fg);
+    let user_s = Style::default().fg(theme.user_fg);
+    let cmd_s = Style::default().fg(theme.cmd_fg);
+    let bold_s = Style::default()
+        .fg(theme.bold_fg)
+        .add_modifier(Modifier::BOLD);
+    let dim_s = Style::default().fg(theme.dim_fg);
+    let hdr_s = Style::default()
+        .fg(theme.header_fg)
+        .bg(theme.header_bg)
+        .add_modifier(Modifier::BOLD);
+    let active_s = Style::default()
+        .fg(theme.user_fg)
+        .add_modifier(Modifier::BOLD);
 
-    // Help or status line
-    if show_help {
-        let _ = writeln!(
-            buf,
-            "{dim}  ── KEYS ──────────────────────────────────────────{r}",
-            dim = theme.dim()
+    // Info line
+    if row < area.y + area.height {
+        let sort_indicator = format!(
+            "sort:{}{}",
+            sort_col.label(),
+            if reverse { "^" } else { "v" }
         );
-        let _ = writeln!(
-            buf,
-            "{green}  s{r} cycle sort column    {green}r{r} reverse sort order",
-            green = theme.green()
+        let pause_str = if paused { " [PAUSED]" } else { "" };
+        let info = format!(
+            "  {} procs, {} FDs -- top {} -- {sort_indicator}{pause_str}",
+            total_procs, total_fds, show_n,
         );
-        let _ = writeln!(
-            buf,
-            "{green}  +/-{r} show more/fewer    {green}1-9{r} set refresh interval",
-            green = theme.green()
-        );
-        let _ = writeln!(
-            buf,
-            "{green}  </>  {r} adjust interval   {green}p{r} pause/resume",
-            green = theme.green()
-        );
-        let _ = writeln!(
-            buf,
-            "{green}  b{r} toggle bar           {green}d{r} toggle delta column",
-            green = theme.green()
-        );
-        let _ = writeln!(
-            buf,
-            "{green}  h/?{r} toggle this help    {green}q/Esc/^C{r} quit",
-            green = theme.green()
-        );
-        let _ = writeln!(
-            buf,
-            "{dim}  ──────────────────────────────────────────────────{r}",
-            dim = theme.dim()
-        );
-    } else {
-        let _ = writeln!(
-            buf,
-            "{dim}  top {n} — s:sort r:reverse +/-:count 1-9:interval p:pause b:bar d:delta ?:help q:quit{r}",
-            dim = theme.dim(),
-            n = show_n,
-        );
+        set_str(buf, area.x, row, &info, dim_s, area.width);
+        row += 1;
     }
-    let _ = writeln!(buf);
+    row += 1; // blank line
 
-    // Header — highlight the active sort column
-    let hdr = |col: SortCol, label: &str, width: usize, right: bool| -> String {
-        let marker = if sort_col == col {
-            if sort_col == SortCol::Pid || sort_col == SortCol::User || sort_col == SortCol::Command
-            {
-                if reverse { "↓" } else { "↑" }
-            } else if reverse {
-                "↑"
-            } else {
-                "↓"
-            }
-        } else {
-            ""
-        };
-        let active = sort_col == col;
-        let text = format!("{label}{marker}");
-        if active {
-            if right {
-                format!("{}{:>width$}{}", theme.yellow(), text, r, width = width)
-            } else {
-                format!("{}{:<width$}{}", theme.yellow(), text, r, width = width)
-            }
-        } else if right {
-            format!("{:>width$}", text, width = width)
-        } else {
-            format!("{:<width$}", text, width = width)
+    // Column header
+    if row < area.y + area.height {
+        // Fill header bg
+        for x in area.x..area.x + area.width {
+            set_cell(buf, x, row, " ", hdr_s);
         }
-    };
 
-    let _ = write!(
-        buf,
-        "{bold}{bg}{}  {}  {}  ",
-        hdr(SortCol::Pid, "PID", 7, true),
-        hdr(SortCol::User, "USER", 8, false),
-        hdr(SortCol::Fds, "FDs", 5, true),
-        bold = theme.bold(),
-        bg = theme.hdr_bg(),
-    );
-    if show_delta {
-        let _ = write!(buf, "{}  ", hdr(SortCol::Delta, "DELTA", 6, true));
-    }
-    let _ = write!(
-        buf,
-        "{}  {}  {}  {}  ",
-        hdr(SortCol::Reg, "REG", 4, true),
-        hdr(SortCol::Sock, "SOCK", 4, true),
-        hdr(SortCol::Pipe, "PIPE", 4, true),
-        hdr(SortCol::Other, "OTHER", 5, true),
-    );
-    if show_bar {
-        let _ = write!(buf, "{:<20}  ", "DISTRIBUTION");
-    }
-    let _ = writeln!(buf, "{}{r}", hdr(SortCol::Command, "COMMAND", 7, false));
+        let mut col_x = area.x + 1;
+        let write_hdr = |buf: &mut Buffer,
+                         cx: &mut u16,
+                         col: SortCol,
+                         label: &str,
+                         width: usize,
+                         right: bool| {
+            let marker = if sort_col == col {
+                let is_alpha =
+                    col == SortCol::Pid || col == SortCol::User || col == SortCol::Command;
+                if is_alpha {
+                    if reverse { "v" } else { "^" }
+                } else if reverse {
+                    "^"
+                } else {
+                    "v"
+                }
+            } else {
+                ""
+            };
+            let text = format!("{label}{marker}");
+            let s = if sort_col == col { active_s } else { hdr_s };
+            if right {
+                let padded = format!("{:>w$}", text, w = width);
+                set_str(buf, *cx, row, &padded, s, width as u16);
+            } else {
+                let padded = format!("{:<w$}", text, w = width);
+                set_str(buf, *cx, row, &padded, s, width as u16);
+            }
+            *cx += width as u16 + 2;
+        };
 
-    // Rows
+        write_hdr(buf, &mut col_x, SortCol::Pid, "PID", 7, true);
+        write_hdr(buf, &mut col_x, SortCol::User, "USER", 8, false);
+        write_hdr(buf, &mut col_x, SortCol::Fds, "FDs", 5, true);
+        if show_delta {
+            write_hdr(buf, &mut col_x, SortCol::Delta, "DELTA", 6, true);
+        }
+        write_hdr(buf, &mut col_x, SortCol::Reg, "REG", 4, true);
+        write_hdr(buf, &mut col_x, SortCol::Sock, "SOCK", 4, true);
+        write_hdr(buf, &mut col_x, SortCol::Pipe, "PIPE", 4, true);
+        write_hdr(buf, &mut col_x, SortCol::Other, "OTHER", 5, true);
+        if show_bar {
+            set_str(buf, col_x, row, "DISTRIBUTION          ", hdr_s, 22);
+            col_x += 22;
+        }
+        write_hdr(buf, &mut col_x, SortCol::Command, "COMMAND", 7, false);
+        row += 1;
+    }
+
+    // Data rows
     for (i, e) in entries.iter().enumerate() {
+        if row >= area.y + area.height {
+            break;
+        }
+
+        let alt_s = if i % 2 == 1 {
+            Style::default().bg(theme.row_alt_bg)
+        } else {
+            Style::default()
+        };
+
+        // Fill row background for alt rows
+        if i % 2 == 1 {
+            for x in area.x..area.x + area.width {
+                set_cell(buf, x, row, " ", alt_s);
+            }
+        }
+
         let user = e.username();
         let user_display = if user.len() > 8 { &user[..8] } else { &user };
         let cmd = if e.command.len() > 30 {
@@ -427,80 +417,122 @@ fn render(
             &e.command
         };
 
-        let alt = if i % 2 == 1 { theme.row_alt() } else { "" };
+        let mut col_x = area.x + 1;
 
-        let _ = write!(
-            buf,
-            "{alt}{}{:>7}{r}  {}{:<8}{r}  {}{:>5}{r}  ",
-            theme.magenta(),
-            e.pid,
-            theme.yellow(),
-            user_display,
-            theme.bold(),
-            e.fd_count,
-        );
+        // PID
+        let pid_str = format!("{:>7}", e.pid);
+        set_str(buf, col_x, row, &pid_str, pid_s.patch(alt_s), 7);
+        col_x += 9;
 
+        // USER
+        let user_str = format!("{:<8}", user_display);
+        set_str(buf, col_x, row, &user_str, user_s.patch(alt_s), 8);
+        col_x += 10;
+
+        // FDs
+        let fds_str = format!("{:>5}", e.fd_count);
+        set_str(buf, col_x, row, &fds_str, bold_s.patch(alt_s), 5);
+        col_x += 7;
+
+        // Delta
         if show_delta {
-            let delta_str = match e.prev_fd_count {
-                Some(prev) if e.fd_count > prev => format!("+{}", e.fd_count - prev),
-                Some(prev) if e.fd_count < prev => format!("-{}", prev - e.fd_count),
-                Some(_) => "=".to_string(),
-                None => "new".to_string(),
+            let (delta_str, delta_s) = match e.prev_fd_count {
+                Some(prev) if e.fd_count > prev => (
+                    format!("+{}", e.fd_count - prev),
+                    Style::default().fg(theme.delta_plus),
+                ),
+                Some(prev) if e.fd_count < prev => (
+                    format!("-{}", prev - e.fd_count),
+                    Style::default().fg(theme.delta_minus),
+                ),
+                Some(_) => ("=".to_string(), Style::default().fg(theme.delta_stable)),
+                None => ("new".to_string(), Style::default().fg(theme.dim_fg)),
             };
-            let delta_color = match e.prev_fd_count {
-                Some(prev) if e.fd_count > prev => theme.red(),
-                Some(prev) if e.fd_count < prev => theme.green(),
-                _ => theme.dim(),
-            };
-            let _ = write!(buf, "{delta_color}{:>6}{r}  ", delta_str);
+            let ds = format!("{:>6}", delta_str);
+            set_str(buf, col_x, row, &ds, delta_s.patch(alt_s), 6);
+            col_x += 8;
         }
 
-        let _ = write!(
-            buf,
-            "{:>4}  {:>4}  {:>4}  {:>5}  ",
-            e.reg_count, e.sock_count, e.pipe_count, e.other_count,
-        );
+        // REG, SOCK, PIPE, OTHER
+        let reg_str = format!("{:>4}", e.reg_count);
+        set_str(buf, col_x, row, &reg_str, dim_s.patch(alt_s), 4);
+        col_x += 6;
+        let sock_str = format!("{:>4}", e.sock_count);
+        set_str(buf, col_x, row, &sock_str, dim_s.patch(alt_s), 4);
+        col_x += 6;
+        let pipe_str = format!("{:>4}", e.pipe_count);
+        set_str(buf, col_x, row, &pipe_str, dim_s.patch(alt_s), 4);
+        col_x += 6;
+        let other_str = format!("{:>5}", e.other_count);
+        set_str(buf, col_x, row, &other_str, dim_s.patch(alt_s), 5);
+        col_x += 7;
 
+        // Distribution bar
         if show_bar {
-            let bar_width = 20;
+            let bar_width: usize = 20;
             let total = e.fd_count.max(1);
             let reg_w = (e.reg_count * bar_width) / total;
             let sock_w = (e.sock_count * bar_width) / total;
             let pipe_w = (e.pipe_count * bar_width) / total;
             let other_w = bar_width.saturating_sub(reg_w + sock_w + pipe_w);
 
-            if reg_w > 0 {
-                let _ = write!(buf, "{}{}", theme.cyan(), "█".repeat(reg_w));
+            let reg_s = Style::default().fg(theme.bar_reg);
+            let sock_s = Style::default().fg(theme.bar_sock);
+            let pipe_s = Style::default().fg(theme.bar_pipe);
+            let other_s = Style::default().fg(theme.bar_other);
+
+            let mut bx = col_x;
+            for _ in 0..reg_w {
+                set_cell(buf, bx, row, "█", reg_s);
+                bx += 1;
             }
-            if sock_w > 0 {
-                let _ = write!(buf, "{}{}", theme.green(), "█".repeat(sock_w));
+            for _ in 0..sock_w {
+                set_cell(buf, bx, row, "█", sock_s);
+                bx += 1;
             }
-            if pipe_w > 0 {
-                let _ = write!(buf, "{}{}", theme.yellow(), "█".repeat(pipe_w));
+            for _ in 0..pipe_w {
+                set_cell(buf, bx, row, "█", pipe_s);
+                bx += 1;
             }
-            if other_w > 0 {
-                let _ = write!(buf, "{}{}", theme.dim(), "░".repeat(other_w));
+            for _ in 0..other_w {
+                set_cell(buf, bx, row, "░", other_s);
+                bx += 1;
             }
-            let _ = write!(buf, "{r}  ");
+            col_x += bar_width as u16 + 2;
         }
 
-        let _ = writeln!(buf, "{}{cmd}{r}", theme.cyan());
+        // COMMAND
+        set_str(buf, col_x, row, cmd, cmd_s.patch(alt_s), 30);
+
+        row += 1;
     }
 
     // Legend
-    let _ = writeln!(buf);
-    if show_bar {
-        let _ = writeln!(
-            buf,
-            "{dim}  {cyan}██{r}{dim} REG/DIR/CHR  {green}██{r}{dim} SOCK/NET  {yellow}██{r}{dim} PIPE  {dim}░░ OTHER{r}",
-            dim = theme.dim(),
-            cyan = theme.cyan(),
-            green = theme.green(),
-            yellow = theme.yellow(),
-        );
-    }
+    row += 1;
+    if show_bar && row < area.y + area.height {
+        let legend_s = Style::default().fg(theme.legend_fg);
+        let reg_s = Style::default().fg(theme.bar_reg);
+        let sock_s = Style::default().fg(theme.bar_sock);
+        let pipe_s = Style::default().fg(theme.bar_pipe);
+        let other_s = Style::default().fg(theme.bar_other);
 
-    buf
+        let mut lx = area.x + 2;
+        set_str(buf, lx, row, "██", reg_s, 2);
+        lx += 2;
+        set_str(buf, lx, row, " REG/DIR/CHR  ", legend_s, 14);
+        lx += 14;
+        set_str(buf, lx, row, "██", sock_s, 2);
+        lx += 2;
+        set_str(buf, lx, row, " SOCK/NET  ", legend_s, 11);
+        lx += 11;
+        set_str(buf, lx, row, "██", pipe_s, 2);
+        lx += 2;
+        set_str(buf, lx, row, " PIPE  ", legend_s, 7);
+        lx += 7;
+        set_str(buf, lx, row, "░░", other_s, 2);
+        lx += 2;
+        set_str(buf, lx, row, " OTHER", legend_s, 6);
+    }
 }
 
 #[cfg(test)]
@@ -523,10 +555,22 @@ mod tests {
         }
     }
 
+    fn test_theme() -> LsofTheme {
+        LsofTheme::from_name(crate::theme::ThemeName::NeonSprawl)
+    }
+
+    fn test_buf() -> (Buffer, Rect) {
+        let area = Rect::new(0, 0, 120, 40);
+        (Buffer::empty(area), area)
+    }
+
     #[test]
     fn render_empty_no_panic() {
-        let theme = Theme::new(false);
-        render(
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &[],
             1,
@@ -536,7 +580,6 @@ mod tests {
             1,
             false,
             true,
-            false,
             true,
             0,
             0,
@@ -545,14 +588,17 @@ mod tests {
 
     #[test]
     fn render_with_entries_no_panic() {
-        let theme = Theme::new(false);
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
         let entries = [
             make_entry(100, "chrome", 50, Some(45)),
             make_entry(200, "nginx", 30, Some(30)),
             make_entry(300, "postgres", 20, None),
         ];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &refs,
             3,
@@ -562,7 +608,6 @@ mod tests {
             1,
             false,
             true,
-            false,
             true,
             100,
             500,
@@ -571,8 +616,11 @@ mod tests {
 
     #[test]
     fn render_paused_indicator() {
-        let theme = Theme::new(false);
-        render(
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &[],
             1,
@@ -580,27 +628,6 @@ mod tests {
             false,
             20,
             1,
-            true,
-            true,
-            false,
-            true,
-            0,
-            0,
-        );
-    }
-
-    #[test]
-    fn render_help_overlay() {
-        let theme = Theme::new(false);
-        render(
-            &theme,
-            &[],
-            1,
-            SortCol::Fds,
-            false,
-            20,
-            1,
-            false,
             true,
             true,
             true,
@@ -611,10 +638,13 @@ mod tests {
 
     #[test]
     fn render_no_bar() {
-        let theme = Theme::new(false);
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
         let entries = [make_entry(1, "test", 10, Some(5))];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &refs,
             1,
@@ -622,7 +652,6 @@ mod tests {
             false,
             20,
             1,
-            false,
             false,
             false,
             true,
@@ -633,10 +662,13 @@ mod tests {
 
     #[test]
     fn render_no_delta() {
-        let theme = Theme::new(false);
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
         let entries = [make_entry(1, "test", 10, Some(5))];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &refs,
             1,
@@ -647,7 +679,6 @@ mod tests {
             false,
             true,
             false,
-            false,
             1,
             10,
         );
@@ -655,7 +686,8 @@ mod tests {
 
     #[test]
     fn render_zero_fds_no_panic() {
-        let theme = Theme::new(false);
+        let (mut buf, area) = test_buf();
+        let theme = test_theme();
         let entries = [TopEntry {
             pid: 1,
             ppid: 0,
@@ -670,7 +702,9 @@ mod tests {
             prev_fd_count: Some(0),
         }];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(
+        render_top(
+            &mut buf,
+            area,
             &theme,
             &refs,
             1,
@@ -680,7 +714,6 @@ mod tests {
             1,
             false,
             true,
-            false,
             true,
             1,
             0,
@@ -768,7 +801,7 @@ mod tests {
             }
             seen.push(col);
         }
-        assert_eq!(seen.len(), 9); // all 9 columns
+        assert_eq!(seen.len(), 9);
     }
 
     #[test]
@@ -802,5 +835,21 @@ mod tests {
     fn delta_val_stable() {
         let e = make_entry(1, "a", 10, Some(10));
         assert_eq!(e.delta_val(), 0);
+    }
+
+    // ── TopMode trait impl ──────────────────────────────────────────
+
+    #[test]
+    fn top_mode_help_keys() {
+        let mode = TopMode::new(20);
+        let keys = mode.help_keys();
+        assert_eq!(keys.len(), 5);
+        assert_eq!(keys[0].0, "s");
+    }
+
+    #[test]
+    fn top_mode_title() {
+        let mode = TopMode::new(20);
+        assert_eq!(mode.title(), "top");
     }
 }

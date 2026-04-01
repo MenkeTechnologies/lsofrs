@@ -20,6 +20,7 @@ mod pipe_chain;
 mod ports;
 mod stale;
 mod summary;
+mod theme;
 mod top;
 mod tree;
 mod tui_app;
@@ -35,6 +36,7 @@ use clap::Parser;
 use cli::Args;
 use filter::Filter;
 use output::Theme;
+use theme::{LsofTheme, ThemeName};
 
 fn main() {
     let args = Args::parse();
@@ -46,6 +48,7 @@ fn main() {
 
     let is_tty = io::stdout().is_terminal();
     let theme = Theme::new(is_tty);
+    let tui_theme = LsofTheme::from_name(ThemeName::from_str_loose(&args.theme_name));
     let filter = Filter::from_args(&args);
     let interval = args.repeat.unwrap_or(1);
 
@@ -64,7 +67,7 @@ fn main() {
     // Top mode
     if let Some(ref top_n) = args.top {
         let n = top_n.unwrap_or(20);
-        top::run_top(&filter, interval, &theme, n);
+        top::run_top(&filter, interval, &tui_theme, n);
         return;
     }
 
@@ -82,7 +85,7 @@ fn main() {
 
     // Summary live mode (--summary with -r)
     if args.summary && args.repeat.is_some() {
-        summary::run_summary_live(&filter, interval, &theme);
+        summary::run_summary_live(&filter, interval, &tui_theme);
         return;
     }
 

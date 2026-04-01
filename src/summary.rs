@@ -4,11 +4,17 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crossterm::event::KeyEvent;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Modifier, Style};
 
 use crate::filter::Filter;
-use crate::output::Theme;
-use crate::tui_app::{TuiMode, TuiState};
+use crate::theme::LsofTheme;
+use crate::tui_app::{TuiMode, TuiState, set_str};
 use crate::types::*;
+
+// Keep the old Theme import for single-shot print_summary
+use crate::output::Theme;
 
 const TOP_N: usize = 10;
 const BAR_MAX: usize = 20;
@@ -107,7 +113,7 @@ fn compute_stats(procs: &[Process]) -> (Vec<TypeStats>, Vec<ProcStats>, Vec<User
     (type_stats, proc_stats, user_stats, total_files)
 }
 
-/// Render summary text into a String buffer (for both single-shot and live mode)
+/// Render summary text into a String buffer (for single-shot non-live mode)
 #[allow(clippy::too_many_arguments)]
 fn render_summary_text(
     total_procs: usize,
@@ -123,16 +129,15 @@ fn render_summary_text(
     let mut buf = String::with_capacity(2048);
     let r = theme.reset();
 
-    // Header
     if let (Some(iter), Some(int)) = (iteration, interval) {
         let _ = writeln!(
             buf,
-            "{bold}{hdr} lsofrs summary — refresh {int}s — #{iter} — q to quit {r}",
+            "{bold}{hdr} lsofrs summary -- refresh {int}s -- #{iter} -- q to quit {r}",
             bold = theme.bold(),
             hdr = theme.hdr_bg(),
         );
     } else {
-        let _ = writeln!(buf, "{bold}═══ lsofrs summary ═══{r}", bold = theme.bold());
+        let _ = writeln!(buf, "{bold}=== lsofrs summary ==={r}", bold = theme.bold());
     }
     let _ = writeln!(buf);
     let _ = writeln!(
@@ -144,10 +149,9 @@ fn render_summary_text(
         yellow = theme.yellow(),
     );
 
-    // Type breakdown
     let _ = writeln!(
         buf,
-        "\n{bold}── File type breakdown ──{r}\n",
+        "\n{bold}-- File type breakdown --{r}\n",
         bold = theme.bold()
     );
 
@@ -190,10 +194,9 @@ fn render_summary_text(
         );
     }
 
-    // Top processes
     let _ = writeln!(
         buf,
-        "\n{bold}── Top {TOP_N} processes by FD count ──{r}\n",
+        "\n{bold}-- Top {TOP_N} processes by FD count --{r}\n",
         bold = theme.bold()
     );
     let _ = writeln!(
@@ -233,10 +236,9 @@ fn render_summary_text(
         );
     }
 
-    // Per-user totals
     let _ = writeln!(
         buf,
-        "\n{bold}── Per-user totals ──{r}\n",
+        "\n{bold}-- Per-user totals --{r}\n",
         bold = theme.bold()
     );
     let _ = writeln!(
@@ -329,17 +331,17 @@ impl TuiMode for SummaryLiveMode {
         self.total_files = total_files;
     }
 
-    fn render_content(&self, theme: &Theme, state: &TuiState) -> String {
-        render_summary_text(
+    fn render(&self, buf: &mut Buffer, area: Rect, theme: &LsofTheme, _state: &TuiState) {
+        render_summary_ratatui(
+            buf,
+            area,
+            theme,
             self.total_procs,
             self.total_files,
             &self.type_stats,
             &self.proc_stats,
             &self.user_stats,
-            theme,
-            Some(state.iteration),
-            Some(state.interval),
-        )
+        );
     }
 
     fn handle_key(&mut self, _key: KeyEvent, _state: &mut TuiState) -> bool {
@@ -349,12 +351,175 @@ impl TuiMode for SummaryLiveMode {
     fn title(&self) -> &str {
         "summary"
     }
+
+    fn help_keys(&self) -> Vec<(&str, &str)> {
+        vec![]
+    }
 }
 
 /// Live summary mode — auto-refresh via TUI framework
-pub fn run_summary_live(filter: &Filter, interval: u64, theme: &Theme) {
+pub fn run_summary_live(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let mut mode = SummaryLiveMode::new();
     crate::tui_app::run_tui(&mut mode, filter, interval, theme);
+}
+
+/// Render summary directly to a ratatui buffer using theme styles.
+#[allow(clippy::too_many_arguments)]
+fn render_summary_ratatui(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    total_procs: usize,
+    total_files: usize,
+    types: &[TypeStats],
+    procs: &[ProcStats],
+    users: &[UserStats],
+) {
+    let bold_s = Style::default()
+        .fg(theme.bold_fg)
+        .add_modifier(Modifier::BOLD);
+    let dim_s = Style::default().fg(theme.dim_fg);
+    let cmd_s = Style::default().fg(theme.cmd_fg);
+    let pid_s = Style::default().fg(theme.pid_fg);
+    let user_s = Style::default().fg(theme.user_fg);
+    let type_s = Style::default().fg(theme.type_fg);
+    let fd_s = Style::default().fg(theme.fd_fg);
+    let hdr_s = Style::default()
+        .fg(theme.header_fg)
+        .bg(theme.header_bg)
+        .add_modifier(Modifier::BOLD);
+    let section_s = Style::default()
+        .fg(theme.section_fg)
+        .add_modifier(Modifier::BOLD);
+
+    let mut row = area.y;
+    let cx = area.x + 2;
+    let w = area.width;
+
+    // Summary line
+    if row < area.y + area.height {
+        let info = format!(
+            "Processes: {}    Open files: {}",
+            fmt_num(total_procs),
+            fmt_num(total_files),
+        );
+        set_str(buf, cx, row, &info, bold_s, w);
+        row += 2;
+    }
+
+    // Type breakdown
+    if row < area.y + area.height {
+        set_str(buf, cx, row, "-- File type breakdown --", section_s, w);
+        row += 2;
+    }
+
+    let max_count = types.first().map(|t| t.count).unwrap_or(1);
+    for (i, ts) in types.iter().enumerate() {
+        if row >= area.y + area.height || i >= 15 {
+            break;
+        }
+        let pct = if total_files > 0 {
+            ts.count as f64 / total_files as f64 * 100.0
+        } else {
+            0.0
+        };
+        let bar_len = (ts.count as f64 / max_count as f64 * BAR_MAX as f64) as usize;
+        set_str(buf, cx, row, &ts.type_name, type_s, 6);
+        let nums = format!("  {:>8}  {:>5.1}%  ", fmt_num(ts.count), pct);
+        set_str(buf, cx + 6, row, &nums, dim_s, 20);
+        let bar = "█".repeat(bar_len);
+        set_str(buf, cx + 26, row, &bar, fd_s, bar_len as u16);
+        row += 1;
+    }
+
+    row += 1;
+
+    // Top processes
+    if row < area.y + area.height {
+        let title = format!("-- Top {} processes by FD count --", TOP_N);
+        set_str(buf, cx, row, &title, section_s, w);
+        row += 2;
+    }
+
+    if row < area.y + area.height {
+        for x in area.x..area.x + area.width {
+            let c = &mut buf[(x.min(area.x + area.width - 1), row)];
+            c.set_style(hdr_s);
+        }
+        let hdr = format!(
+            "{:>7}  {:<15}  {:<8}  {:>8}",
+            "PID", "COMMAND", "USER", "FDs"
+        );
+        set_str(buf, cx, row, &hdr, hdr_s, w);
+        row += 1;
+    }
+
+    for ps in procs.iter().take(TOP_N) {
+        if row >= area.y + area.height {
+            break;
+        }
+        let username = users::get_user_by_uid(ps.uid)
+            .map(|u| u.name().to_string_lossy().into_owned())
+            .unwrap_or_else(|| ps.uid.to_string());
+        let cmd = if ps.command.len() > 15 {
+            &ps.command[..15]
+        } else {
+            &ps.command
+        };
+        let user = if username.len() > 8 {
+            &username[..8]
+        } else {
+            &username
+        };
+
+        let pid_str = format!("{:>7}", ps.pid);
+        set_str(buf, cx, row, &pid_str, pid_s, 7);
+        let cmd_str = format!("  {:<15}", cmd);
+        set_str(buf, cx + 7, row, &cmd_str, cmd_s, 17);
+        let user_str = format!("  {:<8}", user);
+        set_str(buf, cx + 24, row, &user_str, user_s, 10);
+        let fd_str = format!("  {:>8}", fmt_num(ps.fd_count));
+        set_str(buf, cx + 34, row, &fd_str, bold_s, 10);
+        row += 1;
+    }
+
+    row += 1;
+
+    // Per-user totals
+    if row < area.y + area.height {
+        set_str(buf, cx, row, "-- Per-user totals --", section_s, w);
+        row += 2;
+    }
+
+    if row < area.y + area.height {
+        for x in area.x..area.x + area.width {
+            let c = &mut buf[(x.min(area.x + area.width - 1), row)];
+            c.set_style(hdr_s);
+        }
+        let hdr = format!("{:<10}  {:>8}  {:>8}", "USER", "PROCS", "FILES");
+        set_str(buf, cx, row, &hdr, hdr_s, w);
+        row += 1;
+    }
+
+    for us in users.iter().take(20) {
+        if row >= area.y + area.height {
+            break;
+        }
+        let uname = if us.username.len() > 10 {
+            &us.username[..10]
+        } else {
+            &us.username
+        };
+        let user_str = format!("{:<10}", uname);
+        set_str(buf, cx, row, &user_str, user_s, 10);
+        let nums = format!(
+            "  {:>8}  {:>8}",
+            fmt_num(us.proc_count),
+            fmt_num(us.file_count)
+        );
+        set_str(buf, cx + 10, row, &nums, dim_s, 20);
+        row += 1;
+    }
 }
 
 fn print_summary_json(
@@ -510,5 +675,25 @@ mod tests {
         assert_eq!(fmt_num(1000), "1,000");
         assert_eq!(fmt_num(12345), "12,345");
         assert_eq!(fmt_num(1234567), "1,234,567");
+    }
+
+    #[test]
+    fn render_summary_ratatui_empty() {
+        let theme = LsofTheme::from_name(crate::theme::ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 40);
+        let mut buf = Buffer::empty(area);
+        render_summary_ratatui(&mut buf, area, &theme, 0, 0, &[], &[], &[]);
+    }
+
+    #[test]
+    fn summary_live_mode_title() {
+        let mode = SummaryLiveMode::new();
+        assert_eq!(mode.title(), "summary");
+    }
+
+    #[test]
+    fn summary_live_mode_help_keys_empty() {
+        let mode = SummaryLiveMode::new();
+        assert!(mode.help_keys().is_empty());
     }
 }

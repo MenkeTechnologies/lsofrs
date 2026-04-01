@@ -144,6 +144,10 @@ pub struct Args {
     #[arg(short = '0')]
     pub nul_terminator: bool,
 
+    /// Color theme for TUI modes (neon-sprawl, classic, solar-flare, ice-breaker, matrix)
+    #[arg(long = "theme", default_value = "neon-sprawl")]
+    pub theme_name: String,
+
     /// Files/directories to search
     pub files: Vec<String>,
 }
