@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v3.1.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v3.1.1
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
