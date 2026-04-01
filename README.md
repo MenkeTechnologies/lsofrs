@@ -32,6 +32,10 @@ If a process has a file descriptor, `lsofrs` sees it.
 
 ---
 
+![lsofrs --help](screenshots/help.png)
+
+---
+
 ## // JACK IN — BUILD FROM SOURCE
 
 ```bash
