@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.5.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.6.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
@@ -302,6 +302,7 @@ All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
 | `?`/`h` | Toggle help overlay |
 | `c` | Open theme chooser (31 themes with swatches) |
 | `C` | Open theme editor (custom 6-color palettes) |
+| `T` | Toggle hover tooltips (right-click still works) |
 | `x` | Toggle border |
 | `t` | Toggle compact/expanded view |
 | `o` | Freeze/unfreeze sort order |
