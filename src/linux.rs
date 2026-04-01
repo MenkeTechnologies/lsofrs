@@ -690,6 +690,97 @@ mod tests {
         assert!(name.contains("ESTABLISHED"));
     }
 
+    // ── tcp state exhaustive ──────────────────────────────────────────
+
+    #[test]
+    fn tcp_state_all_values() {
+        assert_eq!(tcp_state_from_hex(0x02), TcpState::SynSent);
+        assert_eq!(tcp_state_from_hex(0x03), TcpState::SynRecv);
+        assert_eq!(tcp_state_from_hex(0x04), TcpState::FinWait1);
+        assert_eq!(tcp_state_from_hex(0x05), TcpState::FinWait2);
+        assert_eq!(tcp_state_from_hex(0x06), TcpState::TimeWait);
+        assert_eq!(tcp_state_from_hex(0x08), TcpState::CloseWait);
+        assert_eq!(tcp_state_from_hex(0x09), TcpState::LastAck);
+        assert_eq!(tcp_state_from_hex(0x0B), TcpState::Closing);
+    }
+
+    // ── parse_hex_endpoint edge cases ───────────────────────────────
+
+    #[test]
+    fn parse_hex_endpoint_high_port() {
+        let addr = parse_hex_endpoint("00000000:FFFF", &FileType::IPv4);
+        assert_eq!(addr.port, 65535);
+    }
+
+    #[test]
+    fn parse_hex_endpoint_bad_format() {
+        let addr = parse_hex_endpoint("garbage", &FileType::IPv4);
+        assert_eq!(addr.port, 0);
+    }
+
+    // ── format helpers edge cases ───────────────────────────────────
+
+    #[test]
+    fn format_endpoint_none_addr() {
+        let addr = InetAddr {
+            addr: None,
+            port: 80,
+        };
+        assert_eq!(format_endpoint(&addr), "*:80");
+    }
+
+    #[test]
+    fn format_inet_name_udp_no_state() {
+        let local = InetAddr {
+            addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+            port: 53,
+        };
+        let foreign = InetAddr::default();
+        let name = format_inet_name(&local, &foreign, "UDP", &None);
+        assert_eq!(name, "*:53");
+    }
+
+    #[test]
+    fn format_inet_name_ipv6() {
+        let local = InetAddr {
+            addr: Some(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+            port: 443,
+        };
+        let foreign = InetAddr::default();
+        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Listen));
+        assert!(name.contains("[::1]:443"));
+        assert!(name.contains("LISTEN"));
+    }
+
+    // ── parse_stat edge cases ───────────────────────────────────────
+
+    #[test]
+    fn parse_stat_pid_1() {
+        let stat = "1 (systemd) S 0 1 1 0 -1 4194560";
+        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
+        assert_eq!(cmd, "systemd");
+        assert_eq!(ppid, 0);
+        assert_eq!(pgid, 1);
+    }
+
+    #[test]
+    fn parse_stat_empty_returns_none() {
+        assert!(parse_stat("").is_none());
+    }
+
+    #[test]
+    fn parse_stat_no_parens_returns_none() {
+        assert!(parse_stat("1234 bash S 1 1234").is_none());
+    }
+
+    // ── mode_to_file_type edge cases ────────────────────────────────
+
+    #[test]
+    fn mode_unknown() {
+        let ft = mode_to_file_type(0o170000); // S_IFMT itself
+        assert!(matches!(ft, FileType::Unknown(_)));
+    }
+
     // ── Functional (requires /proc) ─────────────────────────────────
 
     #[cfg(target_os = "linux")]

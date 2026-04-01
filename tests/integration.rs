@@ -651,7 +651,110 @@ fn json_with_pgid_ppid() {
     assert!(parsed[0].get("pgid").is_some());
 }
 
+// ── Stale mode ──────────────────────────────────────────────────────
+
+#[test]
+fn stale_mode_no_crash() {
+    let out = lsofrs().arg("--stale").output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn stale_mode_with_user() {
+    let out = lsofrs()
+        .args(["--stale", "-u", &whoami()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn stale_mode_json() {
+    let out = lsofrs().args(["--stale", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("stale --json should be valid JSON");
+    assert!(parsed.is_object() || parsed.is_array());
+}
+
+#[test]
+fn stale_mode_json_with_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--stale", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+}
+
+// ── Ports mode ──────────────────────────────────────────────────────
+
+#[test]
+fn ports_mode_no_crash() {
+    let out = lsofrs().arg("--ports").output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn ports_mode_with_user() {
+    let out = lsofrs()
+        .args(["--ports", "-u", &whoami()])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn ports_mode_json() {
+    let out = lsofrs().args(["--ports", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value =
+        serde_json::from_str(&stdout).expect("ports --json should be valid JSON");
+    assert!(parsed.is_object() || parsed.is_array());
+}
+
+#[test]
+fn ports_mode_json_with_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--ports", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
+// ── Watch mode (piped, single-shot) ─────────────────────────────────
+
+#[test]
+fn watch_mode_no_crash() {
+    let out = lsofrs().args(["--watch", "/dev/null"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn watch_mode_nonexistent_file() {
+    let out = lsofrs()
+        .args(["--watch", "/nonexistent/path/xyz"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+}
+
 // ── Help content validation ────────────────────────────────────────
+
+#[test]
+fn help_contains_stale_and_ports() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("--stale"));
+    assert!(stdout.contains("--ports"));
+    assert!(stdout.contains("--watch"));
+    assert!(stdout.contains("--top"));
+}
 
 #[test]
 fn help_contains_all_sections() {

@@ -93,3 +93,108 @@ pub fn print_json(procs: &[Process]) {
     let _ = serde_json::to_writer_pretty(&mut out, &json_procs);
     let _ = writeln!(out);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
+        Process {
+            pid,
+            ppid: 1,
+            pgid: pid,
+            uid: 501,
+            command: cmd.to_string(),
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+        }
+    }
+
+    fn make_file(fd: i32, ft: FileType, name: &str) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: ft,
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn print_json_empty() {
+        print_json(&[]);
+    }
+
+    #[test]
+    fn print_json_single_proc() {
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_with_socket() {
+        let mut f = make_file(5, FileType::IPv4, "*:80");
+        f.socket_info = Some(SocketInfo {
+            protocol: "TCP".to_string(),
+            tcp_state: Some(TcpState::Listen),
+            ..Default::default()
+        });
+        let procs = vec![make_proc(1, "nginx", vec![f])];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_with_device_and_inode() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.device = Some((1, 16));
+        f.inode = Some(12345);
+        f.size = Some(4096);
+        let procs = vec![make_proc(1, "cat", vec![f])];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_access_none_omitted() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.access = Access::None;
+        let procs = vec![make_proc(1, "test", vec![f])];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_lock_char() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.lock = 'R';
+        let procs = vec![make_proc(1, "test", vec![f])];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_multiple_procs() {
+        let procs = vec![
+            make_proc(1, "init", vec![make_file(0, FileType::Chr, "/dev/null")]),
+            make_proc(
+                2,
+                "bash",
+                vec![
+                    make_file(0, FileType::Chr, "/dev/pts/0"),
+                    make_file(1, FileType::Chr, "/dev/pts/0"),
+                ],
+            ),
+        ];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_offset_used_when_no_size() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.offset = Some(100);
+        let procs = vec![make_proc(1, "test", vec![f])];
+        print_json(&procs);
+    }
+}

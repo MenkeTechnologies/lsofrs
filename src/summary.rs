@@ -328,3 +328,92 @@ fn fmt_num(n: usize) -> String {
     }
     result.chars().rev().collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_proc(pid: i32, cmd: &str, uid: u32, files: Vec<OpenFile>) -> Process {
+        Process {
+            pid,
+            ppid: 1,
+            pgid: pid,
+            uid,
+            command: cmd.to_string(),
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+        }
+    }
+
+    fn make_file(ft: FileType) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Read,
+            file_type: ft,
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn print_summary_empty() {
+        let theme = Theme::new(false);
+        print_summary(&[], &theme, false);
+    }
+
+    #[test]
+    fn print_summary_json_empty() {
+        let theme = Theme::new(false);
+        print_summary(&[], &theme, true);
+    }
+
+    #[test]
+    fn print_summary_with_data() {
+        let theme = Theme::new(false);
+        let procs = vec![
+            make_proc(
+                1,
+                "init",
+                0,
+                vec![make_file(FileType::Reg), make_file(FileType::Dir)],
+            ),
+            make_proc(
+                2,
+                "bash",
+                501,
+                vec![make_file(FileType::Reg), make_file(FileType::Pipe)],
+            ),
+        ];
+        print_summary(&procs, &theme, false);
+    }
+
+    #[test]
+    fn print_summary_json_with_data() {
+        let theme = Theme::new(false);
+        let procs = vec![
+            make_proc(1, "init", 0, vec![make_file(FileType::IPv4)]),
+            make_proc(
+                2,
+                "nginx",
+                33,
+                vec![make_file(FileType::IPv4), make_file(FileType::IPv4)],
+            ),
+        ];
+        print_summary(&procs, &theme, true);
+    }
+
+    #[test]
+    fn fmt_num_small() {
+        assert_eq!(fmt_num(0), "0");
+        assert_eq!(fmt_num(42), "42");
+        assert_eq!(fmt_num(999), "999");
+    }
+
+    #[test]
+    fn fmt_num_thousands() {
+        assert_eq!(fmt_num(1000), "1,000");
+        assert_eq!(fmt_num(12345), "12,345");
+        assert_eq!(fmt_num(1234567), "1,234,567");
+    }
+}
