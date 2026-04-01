@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::io::{self, IsTerminal, Write};
 use std::time::Duration;
 
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+
 use crate::output::Theme;
 
 struct WatchEntry {
@@ -27,13 +29,19 @@ pub fn run_watch(path: &str, interval: u64, theme: &Theme) {
         .unwrap_or_else(|_| path.to_string());
 
     if is_tty {
-        eprintln!(
-            "{bold}lsofrs watch{reset}: monitoring {cyan}{canon}{reset} (refresh {interval}s)",
+        let _ = crossterm::terminal::enable_raw_mode();
+        let r = theme.reset();
+        // Print header using stdout with \r\n for raw mode
+        let out = io::stdout();
+        let mut out = out.lock();
+        let _ = write!(
+            out,
+            "{bold}lsofrs watch{r}: monitoring {cyan}{canon}{r} (refresh {interval}s, q to quit)\r\n\r\n",
             bold = theme.bold(),
             cyan = theme.cyan(),
-            reset = theme.reset(),
         );
-        eprintln!();
+        let _ = out.flush();
+        drop(out);
     }
 
     loop {
@@ -104,7 +112,26 @@ pub fn run_watch(path: &str, interval: u64, theme: &Theme) {
             break;
         }
 
-        std::thread::sleep(Duration::from_secs(interval));
+        // Poll for q/Esc/Ctrl-C during sleep interval
+        let deadline = std::time::Instant::now() + Duration::from_secs(interval);
+        while std::time::Instant::now() < deadline {
+            if event::poll(Duration::from_millis(200)).unwrap_or(false)
+                && let Ok(Event::Key(key)) = event::read()
+            {
+                let quit = match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => true,
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => true,
+                    _ => false,
+                };
+                if quit {
+                    break;
+                }
+            }
+        }
+    }
+
+    if is_tty {
+        let _ = crossterm::terminal::disable_raw_mode();
     }
 }
 
@@ -138,18 +165,20 @@ fn print_event(theme: &Theme, tag: &str, pid: i32, cmd: &str, uid: u32, fd: &str
     };
 
     let now = chrono::Local::now().format("%H:%M:%S");
+    let nl = if theme.is_tty { "\r\n" } else { "\n" };
 
-    let _ = writeln!(
+    let _ = write!(
         out,
-        "{dim}{now}{r}  {color}{symbol}{tag:<6}{r}  {mag}{pid:>7}{r}  {yellow}{user:<8}{r}  {fd:<5}  {cyan}{cmd}{r}",
+        "{dim}{now}{r}  {color}{symbol}{tag:<6}{r}  {mag}{pid:>7}{r}  {yellow}{user:<8}{r}  {fd:<5}  {cyan}{cmd}{r}{nl}",
         dim = theme.dim(),
         mag = theme.magenta(),
         yellow = theme.yellow(),
         cyan = theme.cyan(),
-        tag = &tag[1..], // strip the +/- prefix
+        tag = &tag[1..],
         user = user_display,
         cmd = cmd_display,
     );
+    let _ = out.flush();
 }
 
 fn print_snapshot(
