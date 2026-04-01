@@ -941,6 +941,24 @@ impl TabbedTui {
                     ),
                 ]
             }
+            "lsofrs" => vec![
+                (
+                    "\u{25b6} App".into(),
+                    format!("LSOFRS v{}", env!("CARGO_PKG_VERSION")),
+                ),
+                ("  Description".into(), "Modern lsof in Rust".into()),
+                ("  Author".into(), "MenkeTechnologies".into()),
+                ("  License".into(), "MIT".into()),
+                (
+                    "  Repository".into(),
+                    "github.com/MenkeTechnologies/lsofrs".into(),
+                ),
+                ("  Platform".into(), std::env::consts::OS.to_string()),
+                ("  Arch".into(), std::env::consts::ARCH.to_string()),
+                ("  Theme".into(), state.theme.display_name().to_string()),
+                ("  Tabs".into(), "7 (Tab/click to switch)".into()),
+                ("  Keys".into(), "h for help, c for themes".into()),
+            ],
             _ => self.build_bottom_tooltip(state, ""),
         }
     }
@@ -1698,6 +1716,26 @@ fn draw_bottom_bar(
         }};
     }
 
+    // App name with triangles (iftoprs style), highlighted in accent color
+    {
+        let app_text = "▶▶▶ LSOFRS ◀◀◀";
+        let app_start = cx;
+        let accent_s = Style::default()
+            .fg(state.theme.pid_fg)
+            .bg(t.row_alt_bg)
+            .add_modifier(Modifier::BOLD);
+        set_str(
+            buf,
+            cx,
+            info_y,
+            app_text,
+            accent_s,
+            area.width.saturating_sub(cx - area.x),
+        );
+        cx += app_text.chars().count() as u16;
+        segments.push((app_start, cx, "lsofrs".to_string()));
+    }
+    sep!();
     seg!("procs", format!("procs:{}", total_procs));
     sep!();
     seg!("files", format!("files:{}", total_files));
@@ -4675,14 +4713,14 @@ mod tests {
     fn draw_bottom_bar_with_filter() {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let state = TuiState::new_pub(2, theme);
-        let area = Rect::new(0, 0, 120, 2);
+        let area = Rect::new(0, 0, 200, 2);
         let mut buf = Buffer::empty(area);
         let filter = Some("nginx".to_string());
         draw_bottom_bar(
             &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &filter, false, false, 0,
         );
         let mut line = String::new();
-        for x in 0..120u16 {
+        for x in 0..200u16 {
             line.push_str(buf[(x, 1)].symbol());
         }
         assert!(line.contains("filter:nginx"));
@@ -5014,13 +5052,13 @@ mod tests {
     fn draw_bottom_bar_with_indicators() {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let state = TuiState::new_pub(2, theme);
-        let area = Rect::new(0, 0, 120, 2);
+        let area = Rect::new(0, 0, 200, 2);
         let mut buf = Buffer::empty(area);
         draw_bottom_bar(
             &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &None, true, true, 3,
         );
         let mut line = String::new();
-        for x in 0..120u16 {
+        for x in 0..200u16 {
             line.push_str(buf[(x, 1)].symbol());
         }
         assert!(line.contains("frozen"));

@@ -169,6 +169,28 @@ impl TopMode {
     pub fn entry_count(&self) -> usize {
         self.entries.len()
     }
+
+    /// Top N processes by FD count: returns `(command, pid, fd_count)`.
+    pub fn top_n_by_fds(&self, n: usize) -> Vec<(String, i32, usize)> {
+        let mut sorted = self.entries.clone();
+        sorted.sort_by(|a, b| b.fd_count.cmp(&a.fd_count));
+        sorted
+            .iter()
+            .take(n)
+            .map(|e| (e.command.clone(), e.pid, e.fd_count))
+            .collect()
+    }
+
+    /// User breakdown: returns `(username, count)` sorted by count descending.
+    pub fn user_breakdown(&self) -> Vec<(String, usize)> {
+        let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for e in &self.entries {
+            *map.entry(e.username()).or_default() += 1;
+        }
+        let mut pairs: Vec<(String, usize)> = map.into_iter().collect();
+        pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        pairs
+    }
 }
 
 impl TopMode {
