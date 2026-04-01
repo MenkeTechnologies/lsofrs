@@ -687,6 +687,11 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                                 format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
                         }
                     } else {
+                        // For TCP sockets reported as SOCKINFO_IN, still read the state
+                        if protocol == IPPROTO_TCP {
+                            let tcp: &TcpSockInfo = &*(proto_bytes.as_ptr() as *const TcpSockInfo);
+                            sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
+                        }
                         let ini: &InSockInfo = &*(proto_bytes.as_ptr() as *const InSockInfo);
 
                         if family == AF_INET {
