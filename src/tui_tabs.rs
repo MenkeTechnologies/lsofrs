@@ -195,10 +195,10 @@ impl Tab {
         Tab::Top,
         Tab::Summary,
         Tab::Ports,
-        Tab::Stale,
         Tab::Tree,
         Tab::NetMap,
         Tab::PipeChain,
+        Tab::Stale,
     ];
 
     fn label(self) -> &'static str {
