@@ -3128,11 +3128,14 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let mut chooser_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
     let mut editor_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
 
+    let mut redraw_only = false;
+
     while running {
-        if !state.paused {
+        if !state.paused && !redraw_only {
             state.iteration += 1;
             tui.update_all(filter);
         }
+        redraw_only = false;
 
         let _ = terminal.draw(|frame| {
             let size = frame.area();
@@ -3427,15 +3430,17 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         // Poll events
         let deadline = Instant::now() + Duration::from_secs(state.interval);
         while Instant::now() < deadline {
-            // Use shorter poll timeout when hover is pending to show tooltip promptly
-            let poll_ms = if tui.hover.row.is_some() && !tui.hover.ready() {
-                50
+            // Use shorter poll timeout only when hover tooltip is about to appear
+            let poll_ms = if state.hover_tooltips && tui.hover.since.is_some() && !tui.hover.ready()
+            {
+                200 // check hover readiness
             } else {
-                100
+                500 // idle — minimal CPU
             };
             if !event::poll(Duration::from_millis(poll_ms)).unwrap_or(false) {
-                // If hover just became ready, break to re-render with tooltip
+                // If hover just became ready, break to re-render with tooltip (no data refresh)
                 if tui.hover.ready() {
+                    redraw_only = true;
                     break;
                 }
                 continue;
@@ -3690,6 +3695,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                 );
                             }
                             // Re-render immediately without re-gathering data
+                            redraw_only = true;
                             break;
                         }
                         continue; // unhandled key, stay in event loop
@@ -4134,19 +4140,20 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             tui.hover.move_to(mouse.column, mouse.row);
                             tui.tooltip.active = false;
                             let new_pos = (mouse.column, mouse.row);
-                            // Re-enable hover timer only for valid zones (storageshower pattern)
                             if old_pos != Some(new_pos) {
                                 let y = mouse.row;
                                 let bdr = if state.show_border { 1u16 } else { 0 };
                                 let term_h = terminal.size().map(|s| s.height).unwrap_or(50);
-                                let is_valid = y == bdr // tab bar
+                                let is_valid = y == bdr
                                     || (y >= tui.content_area_y
-                                        && y < tui.content_area_y + tui.content_area_h) // content
-                                    || y >= term_h.saturating_sub(2 + bdr); // bottom bar
+                                        && y < tui.content_area_y + tui.content_area_h)
+                                    || y >= term_h.saturating_sub(2 + bdr);
                                 if is_valid {
                                     tui.hover.since = Some(Instant::now());
                                 }
                             }
+                            // Redraw to hide/show tooltip but don't re-gather data
+                            redraw_only = true;
                             break;
                         }
                         MouseEventKind::ScrollDown => {
