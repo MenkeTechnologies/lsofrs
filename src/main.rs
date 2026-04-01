@@ -8,6 +8,8 @@ mod filter;
 mod follow;
 mod json;
 mod leak;
+#[cfg(target_os = "linux")]
+mod linux;
 mod monitor;
 mod output;
 mod summary;
@@ -113,9 +115,13 @@ pub fn gather_processes() -> Vec<types::Process> {
     {
         darwin::gather_processes()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     {
-        eprintln!("lsofrs: only macOS is currently supported");
+        linux::gather_processes()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        eprintln!("lsofrs: unsupported platform (macOS and Linux are supported)");
         Vec::new()
     }
 }

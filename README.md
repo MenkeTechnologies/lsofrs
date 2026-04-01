@@ -234,6 +234,7 @@ src/
 ├── cli.rs       # clap argument definitions + custom help display
 ├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
 ├── darwin.rs    # macOS libproc FFI — process/FD enumeration
+├── linux.rs     # Linux /proc filesystem — process/FD enumeration
 ├── filter.rs    # Selection & filtering (PID, user, command, FD, network)
 ├── output.rs    # Columnar & field output formatting, ANSI theming
 ├── json.rs      # JSON serialization via serde
@@ -263,7 +264,7 @@ autoload -Uz compinit && compinit
 
 ### Platform Support
 
-Currently targets **macOS/Darwin** via the `libproc` API (`proc_listpids`, `proc_pidinfo`, `proc_pidfdinfo`). The architecture is designed for dialect extension — Linux (`/proc` filesystem), FreeBSD, etc. can be added as platform-specific modules behind `#[cfg(target_os)]`.
+Supports **macOS/Darwin** via the `libproc` API and **Linux** via the `/proc` filesystem. Platform-specific modules are gated behind `#[cfg(target_os)]`. FreeBSD, etc. can be added as additional modules.
 
 ### Key Design Decisions
 

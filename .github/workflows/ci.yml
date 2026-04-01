@@ -18,8 +18,8 @@ jobs:
       - run: rustup component add rustfmt
       - run: cargo fmt --all --check
 
-  build-linux:
-    name: Build (Linux)
+  test-linux:
+    name: Test (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,8 +29,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
       - run: cargo build --verbose
+      - run: cargo test --verbose
 
   clippy:
     name: Clippy
