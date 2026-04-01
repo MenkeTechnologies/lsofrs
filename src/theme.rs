@@ -21,6 +21,25 @@ pub enum ThemeName {
     RedSector,
     DeepNet,
     Overlock,
+    SakuraDen,
+    DataStream,
+    NeonNoir,
+    ChromeHeart,
+    VoidWalker,
+    ToxicWaste,
+    CyberFrost,
+    PlasmaCore,
+    SteelNerve,
+    DarkSignal,
+    GlitchPop,
+    HoloShift,
+    NightCity,
+    LaserGrid,
+    QuantumFlux,
+    BioHazard,
+    Darkwave,
+    Megacorp,
+    Zaibatsu,
 }
 
 impl ThemeName {
@@ -37,6 +56,25 @@ impl ThemeName {
         ThemeName::RedSector,
         ThemeName::DeepNet,
         ThemeName::Overlock,
+        ThemeName::SakuraDen,
+        ThemeName::DataStream,
+        ThemeName::NeonNoir,
+        ThemeName::ChromeHeart,
+        ThemeName::VoidWalker,
+        ThemeName::ToxicWaste,
+        ThemeName::CyberFrost,
+        ThemeName::PlasmaCore,
+        ThemeName::SteelNerve,
+        ThemeName::DarkSignal,
+        ThemeName::GlitchPop,
+        ThemeName::HoloShift,
+        ThemeName::NightCity,
+        ThemeName::LaserGrid,
+        ThemeName::QuantumFlux,
+        ThemeName::BioHazard,
+        ThemeName::Darkwave,
+        ThemeName::Megacorp,
+        ThemeName::Zaibatsu,
     ];
 
     pub fn display_name(self) -> &'static str {
@@ -53,6 +91,25 @@ impl ThemeName {
             Self::RedSector => "Red Sector",
             Self::DeepNet => "Deep Net",
             Self::Overlock => "Overlock",
+            Self::SakuraDen => "Sakura Den",
+            Self::DataStream => "Data Stream",
+            Self::NeonNoir => "Neon Noir",
+            Self::ChromeHeart => "Chrome Heart",
+            Self::VoidWalker => "Void Walker",
+            Self::ToxicWaste => "Toxic Waste",
+            Self::CyberFrost => "Cyber Frost",
+            Self::PlasmaCore => "Plasma Core",
+            Self::SteelNerve => "Steel Nerve",
+            Self::DarkSignal => "Dark Signal",
+            Self::GlitchPop => "Glitch Pop",
+            Self::HoloShift => "Holo Shift",
+            Self::NightCity => "Night City",
+            Self::LaserGrid => "Laser Grid",
+            Self::QuantumFlux => "Quantum Flux",
+            Self::BioHazard => "Bio Hazard",
+            Self::Darkwave => "Darkwave",
+            Self::Megacorp => "Megacorp",
+            Self::Zaibatsu => "Zaibatsu",
         }
     }
 
@@ -88,6 +145,25 @@ impl ThemeName {
             "redsector" | "red" => Self::RedSector,
             "deepnet" | "deep" => Self::DeepNet,
             "overlock" | "over" => Self::Overlock,
+            "sakuraden" | "sakura" => Self::SakuraDen,
+            "datastream" | "data" => Self::DataStream,
+            "neonnoir" | "noir" => Self::NeonNoir,
+            "chromeheart" | "chrome" => Self::ChromeHeart,
+            "voidwalker" | "void" => Self::VoidWalker,
+            "toxicwaste" | "toxic" => Self::ToxicWaste,
+            "cyberfrost" | "cyber" => Self::CyberFrost,
+            "plasmacore" | "plasma" => Self::PlasmaCore,
+            "steelnerve" | "steel" => Self::SteelNerve,
+            "darksignal" | "signal" => Self::DarkSignal,
+            "glitchpop" | "glitch" => Self::GlitchPop,
+            "holoshift" | "holo" => Self::HoloShift,
+            "nightcity" | "night" => Self::NightCity,
+            "lasergrid" | "laser" => Self::LaserGrid,
+            "quantumflux" | "quantum" => Self::QuantumFlux,
+            "biohazard" | "bio" => Self::BioHazard,
+            "darkwave" | "dark" => Self::Darkwave,
+            "megacorp" | "mega" => Self::Megacorp,
+            "zaibatsu" | "zai" => Self::Zaibatsu,
             _ => Self::NeonSprawl,
         }
     }
@@ -150,6 +226,57 @@ impl LsofTheme {
             ThemeName::RedSector => Self::red_sector(),
             ThemeName::DeepNet => Self::deep_net(),
             ThemeName::Overlock => Self::overlock(),
+            ThemeName::SakuraDen => Self::sakura_den(),
+            ThemeName::DataStream => Self::data_stream(),
+            ThemeName::NeonNoir => Self::neon_noir(),
+            ThemeName::ChromeHeart => Self::chrome_heart(),
+            ThemeName::VoidWalker => Self::void_walker(),
+            ThemeName::ToxicWaste => Self::toxic_waste(),
+            ThemeName::CyberFrost => Self::cyber_frost(),
+            ThemeName::PlasmaCore => Self::plasma_core(),
+            ThemeName::SteelNerve => Self::steel_nerve(),
+            ThemeName::DarkSignal => Self::dark_signal(),
+            ThemeName::GlitchPop => Self::glitch_pop(),
+            ThemeName::HoloShift => Self::holo_shift(),
+            ThemeName::NightCity => Self::night_city(),
+            ThemeName::LaserGrid => Self::laser_grid(),
+            ThemeName::QuantumFlux => Self::quantum_flux(),
+            ThemeName::BioHazard => Self::bio_hazard(),
+            ThemeName::Darkwave => Self::darkwave(),
+            ThemeName::Megacorp => Self::megacorp(),
+            ThemeName::Zaibatsu => Self::zaibatsu(),
+        }
+    }
+
+    /// Build a theme from a 6-color palette (c1=primary, c2=accent, c3-c6=secondary).
+    fn from_palette(name: ThemeName, c1: u8, c2: u8, c3: u8, c4: u8, c5: u8, c6: u8) -> Self {
+        Self {
+            name,
+            header_bg: Color::Indexed(234),
+            header_fg: Color::Indexed(c2),
+            pid_fg: Color::Indexed(c1),
+            user_fg: Color::Indexed(c2),
+            cmd_fg: Color::Indexed(c4),
+            fd_fg: Color::Indexed(c3),
+            type_fg: Color::Indexed(c5),
+            bar_reg: Color::Indexed(c1),
+            bar_sock: Color::Indexed(c2),
+            bar_pipe: Color::Indexed(c4),
+            bar_other: Color::Indexed(c6),
+            help_bg: Color::Indexed(236),
+            help_border: Color::Indexed(c1),
+            help_title: Color::Indexed(c2),
+            help_key: Color::Indexed(c3),
+            help_val: Color::Indexed(c4),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(c3),
+            delta_stable: Color::Indexed(c6),
+            select_bg: Color::Indexed(237),
+            dim_fg: Color::Indexed(240),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(255),
+            section_fg: Color::Indexed(c2),
+            legend_fg: Color::Indexed(240),
         }
     }
 
@@ -223,9 +350,9 @@ impl LsofTheme {
             name: ThemeName::SolarFlare,
             header_bg: Color::Indexed(52),
             header_fg: Color::Indexed(226),
-            pid_fg: Color::Indexed(208),  // orange
-            user_fg: Color::Indexed(226), // yellow
-            cmd_fg: Color::Indexed(214),  // gold
+            pid_fg: Color::Indexed(208),
+            user_fg: Color::Indexed(226),
+            cmd_fg: Color::Indexed(214),
             fd_fg: Color::Indexed(220),
             type_fg: Color::Indexed(172),
             bar_reg: Color::Indexed(208),
@@ -255,9 +382,9 @@ impl LsofTheme {
             name: ThemeName::IceBreaker,
             header_bg: Color::Indexed(17),
             header_fg: Color::Indexed(159),
-            pid_fg: Color::Indexed(75),  // blue
-            user_fg: Color::Indexed(81), // sky
-            cmd_fg: Color::Indexed(123), // bright cyan
+            pid_fg: Color::Indexed(75),
+            user_fg: Color::Indexed(81),
+            cmd_fg: Color::Indexed(123),
             fd_fg: Color::Indexed(117),
             type_fg: Color::Indexed(39),
             bar_reg: Color::Indexed(75),
@@ -536,6 +663,103 @@ impl LsofTheme {
             legend_fg: Color::Indexed(22),
         }
     }
+
+    // ── New themes ────────────────────────────────────────────────────────────
+
+    /// Cherry blossom: pink/rose
+    fn sakura_den() -> Self {
+        Self::from_palette(ThemeName::SakuraDen, 175, 218, 182, 225, 169, 132)
+    }
+
+    /// Green data terminal
+    fn data_stream() -> Self {
+        Self::from_palette(ThemeName::DataStream, 22, 46, 28, 119, 34, 22)
+    }
+
+    /// Dark neon: magenta/white contrasts
+    fn neon_noir() -> Self {
+        Self::from_palette(ThemeName::NeonNoir, 201, 231, 93, 219, 57, 53)
+    }
+
+    /// Monochrome silver
+    fn chrome_heart() -> Self {
+        Self::from_palette(ThemeName::ChromeHeart, 250, 255, 246, 253, 243, 239)
+    }
+
+    /// Deep purple void
+    fn void_walker() -> Self {
+        Self::from_palette(ThemeName::VoidWalker, 55, 99, 54, 141, 92, 17)
+    }
+
+    /// Neon green/yellow toxic
+    fn toxic_waste() -> Self {
+        Self::from_palette(ThemeName::ToxicWaste, 118, 190, 154, 226, 82, 58)
+    }
+
+    /// Icy blue/white frost
+    fn cyber_frost() -> Self {
+        Self::from_palette(ThemeName::CyberFrost, 159, 195, 153, 189, 111, 67)
+    }
+
+    /// Hot pink/magenta plasma
+    fn plasma_core() -> Self {
+        Self::from_palette(ThemeName::PlasmaCore, 199, 213, 163, 207, 126, 89)
+    }
+
+    /// Steel blue industrial
+    fn steel_nerve() -> Self {
+        Self::from_palette(ThemeName::SteelNerve, 68, 110, 60, 146, 24, 236)
+    }
+
+    /// Very dark teal/green
+    fn dark_signal() -> Self {
+        Self::from_palette(ThemeName::DarkSignal, 30, 43, 23, 79, 29, 16)
+    }
+
+    /// Loud neon multi-color
+    fn glitch_pop() -> Self {
+        Self::from_palette(ThemeName::GlitchPop, 201, 51, 226, 47, 196, 21)
+    }
+
+    /// Holographic cyan/pink
+    fn holo_shift() -> Self {
+        Self::from_palette(ThemeName::HoloShift, 123, 219, 159, 183, 87, 133)
+    }
+
+    /// Warm amber city lights
+    fn night_city() -> Self {
+        Self::from_palette(ThemeName::NightCity, 214, 227, 209, 223, 172, 94)
+    }
+
+    /// Bright neon grid
+    fn laser_grid() -> Self {
+        Self::from_palette(ThemeName::LaserGrid, 46, 201, 51, 226, 196, 21)
+    }
+
+    /// Purple/blue quantum
+    fn quantum_flux() -> Self {
+        Self::from_palette(ThemeName::QuantumFlux, 135, 75, 171, 111, 98, 61)
+    }
+
+    /// Warning green/yellow
+    fn bio_hazard() -> Self {
+        Self::from_palette(ThemeName::BioHazard, 148, 184, 106, 192, 64, 22)
+    }
+
+    /// Dark purple/magenta wave
+    fn darkwave() -> Self {
+        Self::from_palette(ThemeName::Darkwave, 53, 140, 89, 176, 127, 52)
+    }
+
+    /// Corporate gray/blue
+    fn megacorp() -> Self {
+        Self::from_palette(ThemeName::Megacorp, 252, 39, 245, 81, 242, 236)
+    }
+
+    /// Red/orange corporate dystopia
+    fn zaibatsu() -> Self {
+        Self::from_palette(ThemeName::Zaibatsu, 167, 216, 131, 224, 95, 52)
+    }
 }
 
 #[cfg(test)]
@@ -544,7 +768,7 @@ mod tests {
 
     #[test]
     fn all_themes_count() {
-        assert_eq!(ThemeName::ALL.len(), 12);
+        assert_eq!(ThemeName::ALL.len(), 31);
     }
 
     #[test]
@@ -592,6 +816,14 @@ mod tests {
         );
         assert_eq!(ThemeName::from_str_loose("matrix"), ThemeName::Matrix);
         assert_eq!(ThemeName::from_str_loose("unknown"), ThemeName::NeonSprawl);
+        // New themes
+        assert_eq!(ThemeName::from_str_loose("sakura"), ThemeName::SakuraDen);
+        assert_eq!(
+            ThemeName::from_str_loose("glitch-pop"),
+            ThemeName::GlitchPop
+        );
+        assert_eq!(ThemeName::from_str_loose("zaibatsu"), ThemeName::Zaibatsu);
+        assert_eq!(ThemeName::from_str_loose("megacorp"), ThemeName::Megacorp);
     }
 
     #[test]
@@ -608,5 +840,13 @@ mod tests {
         let t2 = t.clone();
         assert_eq!(t.name, t2.name);
         assert_eq!(t.header_bg, t2.header_bg);
+    }
+
+    #[test]
+    fn swatch_colors_six() {
+        for &name in ThemeName::ALL {
+            let s = name.swatch_colors();
+            assert_eq!(s.len(), 6);
+        }
     }
 }

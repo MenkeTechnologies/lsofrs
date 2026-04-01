@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 
 pub mod cli;
+pub mod config;
 pub mod csv_out;
 #[cfg(target_os = "macos")]
 pub mod darwin;

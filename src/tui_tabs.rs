@@ -4,7 +4,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton,
+    MouseEventKind,
+};
 use crossterm::{cursor, execute, terminal};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -12,13 +15,14 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
+use ratatui::style::Color;
+
+use crate::config;
 use crate::filter::Filter;
 use crate::summary::SummaryLiveMode;
-use crate::theme::LsofTheme;
-#[cfg(test)]
-use crate::theme::ThemeName;
+use crate::theme::{LsofTheme, ThemeName};
 use crate::top::TopMode;
-use crate::tui_app::{TuiMode, TuiState, draw_help, set_cell, set_str};
+use crate::tui_app::{TuiMode, TuiState, draw_box, draw_help, set_cell, set_str};
 use crate::types::*;
 
 // ── Tab enum ──────────────────────────────────────────────────────────────────
@@ -60,6 +64,20 @@ impl Tab {
     fn index(self) -> usize {
         Tab::ALL.iter().position(|&t| t == self).unwrap_or(0)
     }
+}
+
+/// Hit-test the tab bar: given an x coordinate, return which tab was clicked.
+fn tab_at_x(x: u16) -> Option<Tab> {
+    let mut pos = 1u16; // starts at x=1 (1 space padding)
+    for &tab in &Tab::ALL {
+        // labels are rendered as " LABEL " (space-padded)
+        let label_len = tab.label().len() as u16 + 2;
+        if x >= pos && x < pos + label_len {
+            return Some(tab);
+        }
+        pos += label_len + 3; // " | " separator
+    }
+    None
 }
 
 // ── Simple tab data types ─────────────────────────────────────────────────────
@@ -118,10 +136,16 @@ struct TabbedTui {
     tree_rows: Vec<TreeRow>,
     net_map_rows: Vec<NetMapRow>,
     pipe_rows: Vec<PipeRow>,
+    // Theme chooser modal
+    show_theme_chooser: bool,
+    theme_chooser_idx: usize,
+    // Totals for status bar
+    total_procs: usize,
+    total_files: usize,
 }
 
 impl TabbedTui {
-    fn new() -> Self {
+    fn new(theme_idx: usize) -> Self {
         Self {
             active: Tab::Top,
             top_mode: TopMode::new(20),
@@ -131,6 +155,10 @@ impl TabbedTui {
             tree_rows: Vec::new(),
             net_map_rows: Vec::new(),
             pipe_rows: Vec::new(),
+            show_theme_chooser: false,
+            theme_chooser_idx: theme_idx,
+            total_procs: 0,
+            total_files: 0,
         }
     }
 
@@ -141,6 +169,10 @@ impl TabbedTui {
         for p in &mut procs {
             p.files.retain(|f| filter.matches_file(f));
         }
+
+        // Track totals for status bar
+        self.total_procs = procs.len();
+        self.total_files = procs.iter().map(|p| p.files.len()).sum();
 
         // Top and Summary use TuiMode::update which gathers internally,
         // so we call them directly (they do their own gathering)
@@ -473,22 +505,47 @@ fn draw_tab_bar(buf: &mut Buffer, area: Rect, active: Tab, theme: &LsofTheme) {
     }
 }
 
-fn draw_status_bar(buf: &mut Buffer, area: Rect, state: &TuiState, active: Tab) {
+fn draw_bottom_bar(
+    buf: &mut Buffer,
+    area: Rect,
+    state: &TuiState,
+    total_procs: usize,
+    total_files: usize,
+    elapsed: &str,
+) {
     let t = &state.theme;
-    let bg_s = Style::default().fg(t.dim_fg).bg(t.row_alt_bg);
+    let dim_s = Style::default().fg(t.dim_fg);
+    let bar_s = Style::default().fg(t.dim_fg).bg(t.row_alt_bg);
+
+    // Separator line (row h-2)
+    let sep_y = area.y;
     for x in area.x..area.x + area.width {
-        set_cell(buf, x, area.y, " ", bg_s);
+        set_cell(buf, x, sep_y, "\u{2500}", dim_s); // ─
     }
-    let pause_str = if state.paused { " [PAUSED]" } else { "" };
+
+    // Status info (row h-1)
+    let info_y = sep_y + 1;
+    for x in area.x..area.x + area.width {
+        set_cell(buf, x, info_y, " ", bar_s);
+    }
+    let running_str = if state.paused { "paused" } else { "running" };
     let status = format!(
-        " {} -- {}s -- #{}{} -- theme: {}",
-        active.label(),
-        state.interval,
-        state.iteration,
-        pause_str,
+        " procs:{} \u{2502} files:{} \u{2502} theme:{} \u{2502} {}s \u{2502} {} \u{2502} #{}",
+        total_procs,
+        total_files,
         state.theme.name.display_name(),
+        state.interval,
+        running_str,
+        state.iteration,
     );
-    set_str(buf, area.x, area.y, &status, bg_s, area.width);
+    set_str(buf, area.x, info_y, &status, bar_s, area.width);
+
+    // Right-aligned elapsed time
+    if !elapsed.is_empty() {
+        let e = format!(" {} ", elapsed);
+        let ex = area.x + area.width.saturating_sub(e.len() as u16);
+        set_str(buf, ex, info_y, &e, bar_s, e.len() as u16);
+    }
 }
 
 // ── Simple tab renderers ──────────────────────────────────────────────────────
@@ -974,6 +1031,106 @@ fn render_pipes(buf: &mut Buffer, area: Rect, theme: &LsofTheme, rows: &[PipeRow
     }
 }
 
+// ── Theme chooser modal ──────────────────────────────────────────────────────
+
+/// Draw theme chooser as a centered modal overlay. Returns the rect used for hit-testing.
+fn draw_theme_chooser(
+    buf: &mut Buffer,
+    area: Rect,
+    theme: &LsofTheme,
+    chooser_idx: usize,
+    current_theme_idx: usize,
+) -> (u16, u16, u16, u16) {
+    let theme_count = ThemeName::ALL.len();
+    let bw = 50u16.min(area.width.saturating_sub(4));
+    let bh = ((theme_count + 4) as u16).min(area.height.saturating_sub(2));
+    let bg = theme.help_bg;
+    let bs = Style::default().fg(theme.help_border);
+
+    let (x0, y0) = draw_box(buf, area, bw, bh, bg, bs);
+    let inner_w = bw.saturating_sub(4);
+    let cx = x0 + 2;
+
+    // Title centered in top border
+    let title = " THEME CHOOSER ";
+    let title_x = x0 + (bw.saturating_sub(title.len() as u16)) / 2;
+    let title_s = Style::default()
+        .fg(theme.help_title)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD);
+    set_str(buf, title_x, y0, title, title_s, title.len() as u16);
+
+    // Footer
+    let footer = "j/k navigate  Enter apply  Esc close";
+    let footer_x = x0 + (bw.saturating_sub(footer.len() as u16)) / 2;
+    let footer_s = Style::default().fg(theme.dim_fg).bg(bg);
+    set_str(
+        buf,
+        footer_x,
+        y0 + bh - 1,
+        footer,
+        footer_s,
+        footer.len() as u16,
+    );
+
+    // Theme rows
+    let row_start = y0 + 2;
+    let max_rows = (bh.saturating_sub(4)) as usize;
+    // Scroll so the selected item is visible
+    let scroll = if chooser_idx >= max_rows {
+        chooser_idx - max_rows + 1
+    } else {
+        0
+    };
+
+    for i in 0..max_rows {
+        let ti = scroll + i;
+        if ti >= theme_count {
+            break;
+        }
+        let row_y = row_start + i as u16;
+        if row_y >= y0 + bh - 1 {
+            break;
+        }
+
+        let name = ThemeName::ALL[ti];
+        let swatch = name.swatch_colors();
+        let is_selected = ti == chooser_idx;
+        let is_active = ti == current_theme_idx;
+
+        let row_bg = if is_selected { theme.select_bg } else { bg };
+        let text_s = Style::default().fg(Color::Indexed(252)).bg(row_bg);
+
+        // Fill row background
+        for x in cx..cx + inner_w {
+            set_cell(buf, x, row_y, " ", Style::default().bg(row_bg));
+        }
+
+        // Active marker
+        let marker = if is_active { "\u{25b8}" } else { " " }; // ▸
+        set_str(buf, cx, row_y, marker, text_s, 2);
+
+        // Swatch blocks (6 colored blocks)
+        for (si, &color_idx) in swatch.iter().enumerate() {
+            let swatch_s = Style::default().fg(Color::Indexed(color_idx)).bg(row_bg);
+            set_str(buf, cx + 2 + si as u16, row_y, "\u{2588}", swatch_s, 1); // █
+        }
+
+        // Theme name
+        let display = name.display_name();
+        set_str(
+            buf,
+            cx + 9,
+            row_y,
+            display,
+            text_s,
+            inner_w.saturating_sub(10),
+        );
+    }
+
+    (x0, y0 + 2, bw, max_rows as u16)
+}
+
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
@@ -982,14 +1139,23 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         return;
     }
 
-    let _ = execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide);
+    let mut stdout = io::stdout();
+    let _ = execute!(
+        stdout,
+        terminal::EnterAlternateScreen,
+        cursor::Hide,
+        EnableMouseCapture
+    );
     let _ = terminal::enable_raw_mode();
 
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = TuiState::new_pub(interval, theme.clone());
-    let mut tui = TabbedTui::new();
+    let mut tui = TabbedTui::new(state.theme_idx);
     let mut running = true;
+    let start_time = Instant::now();
+    // Track the theme chooser scroll region for mouse hit-testing
+    let mut chooser_rect: (u16, u16, u16, u16) = (0, 0, 0, 0);
 
     while running {
         if !state.paused {
@@ -997,11 +1163,27 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
             tui.update_all(filter);
         }
 
+        let elapsed_secs = start_time.elapsed().as_secs();
+        let elapsed_str = if elapsed_secs >= 3600 {
+            format!(
+                "{}h{:02}m{:02}s",
+                elapsed_secs / 3600,
+                (elapsed_secs % 3600) / 60,
+                elapsed_secs % 60
+            )
+        } else if elapsed_secs >= 60 {
+            format!("{}m{:02}s", elapsed_secs / 60, elapsed_secs % 60)
+        } else {
+            format!("{}s", elapsed_secs)
+        };
+
         let _ = terminal.draw(|frame| {
             let size = frame.area();
             if size.width < 10 || size.height < 5 {
                 return;
             }
+
+            let h = size.height;
 
             // Row 0: tab bar
             draw_tab_bar(
@@ -1016,28 +1198,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 &state.theme,
             );
 
-            // Row 1: status bar
-            if size.height > 1 {
-                draw_status_bar(
-                    frame.buffer_mut(),
-                    Rect {
-                        x: 0,
-                        y: 1,
-                        width: size.width,
-                        height: 1,
-                    },
-                    &state,
-                    tui.active,
-                );
-            }
-
-            // Row 2+: content
-            if size.height > 2 {
+            // Row 1..(h-2): content
+            if h > 4 {
                 let content_area = Rect {
                     x: 0,
-                    y: 2,
+                    y: 1,
                     width: size.width,
-                    height: size.height.saturating_sub(2),
+                    height: h.saturating_sub(3),
                 };
                 match tui.active {
                     Tab::Top => {
@@ -1083,88 +1250,195 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                 }
             }
 
+            // Bottom 2 rows: separator + status
+            if h > 3 {
+                draw_bottom_bar(
+                    frame.buffer_mut(),
+                    Rect {
+                        x: 0,
+                        y: h - 2,
+                        width: size.width,
+                        height: 2,
+                    },
+                    &state,
+                    tui.total_procs,
+                    tui.total_files,
+                    &elapsed_str,
+                );
+            }
+
             // Help overlay
             if state.show_help {
                 draw_help(frame.buffer_mut(), size, &state.theme, tui.help_keys());
             }
+
+            // Theme chooser overlay (on top of everything)
+            if tui.show_theme_chooser {
+                chooser_rect = draw_theme_chooser(
+                    frame.buffer_mut(),
+                    size,
+                    &state.theme,
+                    tui.theme_chooser_idx,
+                    state.theme_idx,
+                );
+            }
         });
 
-        // Poll keys
+        // Poll events
         let deadline = Instant::now() + Duration::from_secs(state.interval);
         while Instant::now() < deadline {
             if !event::poll(Duration::from_millis(100)).unwrap_or(false) {
                 continue;
             }
-            let Ok(Event::Key(key)) = event::read() else {
+            let Ok(ev) = event::read() else {
                 continue;
             };
 
-            // Tab navigation first
-            match key.code {
-                KeyCode::Tab | KeyCode::Right => {
-                    let idx = (tui.active.index() + 1) % Tab::ALL.len();
-                    tui.active = Tab::ALL[idx];
-                    break;
-                }
-                KeyCode::BackTab | KeyCode::Left => {
-                    let idx = (tui.active.index() + Tab::ALL.len() - 1) % Tab::ALL.len();
-                    tui.active = Tab::ALL[idx];
-                    break;
-                }
-                _ => {}
-            }
-
-            // Number keys 1-7 for tab jump (only when not consumed by interval)
-            // Check for active tab mode-specific keys
-            let consumed = match tui.active {
-                Tab::Top => tui.top_mode.handle_key(key, &mut state),
-                Tab::Summary => tui.summary_mode.handle_key(key, &mut state),
-                _ => false,
-            };
-            if consumed {
-                break;
-            }
-
-            // Common keybindings
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => {
-                    running = false;
-                    break;
-                }
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    running = false;
-                    break;
-                }
-                KeyCode::Char('p') => {
-                    state.paused = !state.paused;
-                    break;
-                }
-                KeyCode::Char('?') | KeyCode::Char('h') => {
-                    state.show_help = !state.show_help;
-                    break;
-                }
-                KeyCode::Char('c') => {
-                    state.cycle_theme();
-                    break;
-                }
-                KeyCode::Char(d @ '1'..='7') => {
-                    let idx = (d as usize) - ('1' as usize);
-                    if idx < Tab::ALL.len() {
-                        tui.active = Tab::ALL[idx];
+            match ev {
+                Event::Key(key) => {
+                    // Theme chooser intercepts keys when open
+                    if tui.show_theme_chooser {
+                        match key.code {
+                            KeyCode::Esc => {
+                                tui.show_theme_chooser = false;
+                            }
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                if tui.theme_chooser_idx + 1 < ThemeName::ALL.len() {
+                                    tui.theme_chooser_idx += 1;
+                                }
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                tui.theme_chooser_idx = tui.theme_chooser_idx.saturating_sub(1);
+                            }
+                            KeyCode::Enter => {
+                                state.theme_idx = tui.theme_chooser_idx;
+                                state.theme = LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                tui.show_theme_chooser = false;
+                                // Persist theme preference
+                                let mut prefs = config::load();
+                                prefs.theme = Some(state.theme.name.display_name().to_string());
+                                config::save(&prefs);
+                            }
+                            KeyCode::Char('q') => {
+                                tui.show_theme_chooser = false;
+                            }
+                            _ => {}
+                        }
+                        break;
                     }
-                    break;
+
+                    // Tab navigation
+                    match key.code {
+                        KeyCode::Tab | KeyCode::Right => {
+                            let idx = (tui.active.index() + 1) % Tab::ALL.len();
+                            tui.active = Tab::ALL[idx];
+                            break;
+                        }
+                        KeyCode::BackTab | KeyCode::Left => {
+                            let idx = (tui.active.index() + Tab::ALL.len() - 1) % Tab::ALL.len();
+                            tui.active = Tab::ALL[idx];
+                            break;
+                        }
+                        _ => {}
+                    }
+
+                    // Mode-specific keys
+                    let consumed = match tui.active {
+                        Tab::Top => tui.top_mode.handle_key(key, &mut state),
+                        Tab::Summary => tui.summary_mode.handle_key(key, &mut state),
+                        _ => false,
+                    };
+                    if consumed {
+                        break;
+                    }
+
+                    // Common keybindings
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => {
+                            running = false;
+                            break;
+                        }
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            running = false;
+                            break;
+                        }
+                        KeyCode::Char('p') => {
+                            state.paused = !state.paused;
+                            break;
+                        }
+                        KeyCode::Char('?') | KeyCode::Char('h') => {
+                            state.show_help = !state.show_help;
+                            break;
+                        }
+                        KeyCode::Char('c') => {
+                            tui.show_theme_chooser = !tui.show_theme_chooser;
+                            tui.theme_chooser_idx = state.theme_idx;
+                            break;
+                        }
+                        KeyCode::Char(d @ '1'..='7') => {
+                            let idx = (d as usize) - ('1' as usize);
+                            if idx < Tab::ALL.len() {
+                                tui.active = Tab::ALL[idx];
+                            }
+                            break;
+                        }
+                        KeyCode::Char(d @ '8'..='9') => {
+                            state.interval = (d as u64) - b'0' as u64;
+                            break;
+                        }
+                        KeyCode::Char('<') | KeyCode::Char('[') => {
+                            state.interval = state.interval.saturating_sub(1).max(1);
+                            break;
+                        }
+                        KeyCode::Char('>') | KeyCode::Char(']') => {
+                            state.interval = (state.interval + 1).min(60);
+                            break;
+                        }
+                        _ => {}
+                    }
                 }
-                KeyCode::Char(d @ '8'..='9') => {
-                    state.interval = (d as u64) - b'0' as u64;
-                    break;
-                }
-                KeyCode::Char('<') | KeyCode::Char('[') => {
-                    state.interval = state.interval.saturating_sub(1).max(1);
-                    break;
-                }
-                KeyCode::Char('>') | KeyCode::Char(']') => {
-                    state.interval = (state.interval + 1).min(60);
-                    break;
+                Event::Mouse(mouse) => {
+                    if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                        let x = mouse.column;
+                        let y = mouse.row;
+
+                        // Theme chooser click handling (takes priority when open)
+                        if tui.show_theme_chooser {
+                            let (cx0, cy0, cw, ch) = chooser_rect;
+                            if x >= cx0 && x < cx0 + cw && y >= cy0 && y < cy0 + ch {
+                                // Calculate scroll offset (same logic as draw)
+                                let max_rows = ch as usize;
+                                let scroll = if tui.theme_chooser_idx >= max_rows {
+                                    tui.theme_chooser_idx - max_rows + 1
+                                } else {
+                                    0
+                                };
+                                let clicked_idx = scroll + (y - cy0) as usize;
+                                if clicked_idx < ThemeName::ALL.len() {
+                                    tui.theme_chooser_idx = clicked_idx;
+                                    state.theme_idx = clicked_idx;
+                                    state.theme =
+                                        LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                    tui.show_theme_chooser = false;
+                                    let mut prefs = config::load();
+                                    prefs.theme = Some(state.theme.name.display_name().to_string());
+                                    config::save(&prefs);
+                                }
+                            } else {
+                                // Click outside chooser dismisses it
+                                tui.show_theme_chooser = false;
+                            }
+                            break;
+                        }
+
+                        // Tab bar click (row 0)
+                        if y == 0 {
+                            if let Some(tab) = tab_at_x(x) {
+                                tui.active = tab;
+                            }
+                            break;
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -1172,7 +1446,12 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     }
 
     let _ = terminal::disable_raw_mode();
-    let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+    let _ = execute!(
+        io::stdout(),
+        cursor::Show,
+        DisableMouseCapture,
+        terminal::LeaveAlternateScreen
+    );
 }
 
 #[cfg(test)]
@@ -1199,10 +1478,14 @@ mod tests {
 
     #[test]
     fn tabbed_tui_new() {
-        let tui = TabbedTui::new();
+        let tui = TabbedTui::new(0);
         assert_eq!(tui.active, Tab::Top);
         assert!(tui.port_rows.is_empty());
         assert!(tui.stale_rows.is_empty());
+        assert!(!tui.show_theme_chooser);
+        assert_eq!(tui.theme_chooser_idx, 0);
+        assert_eq!(tui.total_procs, 0);
+        assert_eq!(tui.total_files, 0);
     }
 
     #[test]
@@ -1293,7 +1576,7 @@ mod tests {
 
     #[test]
     fn help_keys_includes_tab_nav() {
-        let tui = TabbedTui::new();
+        let tui = TabbedTui::new(0);
         let keys = tui.help_keys();
         assert!(keys.iter().any(|(k, _)| *k == "Tab / Right"));
         assert!(keys.iter().any(|(k, _)| *k == "1-7"));
@@ -1301,7 +1584,7 @@ mod tests {
 
     #[test]
     fn help_keys_top_includes_sort() {
-        let mut tui = TabbedTui::new();
+        let mut tui = TabbedTui::new(0);
         tui.active = Tab::Top;
         let keys = tui.help_keys();
         assert!(keys.iter().any(|(k, _)| *k == "s"));
@@ -1373,5 +1656,53 @@ mod tests {
             },
         ];
         render_tree(&mut buf, area, &theme, &rows);
+    }
+
+    #[test]
+    fn tab_at_x_first_tab() {
+        // First tab " TOP " starts at x=1, len=5
+        assert_eq!(tab_at_x(1), Some(Tab::Top));
+        assert_eq!(tab_at_x(5), Some(Tab::Top));
+    }
+
+    #[test]
+    fn tab_at_x_second_tab() {
+        // " TOP " = 5 chars at pos 1, then " | " = 3, so " SUMMARY " at pos 9
+        assert_eq!(tab_at_x(9), Some(Tab::Summary));
+    }
+
+    #[test]
+    fn tab_at_x_out_of_range() {
+        assert_eq!(tab_at_x(200), None);
+    }
+
+    #[test]
+    fn tab_at_x_zero() {
+        assert_eq!(tab_at_x(0), None);
+    }
+
+    #[test]
+    fn draw_theme_chooser_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        draw_theme_chooser(&mut buf, area, &theme, 0, 0);
+    }
+
+    #[test]
+    fn draw_theme_chooser_selected_middle() {
+        let theme = LsofTheme::from_name(ThemeName::Classic);
+        let area = Rect::new(0, 0, 80, 40);
+        let mut buf = Buffer::empty(area);
+        draw_theme_chooser(&mut buf, area, &theme, 15, 5);
+    }
+
+    #[test]
+    fn draw_bottom_bar_no_panic() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let state = TuiState::new_pub(2, theme);
+        let area = Rect::new(0, 0, 80, 2);
+        let mut buf = Buffer::empty(area);
+        draw_bottom_bar(&mut buf, area, &state, 42, 1337, "5s");
     }
 }

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod cli;
+mod config;
 mod csv_out;
 #[cfg(target_os = "macos")]
 mod darwin;
@@ -49,9 +50,22 @@ fn main() {
 
     let is_tty = io::stdout().is_terminal();
     let theme = Theme::new(is_tty);
-    let tui_theme = LsofTheme::from_name(ThemeName::from_str_loose(&args.theme_name));
+
+    // Load saved preferences; CLI flags override saved values
+    let prefs = config::load();
+    let theme_name = if args.theme_name != "neon-sprawl" {
+        // User explicitly passed --theme on CLI
+        args.theme_name.clone()
+    } else if let Some(ref saved) = prefs.theme {
+        saved.clone()
+    } else {
+        args.theme_name.clone()
+    };
+    let tui_theme = LsofTheme::from_name(ThemeName::from_str_loose(&theme_name));
     let filter = Filter::from_args(&args);
-    let interval = args.repeat.unwrap_or(1);
+    let interval = args
+        .repeat
+        .unwrap_or_else(|| prefs.refresh_rate.unwrap_or(1));
 
     // Unified TUI mode
     if args.tui {
