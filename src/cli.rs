@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsofrs",
-    version = "2.2.0",
+    version = "3.0.0",
     about = "List System Open Files — modern Rust implementation",
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
@@ -128,6 +128,18 @@ pub struct Args {
     #[arg(long = "ports")]
     pub ports: bool,
 
+    /// Trace pipe/socket pairs between processes
+    #[arg(long = "pipe-chain")]
+    pub pipe_chain: bool,
+
+    /// CSV output format
+    #[arg(long = "csv")]
+    pub csv_output: bool,
+
+    /// Network connection map grouped by remote host
+    #[arg(long = "net-map")]
+    pub net_map: bool,
+
     /// Use NUL field terminator instead of NL
     #[arg(short = '0')]
     pub nul_terminator: bool,
@@ -160,7 +172,7 @@ impl Args {
 {dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
 {dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
-{cyan}  >> FILE DESCRIPTOR SCANNER v2.2 << {reset}
+{cyan}  >> FILE DESCRIPTOR SCANNER v3.0 << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}
 
 {yellow}  USAGE:{reset} lsofrs [OPTION]... [FILE]...
@@ -206,6 +218,9 @@ impl Args {
 {green}   --watch FILE      {reset}watch who opens/closes a file over time
 {green}   --stale            {reset}find FDs pointing to deleted files
 {green}   --ports            {reset}show listening ports summary {magenta}(like ss -tlnp){reset}
+{green}   --pipe-chain       {reset}trace pipe/socket IPC between processes
+{green}   --csv              {reset}CSV output format {magenta}(for spreadsheets/pipelines){reset}
+{green}   --net-map          {reset}network connections grouped by remote host
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
@@ -217,7 +232,7 @@ impl Args {
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 
 {cyan}  ── INFO ──────────────────────────────────────────{reset}
-{magenta}  v2.2.0 {reset}// {yellow}(c) lsof contributors{reset}
+{magenta}  v3.0.0 {reset}// {yellow}(c) lsof contributors{reset}
 Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );
@@ -483,6 +498,9 @@ mod tests {
         assert!(!args.nul_terminator);
         assert!(!args.stale);
         assert!(!args.ports);
+        assert!(!args.pipe_chain);
+        assert!(!args.csv_output);
+        assert!(!args.net_map);
         assert!(args.pid.is_none());
         assert!(args.user.is_none());
         assert!(args.pgid.is_none());
@@ -542,5 +560,37 @@ mod tests {
         let (interval, threshold) = args.leak_detect_params().unwrap();
         assert_eq!(interval, 5); // fallback
         assert_eq!(threshold, 3); // fallback
+    }
+
+    #[test]
+    fn parse_pipe_chain() {
+        let args = Args::parse_from(["lsofrs", "--pipe-chain"]);
+        assert!(args.pipe_chain);
+    }
+
+    #[test]
+    fn parse_csv_output() {
+        let args = Args::parse_from(["lsofrs", "--csv"]);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_net_map() {
+        let args = Args::parse_from(["lsofrs", "--net-map"]);
+        assert!(args.net_map);
+    }
+
+    #[test]
+    fn parse_pipe_chain_with_json() {
+        let args = Args::parse_from(["lsofrs", "--pipe-chain", "--json"]);
+        assert!(args.pipe_chain);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_net_map_with_json() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "--json"]);
+        assert!(args.net_map);
+        assert!(args.json);
     }
 }

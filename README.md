@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v2.2.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v3.0.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
@@ -162,6 +162,36 @@ lsofrs --ports --json            # JSON output
 lsofrs --ports -u root           # ports opened by root only
 ```
 
+### Pipe Chain (`--pipe-chain`)
+
+Trace pipe and unix socket pairs between processes — visualize the IPC topology.
+
+```bash
+lsofrs --pipe-chain              # show all inter-process pipe/socket connections
+lsofrs --pipe-chain --json       # JSON output
+lsofrs --pipe-chain -c Chrome    # pipes within Chrome process tree
+```
+
+### Network Map (`--net-map`)
+
+Group network connections by remote host — see which servers your system talks to and how many connections each has.
+
+```bash
+lsofrs --net-map                 # connections grouped by remote host
+lsofrs --net-map --json          # JSON output
+lsofrs --net-map -u wizard       # only wizard's connections
+```
+
+### CSV Export (`--csv`)
+
+Pure CSV output for pipelines, spreadsheets, and data analysis. RFC 4180-compliant quoting.
+
+```bash
+lsofrs --csv                     # full CSV dump
+lsofrs --csv -i TCP              # CSV of TCP connections only
+lsofrs --csv -p 1234 > out.csv   # export PID 1234 to file
+```
+
 ### Process Tree (`--tree`)
 
 Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
@@ -267,7 +297,10 @@ src/
 ├── top.rs       # Live top-N FD dashboard with delta tracking
 ├── watch.rs     # File watch — monitor opens/closes over time
 ├── stale.rs     # Stale FD finder — deleted files still held open
-└── ports.rs     # Listening ports summary (like ss -tlnp)
+├── ports.rs     # Listening ports summary (like ss -tlnp)
+├── pipe_chain.rs # Pipe/socket IPC topology between processes
+├── csv_out.rs   # CSV export (RFC 4180)
+└── net_map.rs   # Network connections grouped by remote host
 completions/
 └── _lsofrs      # Zsh completion function
 ```

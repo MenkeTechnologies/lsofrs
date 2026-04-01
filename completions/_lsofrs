@@ -34,6 +34,9 @@ _arguments -C -s -S \
   '--watch[watch who opens/closes a file over time]:file:_files' \
   '--stale[find FDs pointing to deleted files]' \
   '--ports[show listening ports summary]' \
+  '--pipe-chain[trace pipe/socket IPC between processes]' \
+  '--csv[CSV output format]' \
+  '--net-map[network connections grouped by remote host]' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 

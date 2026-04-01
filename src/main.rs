@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 mod cli;
+mod csv_out;
 #[cfg(target_os = "macos")]
 mod darwin;
 mod delta;
@@ -11,7 +12,9 @@ mod leak;
 #[cfg(target_os = "linux")]
 mod linux;
 mod monitor;
+mod net_map;
 mod output;
+mod pipe_chain;
 mod ports;
 mod stale;
 mod summary;
@@ -89,6 +92,18 @@ fn main() {
     }
     if args.ports {
         ports::print_ports(&procs, &theme, args.json);
+        return;
+    }
+    if args.pipe_chain {
+        pipe_chain::print_pipe_chain(&procs, &theme, args.json);
+        return;
+    }
+    if args.csv_output {
+        csv_out::print_csv(&procs);
+        return;
+    }
+    if args.net_map {
+        net_map::print_net_map(&procs, &theme, args.json);
         return;
     }
 
