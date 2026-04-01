@@ -959,6 +959,17 @@ impl TabbedTui {
                 ("  Tabs".into(), "7 (Tab/click to switch)".into()),
                 ("  Keys".into(), "h for help, c for themes".into()),
             ],
+            "theme" => vec![
+                (
+                    "\u{25b6} Theme".into(),
+                    state.theme.display_name().to_string(),
+                ),
+                ("  Change".into(), "c key or mouse click".to_string()),
+            ],
+            "help" => vec![
+                ("\u{25b6} Help".into(), "press h for full help".to_string()),
+                ("  Keys".into(), "h = help overlay".to_string()),
+            ],
             _ => self.build_bottom_tooltip(state, ""),
         }
     }
@@ -1668,7 +1679,6 @@ fn draw_bottom_bar(
     let t = &state.theme;
     let dim_s = Style::default().fg(t.dim_fg);
     let bar_s = Style::default().fg(t.dim_fg).bg(t.row_alt_bg);
-    let sep_char = "\u{2502}";
 
     // Separator line (row h-2)
     let sep_y = area.y;
@@ -1676,106 +1686,151 @@ fn draw_bottom_bar(
         set_cell(buf, x, sep_y, "\u{2500}", dim_s); // ─
     }
 
-    // Status info (row h-1)
+    // Build ONE string with ` │ ` separators (iftoprs style)
+    let s = " \u{2502} ";
+    let paused_str = if state.paused { "yes" } else { "no" };
+    let mut title = format!(
+        " \u{25b6}\u{25b6}\u{25b6} LSOFRS \u{25c0}\u{25c0}\u{25c0}{s}procs:{total_procs}{s}files:{total_files}{s}tcp:{total_tcp} udp:{total_udp} unix:{total_unix} pipe:{total_pipes}{s}rate:{}s{s}theme:{}{s}paused:{paused_str}",
+        state.interval,
+        state.theme.display_name(),
+    );
+    if let Some(f) = screen_filter {
+        title.push_str(&format!("{s}filter:{f}"));
+    }
+    if sort_frozen {
+        title.push_str(&format!("{s}frozen"));
+    }
+    if compact_view {
+        title.push_str(&format!("{s}compact"));
+    }
+    if pin_count > 0 {
+        title.push_str(&format!("{s}\u{2605}{pin_count}"));
+    }
+
+    // Right-align ` │ h=help │ HH:MM:SS `
+    let now = chrono::Local::now();
+    let right = format!("{s}h=help{s}{} ", now.format("%H:%M:%S"));
+    let right_cw = right.chars().count();
+    let avail = area.width as usize;
+    let title_cw = title.chars().count();
+    if title_cw + right_cw < avail {
+        let pad = avail - title_cw - right_cw;
+        title.push_str(&" ".repeat(pad));
+        title.push_str(&right);
+    }
+
+    // Render full string with bar_s style
     let info_y = sep_y + 1;
     for x in area.x..area.x + area.width {
         set_cell(buf, x, info_y, " ", bar_s);
     }
+    let display: String = title.chars().take(avail).collect();
+    set_str(buf, area.x, info_y, &display, bar_s, area.width);
 
-    let mut segments: Vec<(u16, u16, String)> = Vec::new();
-    let mut cx = area.x + 1; // start after leading space
-
-    // Helper: write a segment text, record range, advance cursor
-    macro_rules! seg {
-        ($name:expr, $text:expr) => {{
-            let text: &str = &$text;
-            let start = cx;
-            set_str(
-                buf,
-                cx,
-                info_y,
-                text,
-                bar_s,
-                area.width.saturating_sub(cx - area.x),
-            );
-            cx += text.len() as u16;
-            segments.push((start, cx, $name.to_string()));
-        }};
-    }
-    macro_rules! sep {
-        () => {{
-            set_str(
-                buf,
-                cx,
-                info_y,
-                sep_char,
-                bar_s,
-                area.width.saturating_sub(cx - area.x),
-            );
-            cx += sep_char.len() as u16;
-        }};
+    // Overlay "LSOFRS" in accent color
+    let accent_s = Style::default()
+        .fg(t.pid_fg)
+        .bg(t.row_alt_bg)
+        .add_modifier(Modifier::BOLD);
+    if let Some(idx) = display.find("LSOFRS") {
+        let char_offset = display[..idx].chars().count() as u16;
+        set_str(buf, area.x + char_offset, info_y, "LSOFRS", accent_s, 6);
     }
 
-    // App name with triangles (iftoprs style), highlighted in accent color
-    {
-        let app_text = "▶▶▶ LSOFRS ◀◀◀";
-        let app_start = cx;
-        let accent_s = Style::default()
-            .fg(state.theme.pid_fg)
-            .bg(t.row_alt_bg)
-            .add_modifier(Modifier::BOLD);
-        set_str(
-            buf,
-            cx,
-            info_y,
-            app_text,
-            accent_s,
-            area.width.saturating_sub(cx - area.x),
-        );
-        cx += app_text.chars().count() as u16;
-        segments.push((app_start, cx, "lsofrs".to_string()));
-    }
-    sep!();
-    seg!("procs", format!("procs:{}", total_procs));
-    sep!();
-    seg!("files", format!("files:{}", total_files));
-    sep!();
-    seg!(
-        "net",
-        format!(
-            "tcp:{} udp:{} unix:{} pipe:{}",
-            total_tcp, total_udp, total_unix, total_pipes
-        )
-    );
-    sep!();
-    seg!("interval", format!("{}s", state.interval));
-    sep!();
-    let running_str = if state.paused { "paused" } else { "running" };
-    seg!("status", running_str);
-
-    if let Some(f) = screen_filter {
-        sep!();
-        seg!("filter", format!("filter:{}", f));
+    // Build segment x-ranges by finding │ positions in the displayed string.
+    // The string is: seg0 │ seg1 │ seg2 │ ... │ segN [padding] │ help │ time
+    // Named left-aligned segments, then optionally right-aligned help+time.
+    let mut all_names: Vec<&str> = vec![
+        "lsofrs", "procs", "files", "net", "interval", "theme", "status",
+    ];
+    if screen_filter.is_some() {
+        all_names.push("filter");
     }
     if sort_frozen {
-        sep!();
-        seg!("frozen", "frozen");
+        all_names.push("frozen");
     }
     if compact_view {
-        sep!();
-        seg!("compact", "compact");
+        all_names.push("compact");
     }
     if pin_count > 0 {
-        sep!();
-        seg!("pinned", format!("\u{2605}{}", pin_count));
+        all_names.push("pinned");
     }
 
-    // Right-aligned date/time
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    let ts = format!(" {now} ");
-    let tx = area.x + area.width.saturating_sub(ts.len() as u16);
-    set_str(buf, tx, info_y, &ts, bar_s, ts.len() as u16);
-    segments.push((tx, tx + ts.len() as u16, "time".to_string()));
+    let chars: Vec<char> = display.chars().collect();
+    let mut pipe_positions: Vec<usize> = Vec::new();
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '\u{2502}' {
+            pipe_positions.push(i);
+        }
+    }
+
+    // Between N named segments there are N-1 pipes.
+    // Extra pipes (if any) belong to right-aligned help + time.
+    let named_pipe_count = all_names.len().saturating_sub(1);
+    let has_right = pipe_positions.len() > named_pipe_count;
+
+    // Split pipe list into named-region pipes and right-region pipes.
+    let (named_pipes, right_pipes) = if has_right {
+        (
+            &pipe_positions[..named_pipe_count],
+            &pipe_positions[named_pipe_count..],
+        )
+    } else {
+        (pipe_positions.as_slice(), [].as_slice())
+    };
+
+    let mut segments: Vec<(u16, u16, String)> = Vec::new();
+
+    // Boundaries between named segments: [0, pipe0, pipe1, ..., pipeN-1, tail_end]
+    // where tail_end is either the first right-pipe or end-of-string.
+    let tail_end = if !right_pipes.is_empty() {
+        right_pipes[0]
+    } else {
+        chars.len()
+    };
+    let mut boundaries: Vec<usize> = Vec::with_capacity(named_pipes.len() + 2);
+    boundaries.push(0);
+    for &p in named_pipes {
+        boundaries.push(p);
+    }
+    boundaries.push(tail_end);
+
+    // Each named segment spans from (boundaries[i] content-start) to (boundaries[i+1] content-end).
+    // For i==0: content starts at 0, ends at boundaries[1] (the first pipe, exclusive of trailing space).
+    // For i>0: content starts at pipe+2 (skip "│ "), ends at boundaries[i+1].
+    for (i, name) in all_names.iter().enumerate() {
+        if i + 1 >= boundaries.len() {
+            break;
+        }
+        let start = if i == 0 {
+            0usize
+        } else {
+            boundaries[i] + 2 // skip "│ "
+        };
+        let end = boundaries[i + 1];
+        if start >= chars.len() {
+            break;
+        }
+        segments.push((area.x + start as u16, area.x + end as u16, name.to_string()));
+    }
+
+    // Right-aligned help and time segments (from right_pipes)
+    if right_pipes.len() >= 2 {
+        let help_start = right_pipes[0] + 2;
+        let help_end = right_pipes[1];
+        segments.push((
+            area.x + help_start as u16,
+            area.x + help_end as u16,
+            "help".to_string(),
+        ));
+        let time_start = right_pipes[1] + 2;
+        let time_end = chars.len();
+        segments.push((
+            area.x + time_start as u16,
+            area.x + time_end as u16,
+            "time".to_string(),
+        ));
+    }
 
     segments
 }
@@ -4011,11 +4066,34 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             tui.hover.move_to(mouse.column, mouse.row);
                         }
                         MouseEventKind::ScrollDown => {
-                            tui.select_next();
+                            if tui.show_theme_chooser {
+                                let count = ThemeName::ALL.len() + tui.custom_themes.len();
+                                if tui.theme_chooser_idx + 1 < count {
+                                    tui.theme_chooser_idx += 1;
+                                    // Live preview
+                                    state.theme_idx = tui.theme_chooser_idx;
+                                    if tui.theme_chooser_idx < ThemeName::ALL.len() {
+                                        state.theme =
+                                            LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                    }
+                                }
+                            } else {
+                                tui.select_next();
+                            }
                             break;
                         }
                         MouseEventKind::ScrollUp => {
-                            tui.select_prev();
+                            if tui.show_theme_chooser {
+                                tui.theme_chooser_idx = tui.theme_chooser_idx.saturating_sub(1);
+                                // Live preview
+                                state.theme_idx = tui.theme_chooser_idx;
+                                if tui.theme_chooser_idx < ThemeName::ALL.len() {
+                                    state.theme =
+                                        LsofTheme::from_name(ThemeName::ALL[state.theme_idx]);
+                                }
+                            } else {
+                                tui.select_prev();
+                            }
                             break;
                         }
                         _ => {}
@@ -5069,18 +5147,22 @@ mod tests {
     fn draw_bottom_bar_returns_segments() {
         let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
         let state = TuiState::new_pub(2, theme);
-        let area = Rect::new(0, 0, 120, 2);
+        let area = Rect::new(0, 0, 200, 2);
         let mut buf = Buffer::empty(area);
         let segs = draw_bottom_bar(
             &mut buf, area, &state, 42, 1337, 10, 5, 20, 8, &None, false, false, 0,
         );
         let names: Vec<&str> = segs.iter().map(|(_, _, n)| n.as_str()).collect();
-        assert!(names.contains(&"procs"));
-        assert!(names.contains(&"files"));
-        assert!(names.contains(&"net"));
-        assert!(names.contains(&"interval"));
-        assert!(names.contains(&"status"));
-        assert!(names.contains(&"time"));
+        assert!(names.contains(&"procs"), "missing procs in {:?}", names);
+        assert!(names.contains(&"files"), "missing files in {:?}", names);
+        assert!(names.contains(&"net"), "missing net in {:?}", names);
+        assert!(
+            names.contains(&"interval"),
+            "missing interval in {:?}",
+            names
+        );
+        assert!(names.contains(&"status"), "missing status in {:?}", names);
+        assert!(names.contains(&"time"), "missing time in {:?}", names);
         // Ranges should be non-overlapping and ordered
         for w in segs.windows(2) {
             assert!(
