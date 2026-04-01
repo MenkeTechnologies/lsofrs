@@ -3040,6 +3040,18 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             }
                         }
                     }
+                } else if hover_row >= h.saturating_sub(2 + hover_margin) {
+                    // Hover on bottom bar → verbose system tooltip
+                    let lines = tui.build_bottom_tooltip(&state, "");
+                    if !lines.is_empty() {
+                        let hover_tt = Tooltip {
+                            active: true,
+                            x: hover_col,
+                            y: hover_row,
+                            lines,
+                        };
+                        draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
+                    }
                 }
             }
 
