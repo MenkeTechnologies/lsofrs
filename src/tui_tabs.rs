@@ -2136,6 +2136,15 @@ fn draw_theme_editor(
 }
 
 /// Save current TUI state to config file
+fn save_prefs_with_tab(state: &TuiState, tab: Tab) {
+    let mut prefs = config::load();
+    prefs.theme = Some(state.theme.display_name().to_string());
+    prefs.refresh_rate = Some(state.interval);
+    prefs.show_border = state.show_border;
+    prefs.active_tab = Some(tab.index() as u8);
+    config::save(&prefs);
+}
+
 fn save_prefs(state: &TuiState) {
     let mut prefs = config::load();
     prefs.theme = Some(state.theme.display_name().to_string());
@@ -2167,6 +2176,12 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     let prefs = config::load();
     state.show_border = prefs.show_border;
     let mut tui = TabbedTui::new(state.theme_idx, &prefs);
+    // Restore saved tab
+    if let Some(tab_idx) = prefs.active_tab
+        && (tab_idx as usize) < Tab::ALL.len()
+    {
+        tui.active = Tab::ALL[tab_idx as usize];
+    }
     let mut running = true;
     let start_time = Instant::now();
     // Track modal regions for mouse hit-testing
@@ -2646,11 +2661,13 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         KeyCode::Tab | KeyCode::Right => {
                             let idx = (tui.active.index() + 1) % Tab::ALL.len();
                             tui.active = Tab::ALL[idx];
+                            save_prefs_with_tab(&state, tui.active);
                             break;
                         }
                         KeyCode::BackTab | KeyCode::Left => {
                             let idx = (tui.active.index() + Tab::ALL.len() - 1) % Tab::ALL.len();
                             tui.active = Tab::ALL[idx];
+                            save_prefs_with_tab(&state, tui.active);
                             break;
                         }
                         _ => {}
@@ -2790,6 +2807,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             let idx = (d as usize) - ('1' as usize);
                             if idx < Tab::ALL.len() {
                                 tui.active = Tab::ALL[idx];
+                                save_prefs_with_tab(&state, tui.active);
                             }
                             break;
                         }
@@ -2885,6 +2903,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             if y == margin {
                                 if let Some(tab) = tab_at_x(x) {
                                     tui.active = tab;
+                                    save_prefs_with_tab(&state, tui.active);
                                 }
                                 break;
                             }
