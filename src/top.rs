@@ -1,15 +1,12 @@
 //! Top-N mode — live-sorted processes by FD count, auto-refreshing dashboard
 
-use std::io::{self, Write};
-use std::time::Duration;
+use std::fmt::Write as FmtWrite;
 
-use crossterm::{
-    cursor, execute,
-    terminal::{self, ClearType},
-};
+use crossterm::event::KeyEvent;
 
 use crate::filter::Filter;
 use crate::output::Theme;
+use crate::tui_app::{TuiMode, TuiState};
 use crate::types::*;
 
 const DEFAULT_TOP_N: usize = 20;
@@ -57,17 +54,6 @@ impl SortCol {
     }
 }
 
-struct TopState {
-    sort_col: SortCol,
-    reverse: bool,
-    show_n: usize,
-    interval: u64,
-    paused: bool,
-    show_bar: bool,
-    show_help: bool,
-    show_delta: bool,
-}
-
 struct TopEntry {
     pid: i32,
     ppid: i32,
@@ -97,199 +83,181 @@ impl TopEntry {
     }
 }
 
-pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
-    let mut state = TopState {
-        sort_col: SortCol::Fds,
-        reverse: false,
-        show_n: if top_n == 0 { DEFAULT_TOP_N } else { top_n },
-        interval,
-        paused: false,
-        show_bar: true,
-        show_help: false,
-        show_delta: true,
-    };
-    let mut prev_counts: std::collections::HashMap<i32, usize> = std::collections::HashMap::new();
-    let mut iteration = 0u64;
-    let mut cached_entries: Vec<TopEntry> = Vec::new();
-    let mut cached_total_procs = 0usize;
-    let mut cached_total_fds = 0usize;
+pub struct TopMode {
+    sort_col: SortCol,
+    reverse: bool,
+    show_n: usize,
+    show_bar: bool,
+    show_delta: bool,
+    prev_counts: std::collections::HashMap<i32, usize>,
+    entries: Vec<TopEntry>,
+    total_procs: usize,
+    total_fds: usize,
+}
 
-    let use_alt = theme.is_tty;
-    if use_alt {
-        let _ = execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide);
-        let _ = terminal::enable_raw_mode();
+impl TopMode {
+    pub fn new(top_n: usize) -> Self {
+        Self {
+            sort_col: SortCol::Fds,
+            reverse: false,
+            show_n: if top_n == 0 { DEFAULT_TOP_N } else { top_n },
+            show_bar: true,
+            show_delta: true,
+            prev_counts: std::collections::HashMap::new(),
+            entries: Vec::new(),
+            total_procs: 0,
+            total_fds: 0,
+        }
     }
+}
 
-    let mut running = true;
-
-    while running {
-        if !state.paused {
-            iteration += 1;
-            let mut procs = crate::gather_processes();
-            procs.retain(|p| filter.matches_process(p));
-            for p in &mut procs {
-                p.files.retain(|f| filter.matches_file(f));
-            }
-
-            cached_entries = procs
-                .iter()
-                .map(|p| {
-                    let mut reg = 0;
-                    let mut sock = 0;
-                    let mut pipe = 0;
-                    let mut other = 0;
-                    for f in &p.files {
-                        match f.file_type {
-                            FileType::Reg | FileType::Dir | FileType::Chr => reg += 1,
-                            FileType::IPv4 | FileType::IPv6 | FileType::Unix | FileType::Sock => {
-                                sock += 1
-                            }
-                            FileType::Pipe => pipe += 1,
-                            _ => other += 1,
-                        }
-                    }
-                    TopEntry {
-                        pid: p.pid,
-                        ppid: p.ppid,
-                        pgid: p.pgid,
-                        uid: p.uid,
-                        command: p.command.clone(),
-                        fd_count: p.files.len(),
-                        reg_count: reg,
-                        sock_count: sock,
-                        pipe_count: pipe,
-                        other_count: other,
-                        prev_fd_count: prev_counts.get(&p.pid).copied(),
-                    }
-                })
-                .collect();
-
-            prev_counts.clear();
-            for p in &procs {
-                prev_counts.insert(p.pid, p.files.len());
-            }
-
-            cached_total_procs = procs.len();
-            cached_total_fds = procs.iter().map(|p| p.files.len()).sum();
+impl TuiMode for TopMode {
+    fn update(&mut self, filter: &Filter) {
+        let mut procs = crate::gather_processes();
+        procs.retain(|p| filter.matches_process(p));
+        for p in &mut procs {
+            p.files.retain(|f| filter.matches_file(f));
         }
 
-        // Sort
-        sort_entries(&mut cached_entries, &state);
-        let display: Vec<&TopEntry> = cached_entries.iter().take(state.show_n).collect();
+        self.entries = procs
+            .iter()
+            .map(|p| {
+                let mut reg = 0;
+                let mut sock = 0;
+                let mut pipe = 0;
+                let mut other = 0;
+                for f in &p.files {
+                    match f.file_type {
+                        FileType::Reg | FileType::Dir | FileType::Chr => reg += 1,
+                        FileType::IPv4 | FileType::IPv6 | FileType::Unix | FileType::Sock => {
+                            sock += 1
+                        }
+                        FileType::Pipe => pipe += 1,
+                        _ => other += 1,
+                    }
+                }
+                TopEntry {
+                    pid: p.pid,
+                    ppid: p.ppid,
+                    pgid: p.pgid,
+                    uid: p.uid,
+                    command: p.command.clone(),
+                    fd_count: p.files.len(),
+                    reg_count: reg,
+                    sock_count: sock,
+                    pipe_count: pipe,
+                    other_count: other,
+                    prev_fd_count: self.prev_counts.get(&p.pid).copied(),
+                }
+            })
+            .collect();
+
+        self.prev_counts.clear();
+        for p in &procs {
+            self.prev_counts.insert(p.pid, p.files.len());
+        }
+
+        self.total_procs = procs.len();
+        self.total_fds = procs.iter().map(|p| p.files.len()).sum();
+    }
+
+    fn render_content(&self, theme: &Theme, state: &TuiState) -> String {
+        let mut sorted_entries = self.entries.clone();
+        sort_entries(&mut sorted_entries, self.sort_col, self.reverse);
+        let display: Vec<&TopEntry> = sorted_entries.iter().take(self.show_n).collect();
 
         render(
             theme,
             &display,
-            iteration,
-            &state,
-            cached_total_procs,
-            cached_total_fds,
-        );
+            state.iteration,
+            self.sort_col,
+            self.reverse,
+            self.show_n,
+            state.interval,
+            state.paused,
+            self.show_bar,
+            state.show_help,
+            self.show_delta,
+            self.total_procs,
+            self.total_fds,
+        )
+    }
 
-        // Non-TTY: single-shot
-        if !use_alt {
-            break;
-        }
+    fn handle_key(&mut self, key: KeyEvent, _state: &mut TuiState) -> bool {
+        use crossterm::event::KeyCode;
 
-        // TTY: poll keys during interval
-        let deadline = std::time::Instant::now() + Duration::from_secs(state.interval);
-        while std::time::Instant::now() < deadline {
-            if !crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false) {
-                continue;
+        match key.code {
+            // Sort
+            KeyCode::Char('s') => {
+                self.sort_col = self.sort_col.next();
+                true
             }
-            let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() else {
-                continue;
-            };
-
-            use crossterm::event::KeyCode;
-
-            match key.code {
-                // Quit
-                KeyCode::Char('q') | KeyCode::Esc => {
-                    running = false;
-                    break;
-                }
-                KeyCode::Char('c')
-                    if key
-                        .modifiers
-                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                {
-                    running = false;
-                    break;
-                }
-
-                // Sort
-                KeyCode::Char('s') => {
-                    state.sort_col = state.sort_col.next();
-                    break; // re-render immediately
-                }
-                KeyCode::Char('S') => {
-                    // reverse cycle
-                    state.sort_col = state.sort_col.next();
-                    state.reverse = !state.reverse;
-                    break;
-                }
-                KeyCode::Char('r') => {
-                    state.reverse = !state.reverse;
-                    break;
-                }
-
-                // Adjust count
-                KeyCode::Char('+') | KeyCode::Char('=') => {
-                    state.show_n = (state.show_n + 5).min(200);
-                    break;
-                }
-                KeyCode::Char('-') | KeyCode::Char('_') => {
-                    state.show_n = state.show_n.saturating_sub(5).max(5);
-                    break;
-                }
-
-                // Refresh interval
-                KeyCode::Char('<') | KeyCode::Char('[') => {
-                    state.interval = state.interval.saturating_sub(1).max(1);
-                    break;
-                }
-                KeyCode::Char('>') | KeyCode::Char(']') => {
-                    state.interval = (state.interval + 1).min(60);
-                    break;
-                }
-                KeyCode::Char(d @ '1'..='9') => {
-                    state.interval = (d as u64) - b'0' as u64;
-                    break;
-                }
-
-                // Toggles
-                KeyCode::Char('p') => {
-                    state.paused = !state.paused;
-                    break;
-                }
-                KeyCode::Char('b') => {
-                    state.show_bar = !state.show_bar;
-                    break;
-                }
-                KeyCode::Char('d') => {
-                    state.show_delta = !state.show_delta;
-                    break;
-                }
-                KeyCode::Char('?') | KeyCode::Char('h') => {
-                    state.show_help = !state.show_help;
-                    break;
-                }
-
-                _ => {}
+            KeyCode::Char('S') => {
+                self.sort_col = self.sort_col.next();
+                self.reverse = !self.reverse;
+                true
             }
+            KeyCode::Char('r') => {
+                self.reverse = !self.reverse;
+                true
+            }
+
+            // Adjust count
+            KeyCode::Char('+') | KeyCode::Char('=') => {
+                self.show_n = (self.show_n + 5).min(200);
+                true
+            }
+            KeyCode::Char('-') | KeyCode::Char('_') => {
+                self.show_n = self.show_n.saturating_sub(5).max(5);
+                true
+            }
+
+            // Toggles
+            KeyCode::Char('b') => {
+                self.show_bar = !self.show_bar;
+                true
+            }
+            KeyCode::Char('d') => {
+                self.show_delta = !self.show_delta;
+                true
+            }
+
+            _ => false,
         }
     }
 
-    if use_alt {
-        let _ = terminal::disable_raw_mode();
-        let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+    fn title(&self) -> &str {
+        "top"
     }
 }
 
-fn sort_entries(entries: &mut [TopEntry], state: &TopState) {
+// Allow cloning for sorted display without mutating the original
+impl Clone for TopEntry {
+    fn clone(&self) -> Self {
+        Self {
+            pid: self.pid,
+            ppid: self.ppid,
+            pgid: self.pgid,
+            uid: self.uid,
+            command: self.command.clone(),
+            fd_count: self.fd_count,
+            reg_count: self.reg_count,
+            sock_count: self.sock_count,
+            pipe_count: self.pipe_count,
+            other_count: self.other_count,
+            prev_fd_count: self.prev_fd_count,
+        }
+    }
+}
+
+pub fn run_top(filter: &Filter, interval: u64, theme: &Theme, top_n: usize) {
+    let mut mode = TopMode::new(top_n);
+    crate::tui_app::run_tui(&mut mode, filter, interval, theme);
+}
+
+fn sort_entries(entries: &mut [TopEntry], sort_col: SortCol, reverse: bool) {
     entries.sort_by(|a, b| {
-        let cmp = match state.sort_col {
+        let cmp = match sort_col {
             SortCol::Fds => a.fd_count.cmp(&b.fd_count),
             SortCol::Pid => a.pid.cmp(&b.pid),
             SortCol::User => a.username().cmp(&b.username()),
@@ -300,36 +268,40 @@ fn sort_entries(entries: &mut [TopEntry], state: &TopState) {
             SortCol::Delta => a.delta_val().cmp(&b.delta_val()),
             SortCol::Command => a.command.cmp(&b.command),
         };
-        if state.sort_col == SortCol::Pid
-            || state.sort_col == SortCol::User
-            || state.sort_col == SortCol::Command
-        {
-            if state.reverse { cmp.reverse() } else { cmp }
+        if sort_col == SortCol::Pid || sort_col == SortCol::User || sort_col == SortCol::Command {
+            if reverse { cmp.reverse() } else { cmp }
         } else {
             // Numeric columns default descending
-            if state.reverse { cmp } else { cmp.reverse() }
+            if reverse { cmp } else { cmp.reverse() }
         }
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     theme: &Theme,
     entries: &[&TopEntry],
     iteration: u64,
-    state: &TopState,
+    sort_col: SortCol,
+    reverse: bool,
+    show_n: usize,
+    interval: u64,
+    paused: bool,
+    show_bar: bool,
+    show_help: bool,
+    show_delta: bool,
     total_procs: usize,
     total_fds: usize,
-) {
-    use std::fmt::Write as FmtWrite;
+) -> String {
     let mut buf = String::with_capacity(4096);
     let r = theme.reset();
 
     // Title bar
-    let pause_indicator = if state.paused { " [PAUSED]" } else { "" };
+    let pause_indicator = if paused { " [PAUSED]" } else { "" };
     let sort_indicator = format!(
         "sort:{}{}",
-        state.sort_col.label(),
-        if state.reverse { "↑" } else { "↓" }
+        sort_col.label(),
+        if reverse { "↑" } else { "↓" }
     );
     let _ = writeln!(
         buf,
@@ -338,14 +310,14 @@ fn render(
         hdr = theme.hdr_bg(),
         procs = total_procs,
         fds = total_fds,
-        int = state.interval,
+        int = interval,
         iter = iteration,
         pause = pause_indicator,
         sort = sort_indicator,
     );
 
     // Help or status line
-    if state.show_help {
+    if show_help {
         let _ = writeln!(
             buf,
             "{dim}  ── KEYS ──────────────────────────────────────────{r}",
@@ -386,20 +358,18 @@ fn render(
             buf,
             "{dim}  top {n} — s:sort r:reverse +/-:count 1-9:interval p:pause b:bar d:delta ?:help q:quit{r}",
             dim = theme.dim(),
-            n = state.show_n,
+            n = show_n,
         );
     }
     let _ = writeln!(buf);
 
     // Header — highlight the active sort column
     let hdr = |col: SortCol, label: &str, width: usize, right: bool| -> String {
-        let marker = if state.sort_col == col {
-            if state.sort_col == SortCol::Pid
-                || state.sort_col == SortCol::User
-                || state.sort_col == SortCol::Command
+        let marker = if sort_col == col {
+            if sort_col == SortCol::Pid || sort_col == SortCol::User || sort_col == SortCol::Command
             {
-                if state.reverse { "↓" } else { "↑" }
-            } else if state.reverse {
+                if reverse { "↓" } else { "↑" }
+            } else if reverse {
                 "↑"
             } else {
                 "↓"
@@ -407,7 +377,7 @@ fn render(
         } else {
             ""
         };
-        let active = state.sort_col == col;
+        let active = sort_col == col;
         let text = format!("{label}{marker}");
         if active {
             if right {
@@ -431,7 +401,7 @@ fn render(
         bold = theme.bold(),
         bg = theme.hdr_bg(),
     );
-    if state.show_delta {
+    if show_delta {
         let _ = write!(buf, "{}  ", hdr(SortCol::Delta, "DELTA", 6, true));
     }
     let _ = write!(
@@ -442,7 +412,7 @@ fn render(
         hdr(SortCol::Pipe, "PIPE", 4, true),
         hdr(SortCol::Other, "OTHER", 5, true),
     );
-    if state.show_bar {
+    if show_bar {
         let _ = write!(buf, "{:<20}  ", "DISTRIBUTION");
     }
     let _ = writeln!(buf, "{}{r}", hdr(SortCol::Command, "COMMAND", 7, false));
@@ -470,7 +440,7 @@ fn render(
             e.fd_count,
         );
 
-        if state.show_delta {
+        if show_delta {
             let delta_str = match e.prev_fd_count {
                 Some(prev) if e.fd_count > prev => format!("+{}", e.fd_count - prev),
                 Some(prev) if e.fd_count < prev => format!("-{}", prev - e.fd_count),
@@ -491,7 +461,7 @@ fn render(
             e.reg_count, e.sock_count, e.pipe_count, e.other_count,
         );
 
-        if state.show_bar {
+        if show_bar {
             let bar_width = 20;
             let total = e.fd_count.max(1);
             let reg_w = (e.reg_count * bar_width) / total;
@@ -519,7 +489,7 @@ fn render(
 
     // Legend
     let _ = writeln!(buf);
-    if state.show_bar {
+    if show_bar {
         let _ = writeln!(
             buf,
             "{dim}  {cyan}██{r}{dim} REG/DIR/CHR  {green}██{r}{dim} SOCK/NET  {yellow}██{r}{dim} PIPE  {dim}░░ OTHER{r}",
@@ -530,17 +500,7 @@ fn render(
         );
     }
 
-    // Raw mode: \n → \r\n
-    if theme.is_tty {
-        buf = buf.replace('\n', "\r\n");
-    }
-    let out = io::stdout();
-    let mut out = out.lock();
-    if theme.is_tty {
-        let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
-    }
-    let _ = out.write_all(buf.as_bytes());
-    let _ = out.flush();
+    buf
 }
 
 #[cfg(test)]
@@ -563,23 +523,24 @@ mod tests {
         }
     }
 
-    fn default_state() -> TopState {
-        TopState {
-            sort_col: SortCol::Fds,
-            reverse: false,
-            show_n: 20,
-            interval: 1,
-            paused: false,
-            show_bar: true,
-            show_help: false,
-            show_delta: true,
-        }
-    }
-
     #[test]
     fn render_empty_no_panic() {
         let theme = Theme::new(false);
-        render(&theme, &[], 1, &default_state(), 0, 0);
+        render(
+            &theme,
+            &[],
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            true,
+            false,
+            true,
+            0,
+            0,
+        );
     }
 
     #[test]
@@ -591,23 +552,61 @@ mod tests {
             make_entry(300, "postgres", 20, None),
         ];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(&theme, &refs, 3, &default_state(), 100, 500);
+        render(
+            &theme,
+            &refs,
+            3,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            true,
+            false,
+            true,
+            100,
+            500,
+        );
     }
 
     #[test]
     fn render_paused_indicator() {
         let theme = Theme::new(false);
-        let mut state = default_state();
-        state.paused = true;
-        render(&theme, &[], 1, &state, 0, 0);
+        render(
+            &theme,
+            &[],
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            true,
+            true,
+            false,
+            true,
+            0,
+            0,
+        );
     }
 
     #[test]
     fn render_help_overlay() {
         let theme = Theme::new(false);
-        let mut state = default_state();
-        state.show_help = true;
-        render(&theme, &[], 1, &state, 0, 0);
+        render(
+            &theme,
+            &[],
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            true,
+            true,
+            true,
+            0,
+            0,
+        );
     }
 
     #[test]
@@ -615,9 +614,21 @@ mod tests {
         let theme = Theme::new(false);
         let entries = [make_entry(1, "test", 10, Some(5))];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        let mut state = default_state();
-        state.show_bar = false;
-        render(&theme, &refs, 1, &state, 1, 10);
+        render(
+            &theme,
+            &refs,
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            false,
+            false,
+            true,
+            1,
+            10,
+        );
     }
 
     #[test]
@@ -625,9 +636,21 @@ mod tests {
         let theme = Theme::new(false);
         let entries = [make_entry(1, "test", 10, Some(5))];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        let mut state = default_state();
-        state.show_delta = false;
-        render(&theme, &refs, 1, &state, 1, 10);
+        render(
+            &theme,
+            &refs,
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            true,
+            false,
+            false,
+            1,
+            10,
+        );
     }
 
     #[test]
@@ -647,7 +670,21 @@ mod tests {
             prev_fd_count: Some(0),
         }];
         let refs: Vec<&TopEntry> = entries.iter().collect();
-        render(&theme, &refs, 1, &default_state(), 1, 0);
+        render(
+            &theme,
+            &refs,
+            1,
+            SortCol::Fds,
+            false,
+            20,
+            1,
+            false,
+            true,
+            false,
+            true,
+            1,
+            0,
+        );
     }
 
     // ── Sort tests ──────────────────────────────────────────────────
@@ -659,8 +696,7 @@ mod tests {
             make_entry(2, "b", 50, None),
             make_entry(3, "c", 30, None),
         ];
-        let state = default_state();
-        sort_entries(&mut entries, &state);
+        sort_entries(&mut entries, SortCol::Fds, false);
         assert_eq!(entries[0].pid, 2);
         assert_eq!(entries[1].pid, 3);
         assert_eq!(entries[2].pid, 1);
@@ -669,9 +705,7 @@ mod tests {
     #[test]
     fn sort_by_fds_reversed_ascending() {
         let mut entries = vec![make_entry(1, "a", 10, None), make_entry(2, "b", 50, None)];
-        let mut state = default_state();
-        state.reverse = true;
-        sort_entries(&mut entries, &state);
+        sort_entries(&mut entries, SortCol::Fds, true);
         assert_eq!(entries[0].pid, 1);
         assert_eq!(entries[1].pid, 2);
     }
@@ -683,9 +717,7 @@ mod tests {
             make_entry(100, "a", 10, None),
             make_entry(200, "b", 10, None),
         ];
-        let mut state = default_state();
-        state.sort_col = SortCol::Pid;
-        sort_entries(&mut entries, &state);
+        sort_entries(&mut entries, SortCol::Pid, false);
         assert_eq!(entries[0].pid, 100);
         assert_eq!(entries[2].pid, 300);
     }
@@ -697,9 +729,7 @@ mod tests {
             make_entry(2, "apache", 10, None),
             make_entry(3, "nginx", 10, None),
         ];
-        let mut state = default_state();
-        state.sort_col = SortCol::Command;
-        sort_entries(&mut entries, &state);
+        sort_entries(&mut entries, SortCol::Command, false);
         assert_eq!(entries[0].command, "apache");
         assert_eq!(entries[2].command, "zsh");
     }
@@ -720,9 +750,7 @@ mod tests {
                 ..make_entry(3, "c", 20, None)
             },
         ];
-        let mut state = default_state();
-        state.sort_col = SortCol::Sock;
-        sort_entries(&mut entries, &state);
+        sort_entries(&mut entries, SortCol::Sock, false);
         assert_eq!(entries[0].pid, 2);
         assert_eq!(entries[1].pid, 3);
     }

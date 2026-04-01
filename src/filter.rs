@@ -5,6 +5,7 @@ use regex::Regex;
 use crate::cli::Args;
 use crate::types::*;
 
+#[derive(Default)]
 pub struct Filter {
     pub pids: Vec<i32>,
     pub exclude_pids: Vec<i32>,

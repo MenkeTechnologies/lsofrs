@@ -2,15 +2,12 @@
 
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::time::Duration;
 
-use crossterm::{
-    cursor, execute,
-    terminal::{self, ClearType},
-};
+use crossterm::event::KeyEvent;
 
 use crate::filter::Filter;
 use crate::output::Theme;
+use crate::tui_app::{TuiMode, TuiState};
 use crate::types::*;
 
 const TOP_N: usize = 10;
@@ -36,59 +33,7 @@ struct UserStats {
 }
 
 pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
-    let mut type_map: HashMap<String, usize> = HashMap::new();
-    let mut user_map: HashMap<u32, (String, usize, usize)> = HashMap::new();
-    let mut proc_stats: Vec<ProcStats> = Vec::new();
-    let mut total_files = 0usize;
-
-    for p in procs {
-        let fd_count = p.files.len();
-        total_files += fd_count;
-
-        // Type breakdown
-        for f in &p.files {
-            *type_map
-                .entry(f.file_type.as_str().to_string())
-                .or_insert(0) += 1;
-        }
-
-        // Per-user stats
-        let entry = user_map
-            .entry(p.uid)
-            .or_insert_with(|| (p.username(), 0, 0));
-        entry.1 += 1; // proc_count
-        entry.2 += fd_count; // file_count
-
-        // Proc stats
-        proc_stats.push(ProcStats {
-            pid: p.pid,
-            command: p.command.clone(),
-            uid: p.uid,
-            fd_count,
-        });
-    }
-
-    // Sort procs by fd_count descending
-    proc_stats.sort_by(|a, b| b.fd_count.cmp(&a.fd_count).then(a.pid.cmp(&b.pid)));
-
-    // Sort types by count descending
-    let mut type_stats: Vec<TypeStats> = type_map
-        .into_iter()
-        .map(|(type_name, count)| TypeStats { type_name, count })
-        .collect();
-    type_stats.sort_by(|a, b| b.count.cmp(&a.count).then(a.type_name.cmp(&b.type_name)));
-
-    // Sort users by file_count descending
-    let mut user_stats: Vec<UserStats> = user_map
-        .into_iter()
-        .map(|(uid, (username, proc_count, file_count))| UserStats {
-            uid,
-            username,
-            proc_count,
-            file_count,
-        })
-        .collect();
-    user_stats.sort_by(|a, b| b.file_count.cmp(&a.file_count).then(a.uid.cmp(&b.uid)));
+    let (type_stats, proc_stats, user_stats, total_files) = compute_stats(procs);
 
     if json_output {
         print_summary_json(
@@ -108,6 +53,58 @@ pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
             theme,
         );
     }
+}
+
+fn compute_stats(procs: &[Process]) -> (Vec<TypeStats>, Vec<ProcStats>, Vec<UserStats>, usize) {
+    let mut type_map: HashMap<String, usize> = HashMap::new();
+    let mut user_map: HashMap<u32, (String, usize, usize)> = HashMap::new();
+    let mut proc_stats: Vec<ProcStats> = Vec::new();
+    let mut total_files = 0usize;
+
+    for p in procs {
+        let fd_count = p.files.len();
+        total_files += fd_count;
+
+        for f in &p.files {
+            *type_map
+                .entry(f.file_type.as_str().to_string())
+                .or_insert(0) += 1;
+        }
+
+        let entry = user_map
+            .entry(p.uid)
+            .or_insert_with(|| (p.username(), 0, 0));
+        entry.1 += 1;
+        entry.2 += fd_count;
+
+        proc_stats.push(ProcStats {
+            pid: p.pid,
+            command: p.command.clone(),
+            uid: p.uid,
+            fd_count,
+        });
+    }
+
+    proc_stats.sort_by(|a, b| b.fd_count.cmp(&a.fd_count).then(a.pid.cmp(&b.pid)));
+
+    let mut type_stats: Vec<TypeStats> = type_map
+        .into_iter()
+        .map(|(type_name, count)| TypeStats { type_name, count })
+        .collect();
+    type_stats.sort_by(|a, b| b.count.cmp(&a.count).then(a.type_name.cmp(&b.type_name)));
+
+    let mut user_stats: Vec<UserStats> = user_map
+        .into_iter()
+        .map(|(uid, (username, proc_count, file_count))| UserStats {
+            uid,
+            username,
+            proc_count,
+            file_count,
+        })
+        .collect();
+    user_stats.sort_by(|a, b| b.file_count.cmp(&a.file_count).then(a.uid.cmp(&b.uid)));
+
+    (type_stats, proc_stats, user_stats, total_files)
 }
 
 /// Render summary text into a String buffer (for both single-shot and live mode)
@@ -295,127 +292,69 @@ fn print_summary_text(
     let _ = out.flush();
 }
 
-/// Live summary mode — auto-refresh in alternate screen with key handling
-pub fn run_summary_live(filter: &Filter, interval: u64, theme: &Theme) {
-    let use_alt = theme.is_tty;
-    if use_alt {
-        let _ = execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide);
-        let _ = terminal::enable_raw_mode();
+/// Live summary mode struct implementing TuiMode
+pub struct SummaryLiveMode {
+    type_stats: Vec<TypeStats>,
+    proc_stats: Vec<ProcStats>,
+    user_stats: Vec<UserStats>,
+    total_procs: usize,
+    total_files: usize,
+}
+
+impl SummaryLiveMode {
+    pub fn new() -> Self {
+        Self {
+            type_stats: Vec::new(),
+            proc_stats: Vec::new(),
+            user_stats: Vec::new(),
+            total_procs: 0,
+            total_files: 0,
+        }
     }
+}
 
-    let mut iteration = 0u64;
-    let mut running = true;
-
-    while running {
-        iteration += 1;
-
+impl TuiMode for SummaryLiveMode {
+    fn update(&mut self, filter: &Filter) {
         let mut procs = crate::gather_processes();
         procs.retain(|p| filter.matches_process(p));
         for p in &mut procs {
             p.files.retain(|f| filter.matches_file(f));
         }
 
-        // Compute stats (same as print_summary)
-        let mut type_map: HashMap<String, usize> = HashMap::new();
-        let mut user_map: HashMap<u32, (String, usize, usize)> = HashMap::new();
-        let mut proc_stats: Vec<ProcStats> = Vec::new();
-        let mut total_files = 0usize;
+        let (type_stats, proc_stats, user_stats, total_files) = compute_stats(&procs);
+        self.type_stats = type_stats;
+        self.proc_stats = proc_stats;
+        self.user_stats = user_stats;
+        self.total_procs = procs.len();
+        self.total_files = total_files;
+    }
 
-        for p in &procs {
-            let fd_count = p.files.len();
-            total_files += fd_count;
-            for f in &p.files {
-                *type_map
-                    .entry(f.file_type.as_str().to_string())
-                    .or_insert(0) += 1;
-            }
-            let entry = user_map
-                .entry(p.uid)
-                .or_insert_with(|| (p.username(), 0, 0));
-            entry.1 += 1;
-            entry.2 += fd_count;
-            proc_stats.push(ProcStats {
-                pid: p.pid,
-                command: p.command.clone(),
-                uid: p.uid,
-                fd_count,
-            });
-        }
-
-        proc_stats.sort_by(|a, b| b.fd_count.cmp(&a.fd_count).then(a.pid.cmp(&b.pid)));
-        let mut type_stats: Vec<TypeStats> = type_map
-            .into_iter()
-            .map(|(type_name, count)| TypeStats { type_name, count })
-            .collect();
-        type_stats.sort_by(|a, b| b.count.cmp(&a.count).then(a.type_name.cmp(&b.type_name)));
-        let mut user_stats: Vec<UserStats> = user_map
-            .into_iter()
-            .map(|(uid, (username, proc_count, file_count))| UserStats {
-                uid,
-                username,
-                proc_count,
-                file_count,
-            })
-            .collect();
-        user_stats.sort_by(|a, b| b.file_count.cmp(&a.file_count).then(a.uid.cmp(&b.uid)));
-
-        let mut buf = render_summary_text(
-            procs.len(),
-            total_files,
-            &type_stats,
-            &proc_stats,
-            &user_stats,
+    fn render_content(&self, theme: &Theme, state: &TuiState) -> String {
+        render_summary_text(
+            self.total_procs,
+            self.total_files,
+            &self.type_stats,
+            &self.proc_stats,
+            &self.user_stats,
             theme,
-            Some(iteration),
-            Some(interval),
-        );
-
-        if use_alt {
-            buf = buf.replace('\n', "\r\n");
-        }
-
-        let out = io::stdout();
-        let mut out = out.lock();
-        if use_alt {
-            let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
-        }
-        let _ = out.write_all(buf.as_bytes());
-        let _ = out.flush();
-        drop(out);
-
-        if !use_alt {
-            break;
-        }
-
-        // Poll keys during interval
-        let deadline = std::time::Instant::now() + Duration::from_secs(interval);
-        while std::time::Instant::now() < deadline {
-            if crossterm::event::poll(Duration::from_millis(100)).unwrap_or(false)
-                && let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read()
-            {
-                let quit = match key.code {
-                    crossterm::event::KeyCode::Char('q') | crossterm::event::KeyCode::Esc => true,
-                    crossterm::event::KeyCode::Char('c')
-                        if key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                    {
-                        true
-                    }
-                    _ => false,
-                };
-                if quit {
-                    running = false;
-                    break;
-                }
-            }
-        }
+            Some(state.iteration),
+            Some(state.interval),
+        )
     }
 
-    if use_alt {
-        let _ = terminal::disable_raw_mode();
-        let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+    fn handle_key(&mut self, _key: KeyEvent, _state: &mut TuiState) -> bool {
+        false
     }
+
+    fn title(&self) -> &str {
+        "summary"
+    }
+}
+
+/// Live summary mode — auto-refresh via TUI framework
+pub fn run_summary_live(filter: &Filter, interval: u64, theme: &Theme) {
+    let mut mode = SummaryLiveMode::new();
+    crate::tui_app::run_tui(&mut mode, filter, interval, theme);
 }
 
 fn print_summary_json(

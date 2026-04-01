@@ -22,6 +22,7 @@ mod stale;
 mod summary;
 mod top;
 mod tree;
+mod tui_app;
 mod types;
 mod watch;
 
