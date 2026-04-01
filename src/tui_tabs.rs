@@ -148,13 +148,11 @@ struct HoverState {
 }
 
 impl HoverState {
-    /// Returns true when hover has been on the same row for >= 1s and < 4s.
+    /// Returns true when hover has been on the same row for >= 500ms.
+    /// No auto-hide — tooltip stays as long as mouse is on the same row.
     fn ready(&self) -> bool {
         self.since
-            .map(|t| {
-                let ms = t.elapsed().as_millis();
-                (1000..4000).contains(&ms)
-            })
+            .map(|t| t.elapsed().as_millis() >= 500)
             .unwrap_or(false)
     }
 
