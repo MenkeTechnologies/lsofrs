@@ -14,6 +14,13 @@ pub enum ThemeName {
     SolarFlare,
     IceBreaker,
     Matrix,
+    BladeRunner,
+    Synthwave,
+    AcidRain,
+    GhostWire,
+    RedSector,
+    DeepNet,
+    Overlock,
 }
 
 impl ThemeName {
@@ -23,6 +30,13 @@ impl ThemeName {
         ThemeName::SolarFlare,
         ThemeName::IceBreaker,
         ThemeName::Matrix,
+        ThemeName::BladeRunner,
+        ThemeName::Synthwave,
+        ThemeName::AcidRain,
+        ThemeName::GhostWire,
+        ThemeName::RedSector,
+        ThemeName::DeepNet,
+        ThemeName::Overlock,
     ];
 
     pub fn display_name(self) -> &'static str {
@@ -32,7 +46,31 @@ impl ThemeName {
             Self::SolarFlare => "Solar Flare",
             Self::IceBreaker => "Ice Breaker",
             Self::Matrix => "Matrix",
+            Self::BladeRunner => "Blade Runner",
+            Self::Synthwave => "Synthwave",
+            Self::AcidRain => "Acid Rain",
+            Self::GhostWire => "Ghost Wire",
+            Self::RedSector => "Red Sector",
+            Self::DeepNet => "Deep Net",
+            Self::Overlock => "Overlock",
         }
+    }
+
+    /// 6-color swatch palette for theme chooser display
+    pub fn swatch_colors(self) -> [u8; 6] {
+        let t = LsofTheme::from_name(self);
+        let idx = |c: Color| match c {
+            Color::Indexed(i) => i,
+            _ => 255,
+        };
+        [
+            idx(t.pid_fg),
+            idx(t.user_fg),
+            idx(t.cmd_fg),
+            idx(t.bar_reg),
+            idx(t.bar_sock),
+            idx(t.help_key),
+        ]
     }
 
     /// Parse from CLI string (case-insensitive, dashes optional).
@@ -43,6 +81,13 @@ impl ThemeName {
             "solarflare" | "solar" => Self::SolarFlare,
             "icebreaker" | "ice" => Self::IceBreaker,
             "matrix" | "green" => Self::Matrix,
+            "bladerunner" | "blade" => Self::BladeRunner,
+            "synthwave" | "synth" => Self::Synthwave,
+            "acidrain" | "acid" => Self::AcidRain,
+            "ghostwire" | "ghost" => Self::GhostWire,
+            "redsector" | "red" => Self::RedSector,
+            "deepnet" | "deep" => Self::DeepNet,
+            "overlock" | "over" => Self::Overlock,
             _ => Self::NeonSprawl,
         }
     }
@@ -98,6 +143,13 @@ impl LsofTheme {
             ThemeName::SolarFlare => Self::solar_flare(),
             ThemeName::IceBreaker => Self::ice_breaker(),
             ThemeName::Matrix => Self::matrix(),
+            ThemeName::BladeRunner => Self::blade_runner(),
+            ThemeName::Synthwave => Self::synthwave(),
+            ThemeName::AcidRain => Self::acid_rain(),
+            ThemeName::GhostWire => Self::ghost_wire(),
+            ThemeName::RedSector => Self::red_sector(),
+            ThemeName::DeepNet => Self::deep_net(),
+            ThemeName::Overlock => Self::overlock(),
         }
     }
 
@@ -229,6 +281,230 @@ impl LsofTheme {
         }
     }
 
+    /// Amber/orange noir
+    fn blade_runner() -> Self {
+        Self {
+            name: ThemeName::BladeRunner,
+            header_bg: Color::Indexed(52),
+            header_fg: Color::Indexed(208),
+            pid_fg: Color::Indexed(208),
+            user_fg: Color::Indexed(172),
+            cmd_fg: Color::Indexed(215),
+            fd_fg: Color::Indexed(180),
+            type_fg: Color::Indexed(130),
+            bar_reg: Color::Indexed(208),
+            bar_sock: Color::Indexed(172),
+            bar_pipe: Color::Indexed(130),
+            bar_other: Color::Indexed(58),
+            help_bg: Color::Indexed(52),
+            help_border: Color::Indexed(208),
+            help_title: Color::Indexed(215),
+            help_key: Color::Indexed(208),
+            help_val: Color::Indexed(180),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(172),
+            delta_stable: Color::Indexed(58),
+            select_bg: Color::Indexed(58),
+            dim_fg: Color::Indexed(95),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(215),
+            section_fg: Color::Indexed(208),
+            legend_fg: Color::Indexed(95),
+        }
+    }
+
+    /// Purple/pink retrowave
+    fn synthwave() -> Self {
+        Self {
+            name: ThemeName::Synthwave,
+            header_bg: Color::Indexed(53),
+            header_fg: Color::Indexed(213),
+            pid_fg: Color::Indexed(213),
+            user_fg: Color::Indexed(177),
+            cmd_fg: Color::Indexed(219),
+            fd_fg: Color::Indexed(183),
+            type_fg: Color::Indexed(141),
+            bar_reg: Color::Indexed(213),
+            bar_sock: Color::Indexed(177),
+            bar_pipe: Color::Indexed(141),
+            bar_other: Color::Indexed(96),
+            help_bg: Color::Indexed(53),
+            help_border: Color::Indexed(213),
+            help_title: Color::Indexed(219),
+            help_key: Color::Indexed(213),
+            help_val: Color::Indexed(183),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(177),
+            delta_stable: Color::Indexed(96),
+            select_bg: Color::Indexed(53),
+            dim_fg: Color::Indexed(96),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(219),
+            section_fg: Color::Indexed(213),
+            legend_fg: Color::Indexed(96),
+        }
+    }
+
+    /// Toxic green/yellow
+    fn acid_rain() -> Self {
+        Self {
+            name: ThemeName::AcidRain,
+            header_bg: Color::Indexed(22),
+            header_fg: Color::Indexed(154),
+            pid_fg: Color::Indexed(154),
+            user_fg: Color::Indexed(190),
+            cmd_fg: Color::Indexed(118),
+            fd_fg: Color::Indexed(148),
+            type_fg: Color::Indexed(106),
+            bar_reg: Color::Indexed(154),
+            bar_sock: Color::Indexed(118),
+            bar_pipe: Color::Indexed(190),
+            bar_other: Color::Indexed(58),
+            help_bg: Color::Indexed(22),
+            help_border: Color::Indexed(154),
+            help_title: Color::Indexed(190),
+            help_key: Color::Indexed(118),
+            help_val: Color::Indexed(148),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(118),
+            delta_stable: Color::Indexed(58),
+            select_bg: Color::Indexed(22),
+            dim_fg: Color::Indexed(58),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(190),
+            section_fg: Color::Indexed(154),
+            legend_fg: Color::Indexed(58),
+        }
+    }
+
+    /// Pale gray/silver stealth
+    fn ghost_wire() -> Self {
+        Self {
+            name: ThemeName::GhostWire,
+            header_bg: Color::Indexed(235),
+            header_fg: Color::Indexed(253),
+            pid_fg: Color::Indexed(146),
+            user_fg: Color::Indexed(188),
+            cmd_fg: Color::Indexed(253),
+            fd_fg: Color::Indexed(146),
+            type_fg: Color::Indexed(103),
+            bar_reg: Color::Indexed(146),
+            bar_sock: Color::Indexed(103),
+            bar_pipe: Color::Indexed(188),
+            bar_other: Color::Indexed(239),
+            help_bg: Color::Indexed(235),
+            help_border: Color::Indexed(146),
+            help_title: Color::Indexed(253),
+            help_key: Color::Indexed(146),
+            help_val: Color::Indexed(250),
+            delta_plus: Color::Indexed(210),
+            delta_minus: Color::Indexed(146),
+            delta_stable: Color::Indexed(239),
+            select_bg: Color::Indexed(237),
+            dim_fg: Color::Indexed(241),
+            row_alt_bg: Color::Indexed(234),
+            bold_fg: Color::Indexed(253),
+            section_fg: Color::Indexed(253),
+            legend_fg: Color::Indexed(241),
+        }
+    }
+
+    /// Red/crimson danger
+    fn red_sector() -> Self {
+        Self {
+            name: ThemeName::RedSector,
+            header_bg: Color::Indexed(52),
+            header_fg: Color::Indexed(196),
+            pid_fg: Color::Indexed(196),
+            user_fg: Color::Indexed(167),
+            cmd_fg: Color::Indexed(210),
+            fd_fg: Color::Indexed(174),
+            type_fg: Color::Indexed(124),
+            bar_reg: Color::Indexed(196),
+            bar_sock: Color::Indexed(167),
+            bar_pipe: Color::Indexed(210),
+            bar_other: Color::Indexed(88),
+            help_bg: Color::Indexed(52),
+            help_border: Color::Indexed(196),
+            help_title: Color::Indexed(210),
+            help_key: Color::Indexed(196),
+            help_val: Color::Indexed(174),
+            delta_plus: Color::Indexed(226),
+            delta_minus: Color::Indexed(167),
+            delta_stable: Color::Indexed(88),
+            select_bg: Color::Indexed(52),
+            dim_fg: Color::Indexed(88),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(210),
+            section_fg: Color::Indexed(196),
+            legend_fg: Color::Indexed(88),
+        }
+    }
+
+    /// Dark blue deep ocean
+    fn deep_net() -> Self {
+        Self {
+            name: ThemeName::DeepNet,
+            header_bg: Color::Indexed(17),
+            header_fg: Color::Indexed(69),
+            pid_fg: Color::Indexed(69),
+            user_fg: Color::Indexed(33),
+            cmd_fg: Color::Indexed(111),
+            fd_fg: Color::Indexed(75),
+            type_fg: Color::Indexed(27),
+            bar_reg: Color::Indexed(69),
+            bar_sock: Color::Indexed(33),
+            bar_pipe: Color::Indexed(111),
+            bar_other: Color::Indexed(18),
+            help_bg: Color::Indexed(17),
+            help_border: Color::Indexed(69),
+            help_title: Color::Indexed(111),
+            help_key: Color::Indexed(69),
+            help_val: Color::Indexed(75),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(33),
+            delta_stable: Color::Indexed(18),
+            select_bg: Color::Indexed(18),
+            dim_fg: Color::Indexed(24),
+            row_alt_bg: Color::Indexed(233),
+            bold_fg: Color::Indexed(111),
+            section_fg: Color::Indexed(69),
+            legend_fg: Color::Indexed(24),
+        }
+    }
+
+    /// Industrial gray/teal
+    fn overlock() -> Self {
+        Self {
+            name: ThemeName::Overlock,
+            header_bg: Color::Indexed(236),
+            header_fg: Color::Indexed(37),
+            pid_fg: Color::Indexed(37),
+            user_fg: Color::Indexed(73),
+            cmd_fg: Color::Indexed(116),
+            fd_fg: Color::Indexed(109),
+            type_fg: Color::Indexed(30),
+            bar_reg: Color::Indexed(37),
+            bar_sock: Color::Indexed(73),
+            bar_pipe: Color::Indexed(116),
+            bar_other: Color::Indexed(239),
+            help_bg: Color::Indexed(236),
+            help_border: Color::Indexed(37),
+            help_title: Color::Indexed(116),
+            help_key: Color::Indexed(37),
+            help_val: Color::Indexed(109),
+            delta_plus: Color::Indexed(196),
+            delta_minus: Color::Indexed(73),
+            delta_stable: Color::Indexed(239),
+            select_bg: Color::Indexed(237),
+            dim_fg: Color::Indexed(241),
+            row_alt_bg: Color::Indexed(234),
+            bold_fg: Color::Indexed(116),
+            section_fg: Color::Indexed(37),
+            legend_fg: Color::Indexed(241),
+        }
+    }
+
     /// Green on black
     fn matrix() -> Self {
         Self {
@@ -268,7 +544,7 @@ mod tests {
 
     #[test]
     fn all_themes_count() {
-        assert_eq!(ThemeName::ALL.len(), 5);
+        assert_eq!(ThemeName::ALL.len(), 12);
     }
 
     #[test]
