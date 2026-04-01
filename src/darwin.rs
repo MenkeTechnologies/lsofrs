@@ -4,6 +4,7 @@ use std::mem;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use libc::{self, c_int, c_void, pid_t};
+use rayon::prelude::*;
 
 use crate::types::*;
 
@@ -890,93 +891,93 @@ fn is_any_addr(addr: &IpAddr) -> bool {
     }
 }
 
+/// Process a single PID into a Process struct (used by parallel gather)
+fn process_pid(pid: pid_t) -> Option<Process> {
+    let tai = get_task_info(pid)?;
+
+    let cmd = {
+        let name = cstr_from_bytes(&tai.pbsd.pbi_name);
+        if name.is_empty() {
+            cstr_from_bytes(&tai.pbsd.pbi_comm)
+        } else {
+            name
+        }
+    };
+
+    let mut files = Vec::new();
+
+    // Get cwd and root dir
+    if let Some(vpi) = get_vnode_path_info(pid) {
+        if vpi.pvi_cdir.vip_path[0] != 0 {
+            let mut cwd_file = process_vnode_info(&vpi.pvi_cdir, None);
+            cwd_file.fd = FdName::Cwd;
+            files.push(cwd_file);
+        }
+        if vpi.pvi_rdir.vip_path[0] != 0 {
+            let mut rtd_file = process_vnode_info(&vpi.pvi_rdir, None);
+            rtd_file.fd = FdName::Rtd;
+            files.push(rtd_file);
+        }
+    }
+
+    // Get open FDs
+    let fds = list_fds(pid);
+    for fdi in &fds {
+        let of = match fdi.proc_fdtype {
+            PROX_FDTYPE_VNODE => process_vnode_fd(pid, fdi.proc_fd),
+            PROX_FDTYPE_SOCKET => process_socket_fd(pid, fdi.proc_fd),
+            PROX_FDTYPE_PIPE => process_pipe_fd(pid, fdi.proc_fd),
+            PROX_FDTYPE_KQUEUE => process_kqueue_fd(pid, fdi.proc_fd),
+            PROX_FDTYPE_PSEM => Some(OpenFile {
+                fd: FdName::Number(fdi.proc_fd),
+                file_type: FileType::Psem,
+                name: String::new(),
+                ..Default::default()
+            }),
+            PROX_FDTYPE_PSHM => Some(OpenFile {
+                fd: FdName::Number(fdi.proc_fd),
+                file_type: FileType::Pshm,
+                name: String::new(),
+                ..Default::default()
+            }),
+            PROX_FDTYPE_FSEVENTS => Some(OpenFile {
+                fd: FdName::Number(fdi.proc_fd),
+                file_type: FileType::Fsevents,
+                name: String::new(),
+                ..Default::default()
+            }),
+            PROX_FDTYPE_ATALK => Some(OpenFile {
+                fd: FdName::Number(fdi.proc_fd),
+                file_type: FileType::Atalk,
+                name: String::new(),
+                ..Default::default()
+            }),
+            _ => None,
+        };
+        if let Some(f) = of {
+            files.push(f);
+        }
+    }
+
+    Some(Process {
+        pid,
+        ppid: tai.pbsd.pbi_ppid as i32,
+        pgid: tai.pbsd.pbi_pgid as i32,
+        uid: tai.pbsd.pbi_uid,
+        command: cmd,
+        files,
+        sel_flags: 0,
+        sel_state: 0,
+    })
+}
+
 /// Gather all process information from the system
 pub fn gather_processes() -> Vec<Process> {
     let pids = list_pids();
-    let mut processes = Vec::with_capacity(pids.len());
 
-    for pid in pids {
-        let tai = match get_task_info(pid) {
-            Some(t) => t,
-            None => continue,
-        };
+    let mut processes: Vec<Process> = pids.into_par_iter().filter_map(process_pid).collect();
 
-        let cmd = {
-            let name = cstr_from_bytes(&tai.pbsd.pbi_name);
-            if name.is_empty() {
-                cstr_from_bytes(&tai.pbsd.pbi_comm)
-            } else {
-                name
-            }
-        };
-
-        let mut files = Vec::new();
-
-        // Get cwd and root dir
-        if let Some(vpi) = get_vnode_path_info(pid) {
-            if vpi.pvi_cdir.vip_path[0] != 0 {
-                let mut cwd_file = process_vnode_info(&vpi.pvi_cdir, None);
-                cwd_file.fd = FdName::Cwd;
-                files.push(cwd_file);
-            }
-            if vpi.pvi_rdir.vip_path[0] != 0 {
-                let mut rtd_file = process_vnode_info(&vpi.pvi_rdir, None);
-                rtd_file.fd = FdName::Rtd;
-                files.push(rtd_file);
-            }
-        }
-
-        // Get open FDs
-        let fds = list_fds(pid);
-        for fdi in &fds {
-            let of = match fdi.proc_fdtype {
-                PROX_FDTYPE_VNODE => process_vnode_fd(pid, fdi.proc_fd),
-                PROX_FDTYPE_SOCKET => process_socket_fd(pid, fdi.proc_fd),
-                PROX_FDTYPE_PIPE => process_pipe_fd(pid, fdi.proc_fd),
-                PROX_FDTYPE_KQUEUE => process_kqueue_fd(pid, fdi.proc_fd),
-                PROX_FDTYPE_PSEM => Some(OpenFile {
-                    fd: FdName::Number(fdi.proc_fd),
-                    file_type: FileType::Psem,
-                    name: String::new(),
-                    ..Default::default()
-                }),
-                PROX_FDTYPE_PSHM => Some(OpenFile {
-                    fd: FdName::Number(fdi.proc_fd),
-                    file_type: FileType::Pshm,
-                    name: String::new(),
-                    ..Default::default()
-                }),
-                PROX_FDTYPE_FSEVENTS => Some(OpenFile {
-                    fd: FdName::Number(fdi.proc_fd),
-                    file_type: FileType::Fsevents,
-                    name: String::new(),
-                    ..Default::default()
-                }),
-                PROX_FDTYPE_ATALK => Some(OpenFile {
-                    fd: FdName::Number(fdi.proc_fd),
-                    file_type: FileType::Atalk,
-                    name: String::new(),
-                    ..Default::default()
-                }),
-                _ => None,
-            };
-            if let Some(f) = of {
-                files.push(f);
-            }
-        }
-
-        processes.push(Process {
-            pid,
-            ppid: tai.pbsd.pbi_ppid as i32,
-            pgid: tai.pbsd.pbi_pgid as i32,
-            uid: tai.pbsd.pbi_uid,
-            command: cmd,
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        });
-    }
-
+    processes.sort_by_key(|p| p.pid);
     processes
 }
 

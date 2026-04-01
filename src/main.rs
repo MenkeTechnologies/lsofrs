@@ -7,6 +7,8 @@ mod darwin;
 mod delta;
 mod filter;
 mod follow;
+#[cfg(target_os = "freebsd")]
+mod freebsd;
 mod json;
 mod leak;
 #[cfg(target_os = "linux")]
@@ -145,9 +147,13 @@ pub fn gather_processes() -> Vec<types::Process> {
     {
         linux::gather_processes()
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "freebsd")]
     {
-        eprintln!("lsofrs: unsupported platform (macOS and Linux are supported)");
+        freebsd::gather_processes()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "freebsd")))]
+    {
+        eprintln!("lsofrs: unsupported platform (macOS, Linux, and FreeBSD are supported)");
         Vec::new()
     }
 }

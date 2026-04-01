@@ -1,0 +1,310 @@
+.TH LSOFRS 1 "2026-03-31" "lsofrs 3.0.0" "User Commands"
+.SH NAME
+lsofrs \- list open files (modern Rust implementation)
+.SH SYNOPSIS
+.B lsofrs
+.RI [ OPTION ]...\&
+.RI [ FILE ]...\&
+.SH DESCRIPTION
+.B lsofrs
+maps the relationship between processes and the files they hold open.
+It supports regular files, directories, sockets, pipes, devices, and streams
+on macOS, Linux, and FreeBSD.
+.PP
+When invoked without arguments, it lists all open files for all processes
+visible to the current user.
+When one or more
+.I FILE
+arguments are given, only processes using those files are shown.
+.SH OPTIONS
+.SS Selection
+.TP
+.BR \-h ", " \-\-help
+Display help and exit.
+.TP
+.B \-a
+AND selection mode.
+All specified filters must match a process for it to appear.
+The default is OR mode.
+.TP
+.BI \-c " COMMAND"
+Select processes whose command name matches
+.IR COMMAND .
+Supports prefix matching, exclusion with
+.BR ^ ,
+and regular expressions enclosed in
+.BR / .
+Comma-separated for multiple values.
+.TP
+.BI \-d " FD"
+Select by file descriptor.
+Accepts comma-separated values, ranges
+.RI ( N \- M ),
+and exclusions with
+.BR ^ .
+.TP
+.BI \-g " PGID"
+Select by process group ID.
+Comma-separated;
+.B ^
+to exclude.
+.TP
+.BI \-p " PID"
+Select by process ID.
+Comma-separated;
+.B ^
+to exclude.
+.TP
+.BI \-u " USER"
+Select by login name or UID.
+Comma-separated;
+.B ^
+to exclude.
+.SS Network
+.TP
+.BI \-i " [ADDR]"
+Select internet connections.
+Optional address specification:
+.BR [4|6][proto][@host|addr][:svc|port] .
+Without an argument, selects all internet files.
+.TP
+.B \-n
+Inhibit conversion of host numbers to host names.
+.TP
+.B \-N
+Select NFS files.
+.TP
+.B \-P
+Inhibit conversion of port numbers to port names.
+.TP
+.B \-U
+Select UNIX domain socket files.
+.SS Display
+.TP
+.BI \-F " [FIELDS]"
+Produce output suitable for processing by another program.
+Field characters:
+.BR p =PID,
+.BR c =command,
+.BR f =FD,
+.BR n =name,
+.BR t =type,
+etc.
+.TP
+.BR \-J ", " \-\-json
+Output in JSON format.
+.TP
+.B \-R
+Show parent PID column.
+.TP
+.B \-\-pgid\-show
+Show process group ID column.
+.TP
+.B \-t
+Terse output: print PIDs only, one per line.
+.TP
+.B \-0
+Use NUL as the field terminator instead of newline in
+.B \-F
+output.
+.TP
+.B \-w
+Suppress warning messages.
+.TP
+.B \-V ", " \-\-version
+Display version information and exit.
+.SS System / Live Modes
+.TP
+.BI \-r " [SECONDS]"
+Repeat mode: re-scan every
+.I SECONDS
+(default: 1).
+.TP
+.B \-\-delta
+Highlight new and gone file descriptors in repeat mode.
+.TP
+.BI \-\-leak\-detect "[=INTERVAL[,THRESHOLD]]"
+Detect file descriptor leaks by polling every
+.I INTERVAL
+seconds (default: 5).
+Report when a process's FD count has grown in at least
+.I THRESHOLD
+consecutive iterations (default: 3, minimum: 2).
+.TP
+.BR \-W ", " \-\-monitor
+Live full-screen refresh mode, similar to
+.BR top (1).
+.TP
+.BR \-\-summary ", " \-\-stats
+Display an aggregate FD summary: type breakdown, top processes by FD count,
+and per-user statistics.
+.TP
+.BI \-\-follow " PID"
+Watch a single process's file descriptors in real-time,
+highlighting opens and closes.
+.TP
+.BI \-\-watch " FILE"
+Watch who opens and closes a specific file over time.
+.TP
+.B \-\-tree
+Process tree view with FD counts, similar to
+.BR pstree (1)
+combined with
+.BR lsof (8).
+.TP
+.BI \-\-top " [N]"
+Live top-N processes by file descriptor count (default: 20).
+.TP
+.B \-\-stale
+Find file descriptors pointing to deleted files.
+.TP
+.B \-\-ports
+Show listening ports summary, similar to
+.BR "ss \-tlnp" .
+.TP
+.B \-\-pipe\-chain
+Trace pipe and socket IPC pairs between processes.
+.TP
+.B \-\-csv
+Output in CSV format for spreadsheets and pipelines.
+.TP
+.B \-\-net\-map
+Display network connections grouped by remote host.
+.SH EXAMPLES
+List files using port 8080:
+.PP
+.RS
+.nf
+lsofrs \-i :8080
+.fi
+.RE
+.PP
+List files opened by PID 1234:
+.PP
+.RS
+.nf
+lsofrs \-p 1234
+.fi
+.RE
+.PP
+List files opened by root:
+.PP
+.RS
+.nf
+lsofrs \-u root
+.fi
+.RE
+.PP
+Process tree for root's processes:
+.PP
+.RS
+.nf
+lsofrs \-\-tree \-u root
+.fi
+.RE
+.PP
+List processes using a specific file:
+.PP
+.RS
+.nf
+lsofrs /var/log/syslog
+.fi
+.RE
+.PP
+List all TCP connections:
+.PP
+.RS
+.nf
+lsofrs \-i TCP
+.fi
+.RE
+.PP
+JSON output of all open files:
+.PP
+.RS
+.nf
+lsofrs \-\-json
+.fi
+.RE
+.PP
+Detect FD leaks polling every 10 seconds with threshold 5:
+.PP
+.RS
+.nf
+lsofrs \-\-leak\-detect=10,5
+.fi
+.RE
+.PP
+Show listening ports:
+.PP
+.RS
+.nf
+lsofrs \-\-ports
+.fi
+.RE
+.PP
+Find deleted files still held open:
+.PP
+.RS
+.nf
+lsofrs \-\-stale
+.fi
+.RE
+.PP
+Live monitor mode (full-screen):
+.PP
+.RS
+.nf
+lsofrs \-W
+.fi
+.RE
+.PP
+Repeat every 2 seconds with delta highlighting:
+.PP
+.RS
+.nf
+lsofrs \-r 2 \-\-delta
+.fi
+.RE
+.PP
+CSV export filtered by user:
+.PP
+.RS
+.nf
+lsofrs \-\-csv \-u www\-data
+.fi
+.RE
+.PP
+Network connection map:
+.PP
+.RS
+.nf
+lsofrs \-\-net\-map
+.fi
+.RE
+.PP
+Trace pipe chains between processes:
+.PP
+.RS
+.nf
+lsofrs \-\-pipe\-chain
+.fi
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+Successful completion.
+.TP
+.B 1
+An error occurred, or no matching files were found.
+.SH SEE ALSO
+.BR lsof (8),
+.BR fstat (1),
+.BR ss (8),
+.BR netstat (1),
+.BR pstree (1),
+.BR top (1),
+.BR proc (5)
+.SH AUTHORS
+Jacob Menke
+.RI < https://github.com/MenkeTechnologies >

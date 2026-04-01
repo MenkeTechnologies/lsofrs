@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v3.0.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v3.1.0
 
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
@@ -50,6 +50,13 @@ Or install directly:
 
 ```bash
 cargo install --path .
+```
+
+Install the man page:
+
+```bash
+sudo cp lsofrs.1 /usr/local/share/man/man1/
+man lsofrs
 ```
 
 ---
@@ -283,8 +290,9 @@ src/
 ├── main.rs      # CLI entry point, dispatch, repeat/leak-detect loops
 ├── cli.rs       # clap argument definitions + custom help display
 ├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
-├── darwin.rs    # macOS libproc FFI — process/FD enumeration
-├── linux.rs     # Linux /proc filesystem — process/FD enumeration
+├── darwin.rs    # macOS libproc FFI — process/FD enumeration (rayon parallel)
+├── linux.rs     # Linux /proc filesystem — process/FD enumeration (rayon parallel)
+├── freebsd.rs   # FreeBSD sysctl + procfs — process/FD enumeration
 ├── filter.rs    # Selection & filtering (PID, user, command, FD, network)
 ├── output.rs    # Columnar & field output formatting, ANSI theming
 ├── json.rs      # JSON serialization via serde
@@ -301,6 +309,7 @@ src/
 ├── pipe_chain.rs # Pipe/socket IPC topology between processes
 ├── csv_out.rs   # CSV export (RFC 4180)
 └── net_map.rs   # Network connections grouped by remote host
+lsofrs.1         # Man page (roff)
 completions/
 └── _lsofrs      # Zsh completion function
 ```
@@ -319,11 +328,12 @@ autoload -Uz compinit && compinit
 
 ### Platform Support
 
-Supports **macOS/Darwin** via the `libproc` API and **Linux** via the `/proc` filesystem. Platform-specific modules are gated behind `#[cfg(target_os)]`. FreeBSD, etc. can be added as additional modules.
+Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **FreeBSD** (sysctl + procfs). Platform modules are gated behind `#[cfg(target_os)]`. Process gathering is parallelized with rayon.
 
 ### Key Design Decisions
 
 - **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.
+- **Parallel gathering**: Per-PID FD enumeration parallelized with rayon.
 - **Streaming output**: Processes are gathered, filtered, and printed in a single pass.
 - **crossterm for TUI**: Alternate screen buffer, raw mode, cursor control — no ncurses dependency.
 - **serde for JSON**: Derive-based serialization, no hand-rolled escaping.

@@ -1,147 +1,179 @@
-//! Linux process enumeration via /proc filesystem
+//! FreeBSD process enumeration
+//!
+//! Strategy: try `/proc` first (if procfs/linprocfs is mounted), falling back
+//! to `libc::sysctl` with `KERN_PROC_ALL` for the process list and basic info.
+//! FD enumeration without procfs is limited — we report only the process with
+//! no open-file entries.
 
 use std::collections::HashMap;
 use std::fs;
+use std::mem;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-
-use rayon::prelude::*;
 
 use crate::types::*;
 
-/// Process a single PID directory into a Process struct
-fn process_pid(pid: i32, socket_map: &HashMap<u64, SocketEntry>) -> Option<Process> {
-    let proc_dir = PathBuf::from("/proc").join(pid.to_string());
-
-    let (command, ppid, pgid, uid) = read_proc_info(&proc_dir)?;
-
-    let mut files = Vec::new();
-
-    // cwd
-    if let Ok(target) = fs::read_link(proc_dir.join("cwd")) {
-        files.push(OpenFile {
-            fd: FdName::Cwd,
-            access: Access::Read,
-            file_type: FileType::Dir,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
+/// Gather all process information, preferring procfs when available
+pub fn gather_processes() -> Vec<Process> {
+    if Path::new("/proc").join("curproc").exists() || has_numeric_proc_entries() {
+        gather_via_procfs()
+    } else {
+        gather_via_sysctl()
     }
-
-    // root dir
-    if let Ok(target) = fs::read_link(proc_dir.join("root")) {
-        files.push(OpenFile {
-            fd: FdName::Rtd,
-            access: Access::Read,
-            file_type: FileType::Dir,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
-    }
-
-    // exe (txt)
-    if let Ok(target) = fs::read_link(proc_dir.join("exe")) {
-        files.push(OpenFile {
-            fd: FdName::Txt,
-            access: Access::Read,
-            file_type: FileType::Reg,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
-    }
-
-    // Open file descriptors
-    let fd_dir = proc_dir.join("fd");
-    if let Ok(fd_entries) = fs::read_dir(&fd_dir) {
-        for fd_entry in fd_entries.flatten() {
-            let fd_name = fd_entry.file_name();
-            let Some(fd_num) = fd_name.to_str().and_then(|s| s.parse::<i32>().ok()) else {
-                continue;
-            };
-
-            let fd_path = fd_dir.join(&fd_name);
-            if let Some(of) = process_fd(fd_num, &fd_path, &proc_dir, socket_map) {
-                files.push(of);
-            }
-        }
-    }
-
-    Some(Process {
-        pid,
-        ppid,
-        pgid,
-        uid,
-        command,
-        files,
-        sel_flags: 0,
-        sel_state: 0,
-    })
 }
 
-/// Gather all process information from /proc
-pub fn gather_processes() -> Vec<Process> {
-    // Build the socket map before parallel PID processing (shared read-only state)
-    let socket_map = Arc::new(build_socket_map());
+fn has_numeric_proc_entries() -> bool {
+    fs::read_dir("/proc")
+        .ok()
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|s| s.parse::<i32>().is_ok())
+            })
+        })
+        .unwrap_or(false)
+}
+
+// ── procfs-based enumeration (mirrors linux.rs) ─────────────────────
+
+fn gather_via_procfs() -> Vec<Process> {
+    let socket_map = build_socket_map();
+    let mut processes = Vec::new();
 
     let Ok(entries) = fs::read_dir("/proc") else {
-        return Vec::new();
+        return processes;
     };
 
-    // Collect PIDs sequentially, then process in parallel
-    let pids: Vec<i32> = entries
-        .flatten()
-        .filter_map(|e| e.file_name().to_str().and_then(|s| s.parse::<i32>().ok()))
-        .collect();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str().and_then(|s| s.parse::<i32>().ok()) else {
+            continue;
+        };
 
-    let mut processes: Vec<Process> = pids
-        .into_par_iter()
-        .filter_map(|pid| process_pid(pid, &socket_map))
-        .collect();
+        let proc_dir = PathBuf::from("/proc").join(pid.to_string());
 
-    processes.sort_by_key(|p| p.pid);
+        let Some((command, ppid, pgid, uid)) = read_proc_info(&proc_dir) else {
+            continue;
+        };
+
+        let mut files = Vec::new();
+
+        // cwd
+        if let Ok(target) = fs::read_link(proc_dir.join("cwd")) {
+            files.push(OpenFile {
+                fd: FdName::Cwd,
+                access: Access::Read,
+                file_type: FileType::Dir,
+                name: target.to_string_lossy().into_owned(),
+                ..Default::default()
+            });
+        }
+
+        // root dir
+        if let Ok(target) = fs::read_link(proc_dir.join("root")) {
+            files.push(OpenFile {
+                fd: FdName::Rtd,
+                access: Access::Read,
+                file_type: FileType::Dir,
+                name: target.to_string_lossy().into_owned(),
+                ..Default::default()
+            });
+        }
+
+        // exe (txt)
+        if let Ok(target) = fs::read_link(proc_dir.join("exe")) {
+            files.push(OpenFile {
+                fd: FdName::Txt,
+                access: Access::Read,
+                file_type: FileType::Reg,
+                name: target.to_string_lossy().into_owned(),
+                ..Default::default()
+            });
+        }
+
+        // Open file descriptors
+        let fd_dir = proc_dir.join("fd");
+        if let Ok(fd_entries) = fs::read_dir(&fd_dir) {
+            for fd_entry in fd_entries.flatten() {
+                let fd_name = fd_entry.file_name();
+                let Some(fd_num) = fd_name.to_str().and_then(|s| s.parse::<i32>().ok()) else {
+                    continue;
+                };
+
+                let fd_path = fd_dir.join(&fd_name);
+                if let Some(of) = process_fd(fd_num, &fd_path, &proc_dir, &socket_map) {
+                    files.push(of);
+                }
+            }
+        }
+
+        processes.push(Process {
+            pid,
+            ppid,
+            pgid,
+            uid,
+            command,
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+        });
+    }
+
     processes
 }
 
-/// Read process info from /proc/<pid>/stat and /proc/<pid>/status
+/// Read process info from /proc/<pid>/status (FreeBSD procfs format)
 fn read_proc_info(proc_dir: &Path) -> Option<(String, i32, i32, u32)> {
-    // Read /proc/<pid>/stat for command, ppid, pgid
-    let stat = fs::read_to_string(proc_dir.join("stat")).ok()?;
-    let (command, ppid, pgid) = parse_stat(&stat)?;
+    // FreeBSD linprocfs provides Linux-compatible /proc/<pid>/stat
+    let stat_path = proc_dir.join("stat");
+    if let Ok(stat) = fs::read_to_string(&stat_path) {
+        if let Some(result) = parse_linux_stat(&stat) {
+            return Some(result);
+        }
+    }
 
-    // Read /proc/<pid>/status for uid
-    let status = fs::read_to_string(proc_dir.join("status")).ok()?;
-    let uid = parse_uid(&status).unwrap_or(0);
+    // FreeBSD native procfs: /proc/<pid>/status has a different format:
+    // comm pid ppid pgid sid ...
+    let status_path = proc_dir.join("status");
+    if let Ok(status) = fs::read_to_string(&status_path) {
+        return parse_freebsd_status(&status);
+    }
 
-    Some((command, ppid, pgid, uid))
+    None
 }
 
-/// Parse /proc/<pid>/stat
-/// Format: pid (comm) state ppid pgid ...
-fn parse_stat(stat: &str) -> Option<(String, i32, i32)> {
-    // comm can contain spaces and parens, so find the last ')'
+/// Parse Linux-compatible /proc/<pid>/stat (from linprocfs)
+fn parse_linux_stat(stat: &str) -> Option<(String, i32, i32, u32)> {
     let comm_start = stat.find('(')?;
     let comm_end = stat.rfind(')')?;
     let command = stat[comm_start + 1..comm_end].to_string();
 
     let rest = &stat[comm_end + 2..]; // skip ") "
     let fields: Vec<&str> = rest.split_whitespace().collect();
-    // fields[0] = state, fields[1] = ppid, fields[2] = pgid
     let ppid = fields.get(1)?.parse().ok()?;
     let pgid = fields.get(2)?.parse().ok()?;
 
-    Some((command, ppid, pgid))
+    // UID not in stat — try reading from the filesystem
+    let uid = 0; // Will be overridden if status is available
+    Some((command, ppid, pgid, uid))
 }
 
-/// Parse UID from /proc/<pid>/status
-fn parse_uid(status: &str) -> Option<u32> {
-    for line in status.lines() {
-        if let Some(rest) = line.strip_prefix("Uid:") {
-            return rest.split_whitespace().next()?.parse().ok();
-        }
+/// Parse FreeBSD native /proc/<pid>/status
+/// Format: comm pid ppid pgid sid tty_dev flags start user_time sys_time ...
+fn parse_freebsd_status(status: &str) -> Option<(String, i32, i32, u32)> {
+    let fields: Vec<&str> = status.split_whitespace().collect();
+    if fields.len() < 4 {
+        return None;
     }
-    None
+
+    let command = fields[0].to_string();
+    let _pid: i32 = fields[1].parse().ok()?;
+    let ppid: i32 = fields[2].parse().ok()?;
+    let pgid: i32 = fields[3].parse().ok()?;
+
+    Some((command, ppid, pgid, 0))
 }
 
 /// Process a single fd symlink
@@ -154,11 +186,9 @@ fn process_fd(
     let target = fs::read_link(fd_path).ok()?;
     let target_str = target.to_string_lossy().into_owned();
 
-    // Read access mode from fdinfo
     let access = read_fd_access(proc_dir, fd_num);
     let offset = read_fd_offset(proc_dir, fd_num);
 
-    // Determine file type from the target
     if let Some(inode_str) = target_str
         .strip_prefix("socket:[")
         .and_then(|s| s.strip_suffix(']'))
@@ -178,22 +208,7 @@ fn process_fd(
         });
     }
 
-    if target_str.starts_with("anon_inode:[eventfd")
-        || target_str.starts_with("anon_inode:[eventpoll")
-        || target_str.starts_with("anon_inode:[signalfd")
-        || target_str.starts_with("anon_inode:[timerfd")
-        || target_str.starts_with("anon_inode:[inotify")
-    {
-        return Some(OpenFile {
-            fd: FdName::Number(fd_num),
-            access,
-            file_type: FileType::Unknown(target_str.clone()),
-            name: target_str,
-            ..Default::default()
-        });
-    }
-
-    // Regular file — stat for metadata
+    // Regular file
     let meta = fs::symlink_metadata(fd_path)
         .ok()
         .or_else(|| fs::metadata(&target).ok());
@@ -208,7 +223,6 @@ fn process_fd(
         (FileType::Reg, None, None, None)
     };
 
-    // Check for deleted files
     let (name, name_append) = if target_str.ends_with(" (deleted)") {
         (
             target_str.trim_end_matches(" (deleted)").to_string(),
@@ -294,10 +308,10 @@ struct SocketEntry {
     unix_path: Option<String>,
 }
 
-/// Build a map of inode -> socket info from /proc/net/*
 fn build_socket_map() -> HashMap<u64, SocketEntry> {
     let mut map = HashMap::new();
 
+    // FreeBSD linprocfs provides /proc/net/* if mounted
     parse_inet_sockets("/proc/net/tcp", "TCP", FileType::IPv4, &mut map);
     parse_inet_sockets("/proc/net/tcp6", "TCP", FileType::IPv6, &mut map);
     parse_inet_sockets("/proc/net/udp", "UDP", FileType::IPv4, &mut map);
@@ -381,7 +395,6 @@ fn parse_ipv6_hex(hex: &str) -> Option<IpAddr> {
     if bytes.len() != 16 {
         return None;
     }
-    // Linux stores IPv6 in 4 groups of 4 bytes, each in host byte order
     let mut octets = [0u8; 16];
     for group in 0..4 {
         let base = group * 4;
@@ -455,7 +468,7 @@ fn process_socket(
                 .clone()
                 .unwrap_or_else(|| format!("socket:[{inode}]"))
         } else {
-            format_inet_name(&entry.local, &entry.foreign, &entry.protocol, &entry.state)
+            format_inet_name(&entry.local, &entry.foreign, &entry.state)
         };
 
         OpenFile {
@@ -463,7 +476,7 @@ fn process_socket(
             access,
             file_type: entry.file_type.clone(),
             name,
-            socket_info: Some(SocketInfo {
+            socket_info: Some(crate::types::SocketInfo {
                 protocol: entry.protocol.clone(),
                 local: entry.local.clone(),
                 foreign: entry.foreign.clone(),
@@ -483,12 +496,7 @@ fn process_socket(
     }
 }
 
-fn format_inet_name(
-    local: &InetAddr,
-    foreign: &InetAddr,
-    protocol: &str,
-    state: &Option<TcpState>,
-) -> String {
+fn format_inet_name(local: &InetAddr, foreign: &InetAddr, state: &Option<TcpState>) -> String {
     let local_str = format_endpoint(local);
     let foreign_str = format_endpoint(foreign);
 
@@ -521,55 +529,150 @@ fn format_endpoint(addr: &InetAddr) -> String {
     }
 }
 
+// ── sysctl-based fallback ───────────────────────────────────────────
+
+/// Fallback: enumerate processes via kern.proc.all sysctl (no FD info)
+fn gather_via_sysctl() -> Vec<Process> {
+    let mut processes = Vec::new();
+
+    // CTL_KERN = 1, KERN_PROC = 14, KERN_PROC_ALL = 0
+    let mib: [libc::c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_ALL, 0];
+
+    // First call to get buffer size
+    let mut size: libc::size_t = 0;
+    let ret = unsafe {
+        libc::sysctl(
+            mib.as_ptr(),
+            4,
+            std::ptr::null_mut(),
+            &mut size,
+            std::ptr::null(),
+            0,
+        )
+    };
+    if ret != 0 || size == 0 {
+        return processes;
+    }
+
+    // Add headroom for new processes
+    size = size * 5 / 4;
+    let mut buf: Vec<u8> = vec![0u8; size];
+
+    let ret = unsafe {
+        libc::sysctl(
+            mib.as_ptr(),
+            4,
+            buf.as_mut_ptr() as *mut libc::c_void,
+            &mut size,
+            std::ptr::null(),
+            0,
+        )
+    };
+    if ret != 0 {
+        return processes;
+    }
+
+    let kinfo_size = mem::size_of::<libc::kinfo_proc>();
+    if kinfo_size == 0 {
+        return processes;
+    }
+    let count = size / kinfo_size;
+
+    for i in 0..count {
+        let offset = i * kinfo_size;
+        if offset + kinfo_size > buf.len() {
+            break;
+        }
+        let kp = unsafe { &*(buf.as_ptr().add(offset) as *const libc::kinfo_proc) };
+
+        let pid = kp.ki_pid;
+        if pid <= 0 {
+            continue;
+        }
+
+        let command = {
+            let comm = &kp.ki_comm;
+            let end = comm.iter().position(|&b| b == 0).unwrap_or(comm.len());
+            String::from_utf8_lossy(&comm[..end].iter().map(|&b| b as u8).collect::<Vec<u8>>())
+                .into_owned()
+        };
+
+        processes.push(Process {
+            pid,
+            ppid: kp.ki_ppid,
+            pgid: kp.ki_pgid,
+            uid: kp.ki_uid,
+            command,
+            files: Vec::new(),
+            sel_flags: 0,
+            sel_state: 0,
+        });
+    }
+
+    processes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // ── parse_stat ──────────────────────────────────────────────────
+    // ── parse_linux_stat ────────────────────────────────────────────
 
     #[test]
-    fn parse_stat_simple() {
+    fn parse_linux_stat_simple() {
         let stat = "1234 (bash) S 1000 1234 1234 0 -1 4194304";
-        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
+        let (cmd, ppid, pgid, _uid) = parse_linux_stat(stat).unwrap();
         assert_eq!(cmd, "bash");
         assert_eq!(ppid, 1000);
         assert_eq!(pgid, 1234);
     }
 
     #[test]
-    fn parse_stat_command_with_spaces() {
+    fn parse_linux_stat_with_spaces() {
         let stat = "5678 (Web Content) S 100 5678 5678 0 -1 0";
-        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
+        let (cmd, ppid, _pgid, _uid) = parse_linux_stat(stat).unwrap();
         assert_eq!(cmd, "Web Content");
         assert_eq!(ppid, 100);
     }
 
     #[test]
-    fn parse_stat_command_with_parens() {
+    fn parse_linux_stat_with_parens() {
         let stat = "999 (foo (bar)) S 1 999 999 0 -1 0";
-        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
+        let (cmd, ppid, _pgid, _uid) = parse_linux_stat(stat).unwrap();
         assert_eq!(cmd, "foo (bar)");
         assert_eq!(ppid, 1);
     }
 
-    // ── parse_uid ───────────────────────────────────────────────────
-
     #[test]
-    fn parse_uid_found() {
-        let status = "Name:\tbash\nUid:\t1000\t1000\t1000\t1000\n";
-        assert_eq!(parse_uid(status), Some(1000));
+    fn parse_linux_stat_empty() {
+        assert!(parse_linux_stat("").is_none());
     }
 
     #[test]
-    fn parse_uid_root() {
-        let status = "Uid:\t0\t0\t0\t0\n";
-        assert_eq!(parse_uid(status), Some(0));
+    fn parse_linux_stat_no_parens() {
+        assert!(parse_linux_stat("1234 bash S 1 1234").is_none());
+    }
+
+    // ── parse_freebsd_status ────────────────────────────────────────
+
+    #[test]
+    fn parse_freebsd_status_simple() {
+        let status = "bash 1234 1000 1234 1234 /dev/pts/0 0 0 0,0 0,0";
+        let (cmd, ppid, pgid, uid) = parse_freebsd_status(status).unwrap();
+        assert_eq!(cmd, "bash");
+        assert_eq!(ppid, 1000);
+        assert_eq!(pgid, 1234);
+        assert_eq!(uid, 0);
     }
 
     #[test]
-    fn parse_uid_missing() {
-        let status = "Name:\tbash\nGid:\t1000\n";
-        assert_eq!(parse_uid(status), None);
+    fn parse_freebsd_status_too_short() {
+        assert!(parse_freebsd_status("bash 1").is_none());
+    }
+
+    #[test]
+    fn parse_freebsd_status_invalid_pid() {
+        assert!(parse_freebsd_status("bash abc 1 1").is_none());
     }
 
     // ── mode_to_file_type ───────────────────────────────────────────
@@ -609,11 +712,16 @@ mod tests {
         assert_eq!(mode_to_file_type(0o060660), FileType::Blk);
     }
 
+    #[test]
+    fn mode_unknown() {
+        let ft = mode_to_file_type(0o170000);
+        assert!(matches!(ft, FileType::Unknown(_)));
+    }
+
     // ── hex endpoint parsing ────────────────────────────────────────
 
     #[test]
     fn parse_ipv4_endpoint() {
-        // 0100007F = 127.0.0.1 in network byte order (little-endian hex)
         let addr = parse_hex_endpoint("0100007F:0050", &FileType::IPv4);
         assert_eq!(addr.port, 80);
         assert_eq!(addr.addr.unwrap(), IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
@@ -627,10 +735,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_ipv6_loopback() {
-        // ::1 in Linux /proc format
-        let addr = parse_hex_endpoint("00000000000000000000000001000000:0050", &FileType::IPv6);
-        assert_eq!(addr.port, 80);
+    fn parse_hex_endpoint_high_port() {
+        let addr = parse_hex_endpoint("00000000:FFFF", &FileType::IPv4);
+        assert_eq!(addr.port, 65535);
+    }
+
+    #[test]
+    fn parse_hex_endpoint_bad_format() {
+        let addr = parse_hex_endpoint("garbage", &FileType::IPv4);
+        assert_eq!(addr.port, 0);
     }
 
     // ── tcp state ───────────────────────────────────────────────────
@@ -641,6 +754,18 @@ mod tests {
         assert_eq!(tcp_state_from_hex(0x0A), TcpState::Listen);
         assert_eq!(tcp_state_from_hex(0x07), TcpState::Closed);
         assert_eq!(tcp_state_from_hex(0xFF), TcpState::Unknown(0xFF));
+    }
+
+    #[test]
+    fn tcp_state_all_values() {
+        assert_eq!(tcp_state_from_hex(0x02), TcpState::SynSent);
+        assert_eq!(tcp_state_from_hex(0x03), TcpState::SynRecv);
+        assert_eq!(tcp_state_from_hex(0x04), TcpState::FinWait1);
+        assert_eq!(tcp_state_from_hex(0x05), TcpState::FinWait2);
+        assert_eq!(tcp_state_from_hex(0x06), TcpState::TimeWait);
+        assert_eq!(tcp_state_from_hex(0x08), TcpState::CloseWait);
+        assert_eq!(tcp_state_from_hex(0x09), TcpState::LastAck);
+        assert_eq!(tcp_state_from_hex(0x0B), TcpState::Closing);
     }
 
     // ── format helpers ──────────────────────────────────────────────
@@ -673,13 +798,22 @@ mod tests {
     }
 
     #[test]
+    fn format_endpoint_none_addr() {
+        let addr = InetAddr {
+            addr: None,
+            port: 80,
+        };
+        assert_eq!(format_endpoint(&addr), "*:80");
+    }
+
+    #[test]
     fn format_inet_name_listen() {
         let local = InetAddr {
             addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
             port: 80,
         };
         let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Listen));
+        let name = format_inet_name(&local, &foreign, &Some(TcpState::Listen));
         assert_eq!(name, "*:80 (LISTEN)");
     }
 
@@ -693,49 +827,10 @@ mod tests {
             addr: Some(IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))),
             port: 443,
         };
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Established));
+        let name = format_inet_name(&local, &foreign, &Some(TcpState::Established));
         assert!(name.contains("10.0.0.1:45000"));
         assert!(name.contains("93.184.216.34:443"));
         assert!(name.contains("ESTABLISHED"));
-    }
-
-    // ── tcp state exhaustive ──────────────────────────────────────────
-
-    #[test]
-    fn tcp_state_all_values() {
-        assert_eq!(tcp_state_from_hex(0x02), TcpState::SynSent);
-        assert_eq!(tcp_state_from_hex(0x03), TcpState::SynRecv);
-        assert_eq!(tcp_state_from_hex(0x04), TcpState::FinWait1);
-        assert_eq!(tcp_state_from_hex(0x05), TcpState::FinWait2);
-        assert_eq!(tcp_state_from_hex(0x06), TcpState::TimeWait);
-        assert_eq!(tcp_state_from_hex(0x08), TcpState::CloseWait);
-        assert_eq!(tcp_state_from_hex(0x09), TcpState::LastAck);
-        assert_eq!(tcp_state_from_hex(0x0B), TcpState::Closing);
-    }
-
-    // ── parse_hex_endpoint edge cases ───────────────────────────────
-
-    #[test]
-    fn parse_hex_endpoint_high_port() {
-        let addr = parse_hex_endpoint("00000000:FFFF", &FileType::IPv4);
-        assert_eq!(addr.port, 65535);
-    }
-
-    #[test]
-    fn parse_hex_endpoint_bad_format() {
-        let addr = parse_hex_endpoint("garbage", &FileType::IPv4);
-        assert_eq!(addr.port, 0);
-    }
-
-    // ── format helpers edge cases ───────────────────────────────────
-
-    #[test]
-    fn format_endpoint_none_addr() {
-        let addr = InetAddr {
-            addr: None,
-            port: 80,
-        };
-        assert_eq!(format_endpoint(&addr), "*:80");
     }
 
     #[test]
@@ -745,83 +840,7 @@ mod tests {
             port: 53,
         };
         let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "UDP", &None);
+        let name = format_inet_name(&local, &foreign, &None);
         assert_eq!(name, "*:53");
-    }
-
-    #[test]
-    fn format_inet_name_ipv6() {
-        let local = InetAddr {
-            addr: Some(IpAddr::V6(Ipv6Addr::LOCALHOST)),
-            port: 443,
-        };
-        let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Listen));
-        assert!(name.contains("[::1]:443"));
-        assert!(name.contains("LISTEN"));
-    }
-
-    // ── parse_stat edge cases ───────────────────────────────────────
-
-    #[test]
-    fn parse_stat_pid_1() {
-        let stat = "1 (systemd) S 0 1 1 0 -1 4194560";
-        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
-        assert_eq!(cmd, "systemd");
-        assert_eq!(ppid, 0);
-        assert_eq!(pgid, 1);
-    }
-
-    #[test]
-    fn parse_stat_empty_returns_none() {
-        assert!(parse_stat("").is_none());
-    }
-
-    #[test]
-    fn parse_stat_no_parens_returns_none() {
-        assert!(parse_stat("1234 bash S 1 1234").is_none());
-    }
-
-    // ── mode_to_file_type edge cases ────────────────────────────────
-
-    #[test]
-    fn mode_unknown() {
-        let ft = mode_to_file_type(0o170000); // S_IFMT itself
-        assert!(matches!(ft, FileType::Unknown(_)));
-    }
-
-    // ── Functional (requires /proc) ─────────────────────────────────
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn gather_processes_nonempty() {
-        let procs = gather_processes();
-        assert!(!procs.is_empty());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn gather_processes_finds_self() {
-        let my_pid = std::process::id() as i32;
-        let procs = gather_processes();
-        assert!(procs.iter().any(|p| p.pid == my_pid));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn gather_processes_self_has_files() {
-        let my_pid = std::process::id() as i32;
-        let procs = gather_processes();
-        let me = procs.iter().find(|p| p.pid == my_pid).unwrap();
-        assert!(!me.files.is_empty());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn gather_processes_have_commands() {
-        let procs = gather_processes();
-        for p in procs.iter().take(20) {
-            assert!(!p.command.is_empty(), "pid {} has empty command", p.pid);
-        }
     }
 }

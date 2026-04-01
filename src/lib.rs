@@ -11,6 +11,8 @@ pub mod csv_out;
 pub mod darwin;
 pub mod delta;
 pub mod filter;
+#[cfg(target_os = "freebsd")]
+pub mod freebsd;
 #[cfg(target_os = "linux")]
 pub mod linux;
 pub mod net_map;
