@@ -398,6 +398,17 @@ impl SummaryLiveMode {
     }
 }
 
+impl SummaryLiveMode {
+    fn ingest(&mut self, procs: &[Process]) {
+        let (type_stats, proc_stats, user_stats, total_files) = compute_stats(procs);
+        self.type_stats = type_stats;
+        self.proc_stats = proc_stats;
+        self.user_stats = user_stats;
+        self.total_procs = procs.len();
+        self.total_files = total_files;
+    }
+}
+
 impl TuiMode for SummaryLiveMode {
     fn update(&mut self, filter: &Filter) {
         let mut procs = crate::gather_processes();
@@ -405,13 +416,11 @@ impl TuiMode for SummaryLiveMode {
         for p in &mut procs {
             p.files.retain(|f| filter.matches_file(f));
         }
+        self.ingest(&procs);
+    }
 
-        let (type_stats, proc_stats, user_stats, total_files) = compute_stats(&procs);
-        self.type_stats = type_stats;
-        self.proc_stats = proc_stats;
-        self.user_stats = user_stats;
-        self.total_procs = procs.len();
-        self.total_files = total_files;
+    fn update_from_procs(&mut self, procs: &[Process]) {
+        self.ingest(procs);
     }
 
     fn render(&self, buf: &mut Buffer, area: Rect, theme: &LsofTheme, _state: &TuiState) {

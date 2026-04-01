@@ -171,14 +171,8 @@ impl TopMode {
     }
 }
 
-impl TuiMode for TopMode {
-    fn update(&mut self, filter: &Filter) {
-        let mut procs = crate::gather_processes();
-        procs.retain(|p| filter.matches_process(p));
-        for p in &mut procs {
-            p.files.retain(|f| filter.matches_file(f));
-        }
-
+impl TopMode {
+    fn ingest(&mut self, procs: &[Process]) {
         self.entries = procs
             .iter()
             .map(|p| {
@@ -213,12 +207,27 @@ impl TuiMode for TopMode {
             .collect();
 
         self.prev_counts.clear();
-        for p in &procs {
+        for p in procs {
             self.prev_counts.insert(p.pid, p.files.len());
         }
 
         self.total_procs = procs.len();
         self.total_fds = procs.iter().map(|p| p.files.len()).sum();
+    }
+}
+
+impl TuiMode for TopMode {
+    fn update(&mut self, filter: &Filter) {
+        let mut procs = crate::gather_processes();
+        procs.retain(|p| filter.matches_process(p));
+        for p in &mut procs {
+            p.files.retain(|f| filter.matches_file(f));
+        }
+        self.ingest(&procs);
+    }
+
+    fn update_from_procs(&mut self, procs: &[Process]) {
+        self.ingest(procs);
     }
 
     fn render(&self, buf: &mut Buffer, area: Rect, theme: &LsofTheme, state: &TuiState) {

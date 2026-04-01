@@ -64,6 +64,11 @@ pub trait TuiMode {
     /// Gather fresh data from the system
     fn update(&mut self, filter: &Filter);
 
+    /// Update from pre-gathered process list (avoids redundant gather)
+    fn update_from_procs(&mut self, procs: &[crate::types::Process]) {
+        let _ = procs;
+    }
+
     /// Render content directly to the ratatui frame buffer.
     fn render(&self, buf: &mut Buffer, area: Rect, theme: &LsofTheme, state: &TuiState);
 

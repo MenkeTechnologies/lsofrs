@@ -990,10 +990,9 @@ impl TabbedTui {
         self.total_procs = procs.len();
         self.total_files = procs.iter().map(|p| p.files.len()).sum();
 
-        // Top and Summary use TuiMode::update which gathers internally,
-        // so we call them directly (they do their own gathering)
-        self.top_mode.update(filter);
-        self.summary_mode.update(filter);
+        // All tabs share the same gathered process list — no redundant gathering
+        self.top_mode.update_from_procs(&procs);
+        self.summary_mode.update_from_procs(&procs);
 
         // Simple tabs use the shared process list
         self.update_ports(&procs);
