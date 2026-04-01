@@ -273,7 +273,7 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 
 ## // INTERACTIVE CONTROLS
 
-All live TUI modes (`--top`, `--summary -r`, and future modes) share a common keybinding framework powered by [ratatui](https://ratatui.rs).
+All live TUI modes (`--top`, `--summary -r`, and future modes) share a common keybinding framework via the `TuiMode` trait.
 
 **Common keys** (available in all live modes):
 
@@ -318,7 +318,7 @@ src/
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
-├── tui_app.rs   # Shared ratatui TUI framework (TuiMode trait)
+├── tui_app.rs   # Shared TUI framework (TuiMode trait, crossterm)
 ├── top.rs       # Live top-N FD dashboard (TuiMode)
 ├── watch.rs     # File watch — monitor opens/closes over time
 ├── stale.rs     # Stale FD finder — deleted files still held open
@@ -352,7 +352,7 @@ Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **F
 - **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.
 - **Parallel gathering**: Per-PID FD enumeration parallelized with rayon.
 - **Streaming output**: Processes are gathered, filtered, and printed in a single pass.
-- **ratatui TUI framework**: Shared `TuiMode` trait — all live modes get common keybindings, alternate screen, and atomic frame rendering via ratatui.
+- **Shared TUI framework**: `TuiMode` trait — all live modes get common keybindings, alternate screen, and atomic frame rendering.
 - **serde for JSON**: Derive-based serialization, no hand-rolled escaping.
 - **clap for CLI**: Derive-based argument parsing with full help generation.
 

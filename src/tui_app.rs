@@ -5,17 +5,14 @@
 //! - Common keybindings (q/Esc/Ctrl-C quit, p pause, 1-9 interval, etc.)
 //! - Atomic frame rendering via ratatui
 
-use std::io;
+use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
-use crossterm::{cursor, execute, terminal};
-use ratatui::Frame;
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Rect;
-use ratatui::text::Text;
-use ratatui::widgets::Paragraph;
+use crossterm::{
+    cursor, execute,
+    terminal::{self, ClearType},
+};
 
 use crate::filter::Filter;
 use crate::output::Theme;
@@ -76,16 +73,6 @@ pub fn run_tui(mode: &mut dyn TuiMode, filter: &Filter, interval: u64, theme: &T
     let _ = execute!(io::stdout(), terminal::EnterAlternateScreen, cursor::Hide);
     let _ = terminal::enable_raw_mode();
 
-    let backend = CrosstermBackend::new(io::stdout());
-    let mut terminal = match Terminal::new(backend) {
-        Ok(t) => t,
-        Err(_) => {
-            let _ = terminal::disable_raw_mode();
-            let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
-            return;
-        }
-    };
-
     let mut state = TuiState::new(interval);
     let mut running = true;
 
@@ -95,12 +82,16 @@ pub fn run_tui(mode: &mut dyn TuiMode, filter: &Filter, interval: u64, theme: &T
             mode.update(filter);
         }
 
-        // Render frame via ratatui
+        // Render: clear screen, write ANSI content atomically
         let content = mode.render_content(theme, &state);
-        let _ = terminal.draw(|frame: &mut Frame| {
-            let area = frame.area();
-            render_ansi_paragraph(frame, area, &content);
-        });
+        let mut buf = content;
+        buf = buf.replace('\n', "\r\n");
+
+        let mut out = io::stdout().lock();
+        let _ = execute!(out, cursor::MoveTo(0, 0), terminal::Clear(ClearType::All));
+        let _ = out.write_all(buf.as_bytes());
+        let _ = out.flush();
+        drop(out);
 
         // Poll keys during interval
         let deadline = Instant::now() + Duration::from_secs(state.interval);
@@ -163,17 +154,8 @@ pub fn run_tui(mode: &mut dyn TuiMode, filter: &Filter, interval: u64, theme: &T
     }
 
     // Restore terminal
-    drop(terminal);
     let _ = terminal::disable_raw_mode();
     let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
-}
-
-/// Render pre-formatted ANSI text as a ratatui Paragraph using raw ANSI passthrough
-fn render_ansi_paragraph(frame: &mut Frame, area: Rect, content: &str) {
-    // Convert \n to lines for ratatui Text, preserving ANSI escape sequences
-    let text = Text::raw(content);
-    let paragraph = Paragraph::new(text);
-    frame.render_widget(paragraph, area);
 }
 
 #[cfg(test)]

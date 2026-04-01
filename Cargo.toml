@@ -21,7 +21,6 @@ users = "0.11"
 regex = "1"
 chrono = "0.4"
 rayon = "1"
-ratatui = "0.30"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
