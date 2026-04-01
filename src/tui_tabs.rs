@@ -148,11 +148,14 @@ struct HoverState {
 }
 
 impl HoverState {
-    /// Returns true when hover has been on the same row for >= 500ms.
-    /// No auto-hide — tooltip stays as long as mouse is on the same row.
+    /// Returns true when hover has been on the same row for >= 1s and < 4s.
+    /// Right-click tooltips bypass this (handled separately, no auto-hide).
     fn ready(&self) -> bool {
         self.since
-            .map(|t| t.elapsed().as_millis() >= 500)
+            .map(|t| {
+                let ms = t.elapsed().as_millis();
+                (1000..4000).contains(&ms)
+            })
             .unwrap_or(false)
     }
 
@@ -4582,14 +4585,14 @@ mod tests {
     }
 
     #[test]
-    fn hover_state_stays_ready_indefinitely() {
+    fn hover_state_expires_after_4s() {
         let h = HoverState {
             row: Some(5),
             since: Some(Instant::now() - Duration::from_millis(5000)),
             ..Default::default()
         };
-        // No auto-hide: tooltip stays as long as mouse is on same row
-        assert!(h.ready());
+        // Auto-hides after 4s (matches storageshower/iftoprs behavior)
+        assert!(!h.ready());
     }
 
     #[test]
