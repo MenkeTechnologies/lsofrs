@@ -46,7 +46,12 @@ impl TuiState {
         }
     }
 
-    fn cycle_theme(&mut self) {
+    /// Public constructor for use by tui_tabs
+    pub fn new_pub(interval: u64, theme: LsofTheme) -> Self {
+        Self::new(interval, theme)
+    }
+
+    pub fn cycle_theme(&mut self) {
         self.theme_idx = (self.theme_idx + 1) % ThemeName::ALL.len();
         self.theme = LsofTheme::from_name(ThemeName::ALL[self.theme_idx]);
     }
@@ -222,7 +227,7 @@ pub fn set_cell(buf: &mut Buffer, x: u16, y: u16, ch: &str, s: Style) {
 }
 
 /// Draw a centered box with double-line border. Returns top-left (x0, y0).
-fn draw_box(
+pub fn draw_box(
     buf: &mut Buffer,
     area: Rect,
     bw: u16,
@@ -279,7 +284,7 @@ fn draw_status_bar(buf: &mut Buffer, area: Rect, title: &str, state: &TuiState) 
 }
 
 /// Draw the help overlay as a centered modal.
-fn draw_help(buf: &mut Buffer, area: Rect, theme: &LsofTheme, mode_keys: Vec<(&str, &str)>) {
+pub fn draw_help(buf: &mut Buffer, area: Rect, theme: &LsofTheme, mode_keys: Vec<(&str, &str)>) {
     let common_keys: Vec<(&str, &str)> = vec![
         ("q / Esc", "quit"),
         ("p", "pause / resume"),

@@ -37,6 +37,7 @@ _arguments -C -s -S \
   '--pipe-chain[trace pipe/socket IPC between processes]' \
   '--csv[CSV output format]' \
   '--net-map[network connections grouped by remote host]' \
+  '--tui[unified TUI with tabs for all modes]' \
   '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 

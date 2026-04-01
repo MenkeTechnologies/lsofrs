@@ -24,6 +24,7 @@ mod theme;
 mod top;
 mod tree;
 mod tui_app;
+mod tui_tabs;
 mod types;
 mod watch;
 
@@ -51,6 +52,12 @@ fn main() {
     let tui_theme = LsofTheme::from_name(ThemeName::from_str_loose(&args.theme_name));
     let filter = Filter::from_args(&args);
     let interval = args.repeat.unwrap_or(1);
+
+    // Unified TUI mode
+    if args.tui {
+        tui_tabs::run_tui_tabs(&filter, interval, &tui_theme);
+        return;
+    }
 
     // Watch mode
     if let Some(ref path) = args.watch {

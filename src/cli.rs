@@ -144,6 +144,10 @@ pub struct Args {
     #[arg(short = '0')]
     pub nul_terminator: bool,
 
+    /// Launch unified TUI mode with tabs
+    #[arg(long = "tui")]
+    pub tui: bool,
+
     /// Color theme for TUI modes (neon-sprawl, classic, solar-flare, ice-breaker, matrix)
     #[arg(long = "theme", default_value = "neon-sprawl")]
     pub theme_name: String,
@@ -225,6 +229,7 @@ impl Args {
 {green}   --pipe-chain       {reset}trace pipe/socket IPC between processes
 {green}   --csv              {reset}CSV output format {magenta}(for spreadsheets/pipelines){reset}
 {green}   --net-map          {reset}network connections grouped by remote host
+{green}   --tui              {reset}unified TUI with tabs for all modes
 {green}   -V, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
@@ -505,6 +510,7 @@ mod tests {
         assert!(!args.pipe_chain);
         assert!(!args.csv_output);
         assert!(!args.net_map);
+        assert!(!args.tui);
         assert!(args.pid.is_none());
         assert!(args.user.is_none());
         assert!(args.pgid.is_none());
