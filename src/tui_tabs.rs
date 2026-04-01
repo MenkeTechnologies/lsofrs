@@ -159,15 +159,14 @@ impl HoverState {
             .unwrap_or(false)
     }
 
-    /// Update position. Clears timer on any movement, caller re-enables for valid zones.
+    /// Update position. Resets timer on any movement (matches iftoprs behavior).
     fn move_to(&mut self, col: u16, row: u16) {
         let new_pos = (col, row);
         let old_pos = self.col.zip(self.row);
         if old_pos != Some(new_pos) {
             self.row = Some(row);
             self.col = Some(col);
-            // Kill tooltip instantly on any pixel movement
-            self.since = None;
+            self.since = Some(Instant::now());
         }
     }
 
@@ -3755,18 +3754,6 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                         MouseEventKind::Moved => {
                             tui.hover.move_to(mouse.column, mouse.row);
-                            // Re-enable hover timer only for valid zones
-                            // (tab bar, content area, bottom bar)
-                            let y = mouse.row;
-                            let bdr = if state.show_border { 1u16 } else { 0 };
-                            let h = terminal.size().map(|s| s.height).unwrap_or(50);
-                            let is_valid_zone = y == bdr // tab bar
-                                || (y >= tui.content_area_y
-                                    && y < tui.content_area_y + tui.content_area_h) // content
-                                || y >= h.saturating_sub(2 + bdr); // bottom bar
-                            if is_valid_zone {
-                                tui.hover.since = Some(Instant::now());
-                            }
                         }
                         MouseEventKind::ScrollDown => {
                             tui.select_next();
@@ -4569,22 +4556,22 @@ mod tests {
     }
 
     #[test]
-    fn hover_state_move_clears_timer() {
+    fn hover_state_move_resets_timer() {
         let mut h = HoverState::default();
         h.move_to(10, 5);
         assert_eq!(h.row, Some(5));
         assert_eq!(h.col, Some(10));
-        // since is cleared on move_to (caller re-enables for valid zones)
-        assert!(h.since.is_none());
-        assert!(!h.ready());
-        // Moving to any new pixel clears since
-        h.since = Some(Instant::now()); // simulate caller re-enabling
-        h.move_to(15, 5); // different col
-        assert!(h.since.is_none()); // cleared
-        // Same exact position doesn't clear
-        h.since = Some(Instant::now());
-        h.move_to(15, 5); // same position
-        assert!(h.since.is_some()); // not cleared
+        assert!(h.since.is_some()); // timer started
+        assert!(!h.ready()); // not ready yet (< 1s)
+        // Move to different position resets timer
+        let since1 = h.since;
+        h.move_to(15, 5);
+        assert_ne!(h.since, since1); // timer reset
+        assert_eq!(h.col, Some(15));
+        // Same exact position doesn't reset
+        let since2 = h.since;
+        h.move_to(15, 5);
+        assert_eq!(h.since, since2); // unchanged
     }
 
     #[test]
