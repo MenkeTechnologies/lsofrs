@@ -682,17 +682,23 @@ impl TabbedTui {
             Tab::Ports => {
                 if let Some(r) = self.port_rows.get(idx) {
                     let mut lines = vec![
-                        ("Protocol".into(), r.proto.clone()),
-                        ("Local".into(), format!("{}:{}", r.addr, r.port)),
-                        ("Address".into(), r.addr.clone()),
-                        ("Port".into(), r.port.to_string()),
+                        (
+                            "\u{25b6} Listening Port".into(),
+                            format!("{}:{}", r.addr, r.port),
+                        ),
+                        ("  Protocol".into(), r.proto.clone()),
+                        ("  Address".into(), r.addr.clone()),
+                        ("  Port".into(), r.port.to_string()),
                     ];
                     if let Some(ref st) = r.tcp_state {
-                        lines.push(("TCP State".into(), st.clone()));
+                        lines.push(("  TCP State".into(), st.clone()));
                     }
-                    lines.push(("PID".into(), r.pid.to_string()));
-                    lines.push(("User".into(), r.user.clone()));
-                    lines.push(("Command".into(), r.command.clone()));
+                    lines.push(("  PID".into(), r.pid.to_string()));
+                    lines.push(("  User".into(), r.user.clone()));
+                    lines.push(("  Command".into(), r.command.clone()));
+                    lines.push(("".into(), String::new()));
+                    lines.push(("  Kill".into(), format!("kill {}", r.pid)));
+                    lines.push(("  Copy".into(), "y to copy row".into()));
                     lines
                 } else {
                     vec![]
@@ -700,23 +706,41 @@ impl TabbedTui {
             }
             Tab::Stale => {
                 if let Some(r) = self.stale_rows.get(idx) {
+                    let size_str = r
+                        .size
+                        .map(|s| {
+                            if s >= 1_073_741_824 {
+                                format!("{:.1} GB", s as f64 / 1_073_741_824.0)
+                            } else if s >= 1_048_576 {
+                                format!("{:.1} MB", s as f64 / 1_048_576.0)
+                            } else if s >= 1024 {
+                                format!("{:.1} KB", s as f64 / 1024.0)
+                            } else {
+                                format!("{s} B")
+                            }
+                        })
+                        .unwrap_or_else(|| "unknown".into());
                     let mut lines = vec![
-                        ("PID".into(), r.pid.to_string()),
-                        ("User".into(), r.user.clone()),
-                        ("FD".into(), r.fd.clone()),
-                        ("Type".into(), r.file_type.clone()),
-                        (
-                            "Size".into(),
-                            r.size.map(|s| s.to_string()).unwrap_or_default(),
-                        ),
-                        ("Full Path".into(), r.name.clone()),
+                        ("\u{25b6} Stale FD".into(), r.name.clone()),
+                        ("  PID".into(), r.pid.to_string()),
+                        ("  User".into(), r.user.clone()),
+                        ("  FD".into(), r.fd.clone()),
+                        ("  Type".into(), r.file_type.clone()),
+                        ("  Size".into(), size_str),
+                        ("  Full Path".into(), r.name.clone()),
                     ];
                     if !r.device.is_empty() {
-                        lines.push(("Device".into(), r.device.clone()));
+                        lines.push(("  Device".into(), r.device.clone()));
                     }
                     if !r.inode.is_empty() {
-                        lines.push(("Inode".into(), r.inode.clone()));
+                        lines.push(("  Inode".into(), r.inode.clone()));
                     }
+                    lines.push(("".into(), String::new()));
+                    lines.push((
+                        "  Note".into(),
+                        "File deleted but FD still held open".into(),
+                    ));
+                    lines.push(("  Fix".into(), format!("kill {} or restart process", r.pid)));
                     lines
                 } else {
                     vec![]
@@ -724,19 +748,19 @@ impl TabbedTui {
             }
             Tab::Tree => {
                 if let Some(r) = self.tree_rows.get(idx) {
-                    let type_str = format!(
-                        "REG:{} SOCK:{} PIPE:{} OTHER:{}",
-                        r.reg_count, r.sock_count, r.pipe_count, r.other_count
-                    );
                     vec![
-                        ("PID".into(), r.pid.to_string()),
-                        ("PPID".into(), r.ppid.to_string()),
-                        ("PGID".into(), r.pgid.to_string()),
-                        ("User".into(), r.user.clone()),
-                        ("FDs".into(), r.fd_count.to_string()),
-                        ("Breakdown".into(), type_str),
-                        ("Net Conns".into(), r.net_count.to_string()),
-                        ("Command".into(), r.command.clone()),
+                        ("\u{25b6} Process".into(), r.command.clone()),
+                        ("  PID".into(), r.pid.to_string()),
+                        ("  PPID".into(), r.ppid.to_string()),
+                        ("  PGID".into(), r.pgid.to_string()),
+                        ("  User".into(), r.user.clone()),
+                        ("  Total FDs".into(), r.fd_count.to_string()),
+                        ("  REG/DIR/CHR".into(), r.reg_count.to_string()),
+                        ("  SOCK/NET".into(), r.sock_count.to_string()),
+                        ("  PIPE".into(), r.pipe_count.to_string()),
+                        ("  OTHER".into(), r.other_count.to_string()),
+                        ("  Net Conns".into(), r.net_count.to_string()),
+                        ("  Depth".into(), r.indent.to_string()),
                     ]
                 } else {
                     vec![]
@@ -745,11 +769,11 @@ impl TabbedTui {
             Tab::NetMap => {
                 if let Some(r) = self.net_map_rows.get(idx) {
                     let mut lines = vec![
-                        ("Host".into(), r.host.clone()),
-                        ("Connections".into(), r.count.to_string()),
-                        ("Protocols".into(), r.protocols.clone()),
-                        ("Ports".into(), r.ports_full.clone()),
-                        ("Processes".into(), r.processes.clone()),
+                        ("\u{25b6} Remote Host".into(), r.host.clone()),
+                        ("  Connections".into(), r.count.to_string()),
+                        ("  Protocols".into(), r.protocols.clone()),
+                        ("  Ports".into(), r.ports_full.clone()),
+                        ("  Processes".into(), r.processes.clone()),
                     ];
                     if !r.state_breakdown.is_empty() {
                         lines.push(("States".into(), r.state_breakdown.clone()));
@@ -3855,7 +3879,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                     }
                 }
                 Event::Mouse(mouse) => {
-                    // Dismiss tooltip and hover on any click
+                    // Dismiss tooltip on any click
                     if matches!(mouse.kind, MouseEventKind::Down(_)) {
                         tui.tooltip.active = false;
                         tui.hover.clear();
@@ -4064,7 +4088,8 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         }
                         MouseEventKind::Moved => {
                             tui.hover.move_to(mouse.column, mouse.row);
-                            break; // re-render immediately to hide/show tooltip
+                            tui.tooltip.active = false; // dismiss all tooltips on move
+                            break; // re-render immediately
                         }
                         MouseEventKind::ScrollDown => {
                             if tui.show_theme_chooser {
