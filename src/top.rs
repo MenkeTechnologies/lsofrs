@@ -61,6 +61,7 @@ struct TopEntry {
     pgid: i32,
     uid: u32,
     command: String,
+    username: String, // cached — avoids repeated get_user_by_uid syscalls
     fd_count: usize,
     reg_count: usize,
     sock_count: usize,
@@ -77,10 +78,8 @@ impl TopEntry {
         }
     }
 
-    fn username(&self) -> String {
-        users::get_user_by_uid(self.uid)
-            .map(|u| u.name().to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.uid.to_string())
+    fn username(&self) -> &str {
+        &self.username
     }
 }
 
@@ -92,6 +91,7 @@ impl Clone for TopEntry {
             pgid: self.pgid,
             uid: self.uid,
             command: self.command.clone(),
+            username: self.username.clone(),
             fd_count: self.fd_count,
             reg_count: self.reg_count,
             sock_count: self.sock_count,
@@ -157,7 +157,7 @@ impl TopMode {
                     ("  PID".into(), e.pid.to_string()),
                     ("  PPID".into(), e.ppid.to_string()),
                     ("  PGID".into(), e.pgid.to_string()),
-                    ("  User".into(), e.username()),
+                    ("  User".into(), e.username.clone()),
                     ("  UID".into(), e.uid.to_string()),
                     ("  Total FDs".into(), e.fd_count.to_string()),
                     ("  % of system".into(), pct),
@@ -197,7 +197,7 @@ impl TopMode {
     pub fn user_breakdown(&self) -> Vec<(String, usize)> {
         let mut map: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for e in &self.entries {
-            *map.entry(e.username()).or_default() += 1;
+            *map.entry(e.username.clone()).or_default() += 1;
         }
         let mut pairs: Vec<(String, usize)> = map.into_iter().collect();
         pairs.sort_by(|a, b| b.1.cmp(&a.1));
@@ -230,6 +230,7 @@ impl TopMode {
                     pgid: p.pgid,
                     uid: p.uid,
                     command: p.command.clone(),
+                    username: p.username(),
                     fd_count: p.files.len(),
                     reg_count: reg,
                     sock_count: sock,
@@ -349,7 +350,7 @@ fn sort_entries(entries: &mut [TopEntry], sort_col: SortCol, reverse: bool) {
         let cmp = match sort_col {
             SortCol::Fds => a.fd_count.cmp(&b.fd_count),
             SortCol::Pid => a.pid.cmp(&b.pid),
-            SortCol::User => a.username().cmp(&b.username()),
+            SortCol::User => a.username.cmp(&b.username),
             SortCol::Reg => a.reg_count.cmp(&b.reg_count),
             SortCol::Sock => a.sock_count.cmp(&b.sock_count),
             SortCol::Pipe => a.pipe_count.cmp(&b.pipe_count),
@@ -493,8 +494,11 @@ fn render_top(
             }
         }
 
-        let user = e.username();
-        let user_display = if user.len() > 8 { &user[..8] } else { &user };
+        let user_display = if e.username.len() > 8 {
+            &e.username[..8]
+        } else {
+            &e.username
+        };
         let cmd = if e.command.len() > 30 {
             &e.command[..30]
         } else {
@@ -630,6 +634,7 @@ mod tests {
             pgid: pid,
             uid: 501,
             command: cmd.to_string(),
+            username: "test".to_string(),
             fd_count: fds,
             reg_count: fds / 2,
             sock_count: fds / 4,
@@ -778,6 +783,7 @@ mod tests {
             pgid: 1,
             uid: 0,
             command: "idle".to_string(),
+            username: "root".to_string(),
             fd_count: 0,
             reg_count: 0,
             sock_count: 0,
