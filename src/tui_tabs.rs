@@ -1668,7 +1668,7 @@ fn draw_bottom_bar(
     let t = &state.theme;
     let dim_s = Style::default().fg(t.dim_fg);
     let bar_s = Style::default().fg(t.dim_fg).bg(t.row_alt_bg);
-    let sep_char = " \u{2502} ";
+    let sep_char = "\u{2502}";
 
     // Separator line (row h-2)
     let sep_y = area.y;
