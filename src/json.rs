@@ -205,4 +205,23 @@ mod tests {
         let procs = vec![make_proc(1, "holder", vec![f])];
         print_json(&procs);
     }
+
+    #[test]
+    fn print_json_ipv6_socket_with_protocol() {
+        let mut f = make_file(4, FileType::IPv6, "[::1]:443");
+        f.socket_info = Some(SocketInfo {
+            protocol: "TCP".to_string(),
+            tcp_state: Some(TcpState::Established),
+            ..Default::default()
+        });
+        let procs = vec![make_proc(1, "srv", vec![f])];
+        print_json(&procs);
+    }
+
+    #[test]
+    fn print_json_unknown_file_type_round_trips_name() {
+        let f = make_file(2, FileType::Unknown("CUSTOM".to_string()), "/dev/foo");
+        let procs = vec![make_proc(1, "t", vec![f])];
+        print_json(&procs);
+    }
 }

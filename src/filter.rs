@@ -1315,4 +1315,20 @@ mod tests {
         let f = Filter::from_args(&args);
         assert_eq!(f.pgids, vec![10, 20, 30]);
     }
+
+    #[test]
+    fn from_args_exclude_pid_caret() {
+        let args = Args::parse_from(["lsofrs", "-p", "^1,^2,^3"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.exclude_pids, vec![1, 2, 3]);
+        assert!(f.pids.is_empty());
+    }
+
+    #[test]
+    fn from_args_field_output_not_in_filter() {
+        let args = Args::parse_from(["lsofrs", "-F", "pcfn"]);
+        let f = Filter::from_args(&args);
+        assert!(f.files.is_empty());
+        assert!(f.pids.is_empty());
+    }
 }

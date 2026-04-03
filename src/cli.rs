@@ -618,4 +618,87 @@ mod tests {
         assert!(args.net_map);
         assert!(args.json);
     }
+
+    #[test]
+    fn parse_watch_path() {
+        let args = Args::parse_from(["lsofrs", "--watch", "/tmp/lsofrs-watch"]);
+        assert_eq!(args.watch.as_deref(), Some("/tmp/lsofrs-watch"));
+    }
+
+    #[test]
+    fn parse_top_bare() {
+        let args = Args::parse_from(["lsofrs", "--top"]);
+        assert_eq!(args.top, Some(None));
+    }
+
+    #[test]
+    fn parse_top_with_limit() {
+        let args = Args::parse_from(["lsofrs", "--top", "7"]);
+        assert_eq!(args.top, Some(Some(7)));
+    }
+
+    #[test]
+    fn parse_tui() {
+        let args = Args::parse_from(["lsofrs", "--tui"]);
+        assert!(args.tui);
+    }
+
+    #[test]
+    fn parse_theme_override() {
+        let args = Args::parse_from(["lsofrs", "--tui", "--theme", "matrix"]);
+        assert_eq!(args.theme_name, "matrix");
+    }
+
+    #[test]
+    fn parse_color_always() {
+        let args = Args::parse_from(["lsofrs", "--color", "always"]);
+        assert_eq!(args.color, "always");
+    }
+
+    #[test]
+    fn parse_color_never() {
+        let args = Args::parse_from(["lsofrs", "--color", "never"]);
+        assert_eq!(args.color, "never");
+    }
+
+    #[test]
+    fn parse_dir_long_form() {
+        let args = Args::parse_from(["lsofrs", "--dir", "/var/tmp"]);
+        assert_eq!(args.dir.as_deref(), Some("/var/tmp"));
+    }
+
+    #[test]
+    fn parse_leak_detect_from_cli_with_spec() {
+        let args = Args::parse_from(["lsofrs", "--leak-detect", "12,6"]);
+        assert_eq!(args.leak_detect, Some(Some("12,6".to_string())));
+        assert_eq!(args.leak_detect_params(), Some((12, 6)));
+    }
+
+    #[test]
+    fn parse_leak_detect_from_cli_flag_only() {
+        let args = Args::parse_from(["lsofrs", "--leak-detect"]);
+        assert_eq!(args.leak_detect, Some(None));
+        assert_eq!(args.leak_detect_params(), Some((5, 3)));
+    }
+
+    #[test]
+    fn parse_monitor_with_theme_and_color() {
+        let args = Args::parse_from(["lsofrs", "-W", "--theme", "ice-breaker", "--color", "never"]);
+        assert!(args.monitor);
+        assert_eq!(args.theme_name, "ice-breaker");
+        assert_eq!(args.color, "never");
+    }
+
+    #[test]
+    fn parse_summary_with_csv_is_valid_args() {
+        let args = Args::parse_from(["lsofrs", "--summary", "--csv"]);
+        assert!(args.summary);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_follow_pid() {
+        let args = Args::parse_from(["lsofrs", "--follow", "4242"]);
+        assert_eq!(args.follow, Some(4242));
+    }
 }
