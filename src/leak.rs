@@ -220,6 +220,16 @@ mod tests {
     }
 
     #[test]
+    fn two_pids_tracked_independently() {
+        let mut ld = LeakDetector::new(2);
+        ld.update(&[make_proc(100, "a", 5), make_proc(200, "b", 5)]);
+        ld.update(&[make_proc(100, "a", 6), make_proc(200, "b", 6)]);
+        ld.update(&[make_proc(100, "a", 7), make_proc(200, "b", 7)]);
+        assert!(ld.table.contains_key(&100));
+        assert!(ld.table.contains_key(&200));
+    }
+
+    #[test]
     fn leak_detected_on_monotonic_increase() {
         let mut ld = LeakDetector::new(3);
         for i in 0..5 {

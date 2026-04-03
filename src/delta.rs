@@ -170,6 +170,15 @@ mod tests {
     }
 
     #[test]
+    fn count_gone_on_empty_iteration_is_zero() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 0);
+        assert_eq!(dt.new_count, 0);
+    }
+
+    #[test]
     fn first_iteration_all_new() {
         let mut dt = DeltaTracker::new();
         dt.begin_iteration();
