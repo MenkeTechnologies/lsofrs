@@ -14,6 +14,21 @@ fn first_line(bytes: &[u8]) -> String {
         .to_string()
 }
 
+/// Piped columnar mode uses plain titles, but padding widths depend on live FD data,
+/// so two invocations are not guaranteed to produce byte-identical header lines.
+fn assert_pipe_plain_header(line: &str) {
+    assert!(line.contains("COMMAND"), "{line}");
+    assert!(line.contains("PID"), "{line}");
+    assert!(
+        !line.contains("PROCESS"),
+        "piped plain header must not use PROCESS: {line}"
+    );
+    assert!(
+        !line.contains("PRC"),
+        "piped plain header must not use PRC: {line}"
+    );
+}
+
 #[test]
 fn color_never_uses_plain_column_titles() {
     let my_pid = std::process::id().to_string();
@@ -75,12 +90,8 @@ fn color_auto_when_piped_matches_never_header_row() {
         .output()
         .unwrap();
     assert!(out_auto.status.success() && out_never.status.success());
-    // Full stdout can differ between runs (FD set changes); header row is stable.
-    assert_eq!(
-        first_line(&out_auto.stdout),
-        first_line(&out_never.stdout),
-        "header row must match for auto vs never when piped"
-    );
+    assert_pipe_plain_header(&first_line(&out_auto.stdout));
+    assert_pipe_plain_header(&first_line(&out_never.stdout));
 }
 
 #[test]
@@ -104,11 +115,8 @@ fn unknown_color_value_falls_back_to_auto_behavior() {
         .unwrap();
     let out_auto = lsofrs().args(["-p", &my_pid]).output().unwrap();
     assert!(out_bad.status.success() && out_auto.status.success());
-    assert_eq!(
-        first_line(&out_bad.stdout),
-        first_line(&out_auto.stdout),
-        "invalid --color should match auto (non-TTY) header"
-    );
+    assert_pipe_plain_header(&first_line(&out_bad.stdout));
+    assert_pipe_plain_header(&first_line(&out_auto.stdout));
 }
 
 #[test]

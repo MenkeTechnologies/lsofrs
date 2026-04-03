@@ -1,0 +1,131 @@
+//! CLI combinations and structured JSON smoke tests (non-interactive).
+
+use std::process::Command;
+
+fn lsofrs() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_lsofrs"))
+}
+
+#[test]
+fn json_two_pids_or_mode_is_array() {
+    let a = std::process::id().to_string();
+    let b = "1".to_string();
+    let out = lsofrs()
+        .args(["-J", "-p", &format!("{a},{b}")])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(
+        !v.is_empty(),
+        "OR of two PIDs should return at least the matching process"
+    );
+}
+
+#[test]
+fn json_and_mode_with_pid_and_inet_no_panic() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-a", "-p", &my_pid, "-i", "TCP"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn tree_json_self_pid_is_non_empty_value() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.trim().is_empty());
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(!v.is_null());
+}
+
+#[test]
+fn summary_json_parses_and_has_keys() {
+    let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    match v {
+        serde_json::Value::Object(ref m) => {
+            assert!(!m.is_empty(), "summary object should have keys");
+        }
+        serde_json::Value::Array(ref a) => {
+            assert!(!a.is_empty(), "summary array should be non-empty");
+        }
+        _ => panic!("summary --json should be object or array"),
+    }
+}
+
+#[test]
+fn net_map_json_is_structured() {
+    let out = lsofrs().args(["--net-map", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(
+        v.is_array() || v.is_object(),
+        "net-map --json should be JSON array or object"
+    );
+}
+
+#[test]
+fn pipe_chain_json_top_level_array_or_object() {
+    let out = lsofrs().args(["--pipe-chain", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array() || v.is_object());
+}
+
+#[test]
+fn stale_json_top_level_object_with_stale_fds() {
+    let out = lsofrs().args(["--stale", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stale --json should be an object");
+    assert!(obj.contains_key("stale_fds"));
+}
+
+#[test]
+fn default_output_stderr_empty_on_success() {
+    let out = lsofrs().output().unwrap();
+    assert!(out.status.success());
+    assert!(
+        out.stderr.is_empty(),
+        "default run stderr should be empty on success"
+    );
+}
+
+#[test]
+fn json_stderr_empty_on_success() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn csv_stderr_empty_on_success() {
+    let out = lsofrs().arg("--csv").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn exclude_user_syntax_no_crash() {
+    let out = lsofrs().args(["-u", "^root"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn exclude_pid_syntax_no_crash() {
+    let out = lsofrs().args(["-p", "^1"]).output().unwrap();
+    assert!(out.status.success());
+}
