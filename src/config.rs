@@ -258,4 +258,15 @@ mod tests {
         assert_eq!(c.c1, c2.c1);
         assert_eq!(c.c6, c2.c6);
     }
+
+    #[test]
+    fn prefs_pinned_pids_roundtrip() {
+        let p = Prefs {
+            pinned_pids: vec![1, 2, 999],
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.pinned_pids, vec![1, 2, 999]);
+    }
 }

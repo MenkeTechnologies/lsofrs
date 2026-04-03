@@ -170,4 +170,14 @@ mod tests {
         )];
         print_csv(&procs);
     }
+
+    #[test]
+    fn print_csv_pipe_in_name_field_no_panic() {
+        let procs = vec![make_proc(
+            1,
+            "writer",
+            vec![make_file(1, FileType::Pipe, "pipe:[12345]")],
+        )];
+        print_csv(&procs);
+    }
 }

@@ -664,4 +664,13 @@ mod tests {
         )];
         print_field_output(&procs, "pfx!z", '\n');
     }
+
+    #[test]
+    fn print_field_output_pgid_ppid_username_no_panic() {
+        let mut p = make_proc(7, "cmd", vec![make_file(3, FileType::Reg, "/x")]);
+        p.pgid = 99;
+        p.ppid = 100;
+        p.uid = 501;
+        print_field_output(std::slice::from_ref(&p), "pgRuL", '\n');
+    }
 }

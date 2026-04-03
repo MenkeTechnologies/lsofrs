@@ -352,4 +352,12 @@ mod tests {
         let theme = Theme::new(false);
         dt.print_gone(&theme);
     }
+
+    #[test]
+    fn print_summary_zero_counts_no_panic() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        let theme = Theme::new(false);
+        dt.print_summary(&theme);
+    }
 }

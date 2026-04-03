@@ -1402,4 +1402,28 @@ mod tests {
                 .any(|x| matches!(x, FdFilter::Range(0, 7)))
         );
     }
+
+    #[test]
+    fn from_args_two_command_regexes() {
+        let args = Args::parse_from(["lsofrs", "-c", "/foo/,/bar/"]);
+        let f = Filter::from_args(&args);
+        assert!(f.commands.is_empty());
+        assert_eq!(f.command_regexes.len(), 2);
+    }
+
+    #[test]
+    fn from_args_exclude_uid_zero_only() {
+        let args = Args::parse_from(["lsofrs", "-u", "^0"]);
+        let f = Filter::from_args(&args);
+        assert!(f.usernames.is_empty());
+        assert_eq!(f.exclude_uids, vec![0]);
+    }
+
+    #[test]
+    fn from_args_unix_only_sets_unix_socket() {
+        let args = Args::parse_from(["lsofrs", "-U"]);
+        let f = Filter::from_args(&args);
+        assert!(f.unix_socket);
+        assert!(!f.nfs_only);
+    }
 }

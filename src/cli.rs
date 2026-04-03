@@ -845,4 +845,36 @@ mod tests {
         assert!(args.no_port_lookup);
         assert_eq!(args.inet.as_deref(), Some("TCP"));
     }
+
+    #[test]
+    fn parse_csv_json_terse_flags() {
+        let args = Args::parse_from(["lsofrs", "--csv", "-J", "-t"]);
+        assert!(args.csv_output);
+        assert!(args.json);
+        assert!(args.terse);
+    }
+
+    #[test]
+    fn parse_repeat_delta_json() {
+        let args = Args::parse_from(["lsofrs", "-r", "3", "--delta", "-J"]);
+        assert_eq!(args.repeat, Some(3));
+        assert!(args.delta);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_stale_net_map_json_combo() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--net-map", "-J"]);
+        assert!(args.stale);
+        assert!(args.net_map);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_monitor_top_and_csv() {
+        let args = Args::parse_from(["lsofrs", "-W", "--top", "3", "--csv"]);
+        assert!(args.monitor);
+        assert_eq!(args.top, Some(Some(3)));
+        assert!(args.csv_output);
+    }
 }
