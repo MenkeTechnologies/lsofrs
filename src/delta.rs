@@ -306,4 +306,18 @@ mod tests {
         assert_eq!(dt.gone_count, 1);
         assert_eq!(dt.new_count, 1);
     }
+
+    #[test]
+    fn classify_other_pid_is_new_even_if_name_matches() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "a", vec![("3", "/shared")]));
+        dt.count_gone();
+
+        dt.begin_iteration();
+        dt.record(&make_proc(200, "b", vec![("3", "/shared")]));
+
+        assert_eq!(dt.classify(200, "3u", "/shared"), DeltaStatus::New);
+        assert_eq!(dt.classify(100, "3u", "/shared"), DeltaStatus::Unchanged);
+    }
 }

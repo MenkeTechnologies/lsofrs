@@ -1331,4 +1331,16 @@ mod tests {
         assert!(f.files.is_empty());
         assert!(f.pids.is_empty());
     }
+
+    #[test]
+    fn from_args_inet_udp_sets_protocol_filter() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.protocol.as_deref() == Some("UDP"))
+        );
+    }
 }

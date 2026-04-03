@@ -701,4 +701,31 @@ mod tests {
         let args = Args::parse_from(["lsofrs", "--follow", "4242"]);
         assert_eq!(args.follow, Some(4242));
     }
+
+    #[test]
+    fn parse_inet_udp_value() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP"]);
+        assert_eq!(args.inet.as_deref(), Some("UDP"));
+    }
+
+    #[test]
+    fn parse_inet_4tcp_combined_token() {
+        let args = Args::parse_from(["lsofrs", "-i", "4TCP:22"]);
+        assert_eq!(args.inet.as_deref(), Some("4TCP:22"));
+    }
+
+    #[test]
+    fn parse_repeat_delta_json_combo() {
+        let args = Args::parse_from(["lsofrs", "-r", "2", "--delta", "-J"]);
+        assert_eq!(args.repeat, Some(2));
+        assert!(args.delta);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_watch_with_json_flags() {
+        let args = Args::parse_from(["lsofrs", "--watch", "/tmp/x", "--json"]);
+        assert_eq!(args.watch.as_deref(), Some("/tmp/x"));
+        assert!(args.json);
+    }
 }

@@ -374,6 +374,64 @@ mod tests {
         assert_eq!(FileType::Unknown("0014".to_string()).as_str(), "0014");
     }
 
+    // ── FdName ────────────────────────────────────────────────────────
+
+    #[test]
+    fn fd_name_as_display_special_fds() {
+        assert_eq!(FdName::Cwd.as_display(), "cwd");
+        assert_eq!(FdName::Rtd.as_display(), "rtd");
+        assert_eq!(FdName::Txt.as_display(), "txt");
+        assert_eq!(FdName::Mem.as_display(), "mem");
+        assert_eq!(FdName::Err.as_display(), "err");
+        assert_eq!(FdName::Other("foo".into()).as_display(), "foo");
+    }
+
+    #[test]
+    fn fd_name_with_access_number_suffixes() {
+        assert_eq!(FdName::Number(3).with_access(Access::Read), "3r");
+        assert_eq!(FdName::Number(3).with_access(Access::Write), "3w");
+        assert_eq!(FdName::Number(3).with_access(Access::ReadWrite), "3u");
+        assert_eq!(FdName::Number(3).with_access(Access::None), "3");
+    }
+
+    #[test]
+    fn fd_name_with_access_non_numeric_ignores_access() {
+        assert_eq!(FdName::Cwd.with_access(Access::ReadWrite), "cwd");
+        assert_eq!(FdName::Mem.with_access(Access::Write), "mem");
+    }
+
+    // ── TcpState ──────────────────────────────────────────────────────
+
+    #[test]
+    fn tcp_state_from_raw_maps_kernel_codes() {
+        assert_eq!(TcpState::from_raw(0).as_str(), "CLOSED");
+        assert_eq!(TcpState::from_raw(1).as_str(), "LISTEN");
+        assert_eq!(TcpState::from_raw(4).as_str(), "ESTABLISHED");
+        assert_eq!(TcpState::from_raw(10).as_str(), "TIME_WAIT");
+    }
+
+    #[test]
+    fn tcp_state_from_raw_unknown_numeric() {
+        let s = TcpState::from_raw(99);
+        assert!(matches!(s, TcpState::Unknown(99)));
+        assert_eq!(s.as_str(), "UNKNOWN");
+    }
+
+    #[test]
+    fn tcp_state_display_matches_as_str() {
+        let s = TcpState::Established;
+        assert_eq!(format!("{s}"), s.as_str());
+    }
+
+    // ── DeltaStatus ───────────────────────────────────────────────────
+
+    #[test]
+    fn delta_status_equality() {
+        assert_eq!(DeltaStatus::New, DeltaStatus::New);
+        assert_ne!(DeltaStatus::New, DeltaStatus::Unchanged);
+        assert_ne!(DeltaStatus::Gone, DeltaStatus::Unchanged);
+    }
+
     #[test]
     fn file_type_display() {
         assert_eq!(format!("{}", FileType::Reg), "REG");
