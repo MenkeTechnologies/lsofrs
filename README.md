@@ -390,6 +390,10 @@ autoload -Uz compinit && compinit
 
 Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **FreeBSD** (sysctl + procfs). Platform modules are gated behind `#[cfg(target_os)]`. Process gathering is parallelized with rayon.
 
+### Development and CI
+
+The repo includes `rust-toolchain.toml` (stable + `rustfmt` / `clippy`) so local builds and GitHub Actions agree on the compiler and edition. Run `cargo test` for unit tests (`src/**`) and integration tests (`tests/`). CI runs `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo doc` with warnings denied, and `cargo test` on Linux and macOS runners.
+
 ### Key Design Decisions
 
 - **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.

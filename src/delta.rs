@@ -269,4 +269,32 @@ mod tests {
         assert_eq!(dt.gone_count, 1);
         assert_eq!(dt.new_count, 0);
     }
+
+    #[test]
+    fn process_removed_entirely_counts_all_fds_gone() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "gone", vec![("3", "/a"), ("4", "/b")]));
+        dt.count_gone();
+
+        dt.begin_iteration();
+        // No record — curr empty, both keys from prev are gone
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 2);
+        assert_eq!(dt.new_count, 0);
+    }
+
+    #[test]
+    fn same_fd_new_name_counts_new_not_unchanged() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/first")]));
+        dt.count_gone();
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/second")]));
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 1);
+    }
 }

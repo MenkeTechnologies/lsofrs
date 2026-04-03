@@ -197,4 +197,12 @@ mod tests {
         let procs = vec![make_proc(1, "test", vec![f])];
         print_json(&procs);
     }
+
+    #[test]
+    fn print_json_name_append_deleted() {
+        let mut f = make_file(3, FileType::Reg, "/tmp/zombie");
+        f.name_append = Some("(deleted)".to_string());
+        let procs = vec![make_proc(1, "holder", vec![f])];
+        print_json(&procs);
+    }
 }
