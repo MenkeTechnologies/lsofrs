@@ -94,6 +94,16 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_tab_only_unquoted() {
+        assert_eq!(csv_quote("a\tb"), "a\tb");
+    }
+
+    #[test]
+    fn csv_quote_comma_and_quotes() {
+        assert_eq!(csv_quote("a,\"b\",c"), "\"a,\"\"b\"\",c\"");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }
