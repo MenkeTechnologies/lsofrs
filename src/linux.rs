@@ -486,7 +486,7 @@ fn process_socket(
 fn format_inet_name(
     local: &InetAddr,
     foreign: &InetAddr,
-    protocol: &str,
+    _protocol: &str,
     state: &Option<TcpState>,
 ) -> String {
     let local_str = format_endpoint(local);
@@ -542,6 +542,7 @@ mod tests {
         let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
         assert_eq!(cmd, "Web Content");
         assert_eq!(ppid, 100);
+        assert_eq!(pgid, 5678);
     }
 
     #[test]
@@ -550,6 +551,7 @@ mod tests {
         let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
         assert_eq!(cmd, "foo (bar)");
         assert_eq!(ppid, 1);
+        assert_eq!(pgid, 999);
     }
 
     // ── parse_uid ───────────────────────────────────────────────────

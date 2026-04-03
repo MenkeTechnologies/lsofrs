@@ -1105,6 +1105,77 @@ fn terse_with_dir() {
     }
 }
 
+// ── Help: additional CLI surface ──────────────────────────────────────
+
+#[test]
+fn help_contains_leak_detect() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("--leak-detect"));
+}
+
+#[test]
+fn help_contains_monitor_short_or_long() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("--monitor") && s.contains("-W"),
+        "help should document monitor short and long flags"
+    );
+}
+
+#[test]
+fn help_contains_follow() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("--follow"));
+}
+
+#[test]
+fn help_contains_top_mode() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("--top"));
+}
+
+#[test]
+fn help_contains_stale() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("--stale"));
+}
+
+#[test]
+fn help_contains_ports() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains("--ports"));
+}
+
+#[test]
+fn json_tcp_filter_is_valid_array() {
+    let out = lsofrs().args(["-J", "-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_udp_filter_is_valid_array() {
+    let out = lsofrs().args(["--json", "-i", "UDP"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v.is_array());
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 fn whoami() -> String {
