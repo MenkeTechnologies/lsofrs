@@ -1272,4 +1272,47 @@ mod tests {
         let f = Filter::from_args(&args);
         assert_eq!(f.dir_recurse.as_deref(), Some("/var/log"));
     }
+
+    #[test]
+    fn from_args_terse_propagates() {
+        let args = Args::parse_from(["lsofrs", "-t"]);
+        let f = Filter::from_args(&args);
+        assert!(f.terse);
+    }
+
+    #[test]
+    fn from_args_and_mode_propagates() {
+        let args = Args::parse_from(["lsofrs", "-a"]);
+        let f = Filter::from_args(&args);
+        assert!(f.and_mode);
+    }
+
+    #[test]
+    fn from_args_nfs_and_unix_socket() {
+        let args = Args::parse_from(["lsofrs", "-N", "-U"]);
+        let f = Filter::from_args(&args);
+        assert!(f.nfs_only);
+        assert!(f.unix_socket);
+    }
+
+    #[test]
+    fn from_args_file_operands() {
+        let args = Args::parse_from(["lsofrs", "/tmp/a", "/tmp/b"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.files, vec!["/tmp/a".to_string(), "/tmp/b".to_string()]);
+    }
+
+    #[test]
+    fn from_args_csv_output_not_in_filter() {
+        let args = Args::parse_from(["lsofrs", "--csv"]);
+        let f = Filter::from_args(&args);
+        assert!(f.files.is_empty());
+    }
+
+    #[test]
+    fn from_args_pgids_list() {
+        let args = Args::parse_from(["lsofrs", "-g", "10,20,30"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.pgids, vec![10, 20, 30]);
+    }
 }
