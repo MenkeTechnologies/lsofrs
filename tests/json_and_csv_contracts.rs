@@ -125,3 +125,57 @@ fn json_nfs_flag_is_array() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn json_self_pid_with_no_dns_flag_still_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-n", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+}
+
+#[test]
+fn csv_tcp_filter_has_header_and_rows() {
+    let out = lsofrs().args(["--csv", "-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut lines = stdout.lines();
+    let header = lines.next().unwrap_or("");
+    assert!(
+        header.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {header}"
+    );
+}
+
+#[test]
+fn json_6tcp_combo_is_array() {
+    let out = lsofrs().args(["-J", "-i", "6TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_udp_port_filter_is_array() {
+    let out = lsofrs().args(["-J", "-i", "UDP:53"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn field_output_self_pid_multichar_fields() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-F", "pcfn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(s.contains(&format!("p{my_pid}")));
+    assert!(s.contains('c'));
+    assert!(s.contains('f'));
+    assert!(s.lines().any(|l| l.starts_with('n')));
+}

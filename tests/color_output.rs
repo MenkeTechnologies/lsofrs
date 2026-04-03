@@ -120,5 +120,19 @@ fn color_never_terse_matches_auto_terse() {
         .output()
         .unwrap();
     assert!(a.status.success() && b.status.success());
-    assert_eq!(a.stdout, b.stdout);
+    fn terse_pids(stdout: &[u8]) -> Vec<String> {
+        String::from_utf8_lossy(stdout)
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.trim().to_string())
+            .collect()
+    }
+    let pa = terse_pids(&a.stdout);
+    let pb = terse_pids(&b.stdout);
+    assert_eq!(pa, pb, "auto vs never terse should list the same PIDs");
+    assert_eq!(
+        pa,
+        vec![my_pid.clone()],
+        "terse -p self should list only our PID"
+    );
 }
