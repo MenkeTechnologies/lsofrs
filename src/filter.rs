@@ -670,6 +670,13 @@ mod tests {
         assert!(matches!(&filters[0], FdFilter::Name(s) if s == "txt"));
     }
 
+    #[test]
+    fn fd_filter_empty_string_becomes_name() {
+        let mut filters = vec![];
+        parse_fd_filter("", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Name(s) if s.is_empty()));
+    }
+
     // ── matches_process tests ───────────────────────────────────────
 
     #[test]
@@ -1358,5 +1365,17 @@ mod tests {
         let args = Args::parse_from(["lsofrs", "-p", " 42 , 43 "]);
         let f = Filter::from_args(&args);
         assert_eq!(f.pids, vec![42, 43]);
+    }
+
+    #[test]
+    fn from_args_exclude_fd_range() {
+        let args = Args::parse_from(["lsofrs", "-d", "^0-7"]);
+        let f = Filter::from_args(&args);
+        assert!(f.fd_exclude);
+        assert!(
+            f.fd_filters
+                .iter()
+                .any(|x| matches!(x, FdFilter::Range(0, 7)))
+        );
     }
 }

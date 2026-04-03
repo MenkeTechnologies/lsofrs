@@ -756,4 +756,41 @@ mod tests {
         assert!(args.ports);
         assert!(args.csv_output);
     }
+
+    #[test]
+    fn parse_net_map_json_csv_combo() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "-J", "--csv"]);
+        assert!(args.net_map);
+        assert!(args.json);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_top_with_json() {
+        let args = Args::parse_from(["lsofrs", "--top", "12", "-J"]);
+        assert_eq!(args.top, Some(Some(12)));
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_pipe_chain_with_csv() {
+        let args = Args::parse_from(["lsofrs", "--pipe-chain", "--csv"]);
+        assert!(args.pipe_chain);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_leak_detect_params_with_json() {
+        let args = Args::parse_from(["lsofrs", "--leak-detect", "8,4", "-J"]);
+        assert_eq!(args.leak_detect_params(), Some((8, 4)));
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_summary_json_and_delta() {
+        let args = Args::parse_from(["lsofrs", "--summary", "--json", "--delta"]);
+        assert!(args.summary);
+        assert!(args.json);
+        assert!(args.delta);
+    }
 }

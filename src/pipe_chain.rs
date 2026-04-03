@@ -267,6 +267,18 @@ mod tests {
     }
 
     #[test]
+    fn pipe_identifier_generic_sock_none() {
+        let f = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::ReadWrite,
+            file_type: FileType::Sock,
+            name: "socket".to_string(),
+            ..Default::default()
+        };
+        assert!(pipe_identifier(&f).is_none());
+    }
+
+    #[test]
     fn pipe_identifier_pipe_fallback_name() {
         let f = make_pipe(3, "some-pipe-name");
         let result = pipe_identifier(&f);

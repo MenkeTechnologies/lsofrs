@@ -320,4 +320,24 @@ mod tests {
         assert_eq!(dt.classify(200, "3u", "/shared"), DeltaStatus::New);
         assert_eq!(dt.classify(100, "3u", "/shared"), DeltaStatus::Unchanged);
     }
+
+    #[test]
+    fn print_summary_no_panic() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a")]));
+        dt.count_gone();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a"), ("4", "/b")]));
+        dt.count_gone();
+        let theme = Theme::new(false);
+        dt.print_summary(&theme);
+    }
+
+    #[test]
+    fn print_gone_when_prev_empty_no_panic() {
+        let dt = DeltaTracker::new();
+        let theme = Theme::new(false);
+        dt.print_gone(&theme);
+    }
 }

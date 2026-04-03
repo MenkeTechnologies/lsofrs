@@ -242,4 +242,20 @@ mod tests {
         let p2: Prefs = toml::from_str(&s).unwrap();
         assert!(p2.hover_tooltips);
     }
+
+    #[test]
+    fn custom_theme_colors_toml_roundtrip() {
+        let c = CustomThemeColors {
+            c1: 11,
+            c2: 22,
+            c3: 33,
+            c4: 44,
+            c5: 55,
+            c6: 66,
+        };
+        let s = toml::to_string(&c).unwrap();
+        let c2: CustomThemeColors = toml::from_str(&s).unwrap();
+        assert_eq!(c.c1, c2.c1);
+        assert_eq!(c.c6, c2.c6);
+    }
 }
