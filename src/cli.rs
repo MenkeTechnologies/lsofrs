@@ -728,4 +728,32 @@ mod tests {
         assert_eq!(args.watch.as_deref(), Some("/tmp/x"));
         assert!(args.json);
     }
+
+    #[test]
+    fn parse_nul_terminator_with_json() {
+        let args = Args::parse_from(["lsofrs", "-0", "-J"]);
+        assert!(args.nul_terminator);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_tree_with_csv_flags() {
+        let args = Args::parse_from(["lsofrs", "--tree", "--csv"]);
+        assert!(args.tree);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_stale_with_csv() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--csv"]);
+        assert!(args.stale);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_ports_with_csv() {
+        let args = Args::parse_from(["lsofrs", "--ports", "--csv"]);
+        assert!(args.ports);
+        assert!(args.csv_output);
+    }
 }

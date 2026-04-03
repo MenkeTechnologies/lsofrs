@@ -229,4 +229,17 @@ mod tests {
         assert!(!s.contains("sort_frozen"));
         assert!(!s.contains("compact_view"));
     }
+
+    #[test]
+    fn prefs_invalid_toml_fails_parse() {
+        assert!(toml::from_str::<Prefs>("not valid toml {{{").is_err());
+    }
+
+    #[test]
+    fn prefs_roundtrip_preserves_hover_tooltips_default_true() {
+        let p = Prefs::default();
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert!(p2.hover_tooltips);
+    }
 }

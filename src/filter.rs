@@ -1343,4 +1343,20 @@ mod tests {
                 .any(|nf| nf.protocol.as_deref() == Some("UDP"))
         );
     }
+
+    #[test]
+    fn from_args_inet_host_only_propagates() {
+        let args = Args::parse_from(["lsofrs", "-i", "@203.0.113.5"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].host.as_deref(), Some("203.0.113.5"));
+        assert!(f.network_filters[0].port_start.is_none());
+    }
+
+    #[test]
+    fn from_args_pid_trims_each_token() {
+        let args = Args::parse_from(["lsofrs", "-p", " 42 , 43 "]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.pids, vec![42, 43]);
+    }
 }

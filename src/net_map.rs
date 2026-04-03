@@ -235,7 +235,7 @@ fn print_net_map_json(entries: &[NetMapEntry]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
         Process {
@@ -273,6 +273,29 @@ mod tests {
         }
     }
 
+    fn make_tcp6_conn(fd: i32, foreign_addr: IpAddr, foreign_port: u16) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv6,
+            name: format!("[::1]:1234->{foreign_addr}"),
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                tcp_state: Some(TcpState::Established),
+                local: InetAddr {
+                    addr: Some(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+                    port: 1234,
+                },
+                foreign: InetAddr {
+                    addr: Some(foreign_addr),
+                    port: foreign_port,
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn print_net_map_empty_no_panic() {
         let theme = Theme::new(false);
@@ -288,6 +311,15 @@ mod tests {
             make_proc(200, "wget", vec![make_tcp_conn(3, remote, 443)]),
         ];
         print_net_map(&procs, &theme, false);
+    }
+
+    #[test]
+    fn print_net_map_ipv6_remote_no_panic() {
+        let theme = Theme::new(false);
+        let remote = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
+        let procs = vec![make_proc(100, "app", vec![make_tcp6_conn(3, remote, 443)])];
+        print_net_map(&procs, &theme, false);
+        print_net_map(&procs, &theme, true);
     }
 
     #[test]

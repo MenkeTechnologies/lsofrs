@@ -150,4 +150,14 @@ mod tests {
         ];
         print_csv(&procs);
     }
+
+    #[test]
+    fn print_csv_utf8_command_and_path_no_panic() {
+        let procs = vec![make_proc(
+            42,
+            "プロセス",
+            vec![make_file(1, FileType::Reg, "/tmp/文件")],
+        )];
+        print_csv(&procs);
+    }
 }

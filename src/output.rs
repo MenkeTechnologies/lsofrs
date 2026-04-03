@@ -531,6 +531,24 @@ mod tests {
         assert!(w_yes.pgid >= 1);
     }
 
+    #[test]
+    fn col_widths_ppid_only_with_flag() {
+        let p = Process {
+            pid: 1,
+            ppid: 123456,
+            pgid: 1,
+            uid: 0,
+            command: "x".to_string(),
+            files: vec![],
+            sel_flags: 0,
+            sel_state: 0,
+        };
+        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, true);
+        assert_eq!(w_no.ppid, 4);
+        assert!(w_yes.ppid >= 6);
+    }
+
     // ── print_processes smoke tests ─────────────────────────────────
 
     #[test]
@@ -614,5 +632,25 @@ mod tests {
         });
         let procs = vec![make_proc(42, "test", vec![f])];
         print_field_output(&procs, "pcfntaDsoiPTguRL", '\n');
+    }
+
+    #[test]
+    fn print_field_output_nul_terminator_no_panic() {
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_field_output(&procs, "pfn", '\0');
+    }
+
+    #[test]
+    fn print_field_output_unknown_chars_ignored_no_panic() {
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_field_output(&procs, "pfx!z", '\n');
     }
 }
