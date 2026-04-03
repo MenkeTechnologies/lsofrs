@@ -372,4 +372,13 @@ mod tests {
         assert_eq!(dt.gone_count, 2);
         assert_eq!(dt.new_count, 0);
     }
+
+    #[test]
+    fn record_process_with_no_files_has_no_new_entries() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "empty", vec![]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 0);
+    }
 }

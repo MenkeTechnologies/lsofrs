@@ -360,6 +360,12 @@ mod tests {
     }
 
     #[test]
+    fn open_file_default_lock_is_space() {
+        let f = OpenFile::default();
+        assert_eq!(f.lock, ' ');
+    }
+
+    #[test]
     fn file_type_as_str_all_variants() {
         assert_eq!(FileType::Reg.as_str(), "REG");
         assert_eq!(FileType::Dir.as_str(), "DIR");

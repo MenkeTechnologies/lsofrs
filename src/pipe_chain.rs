@@ -289,6 +289,15 @@ mod tests {
     }
 
     #[test]
+    fn pipe_identifier_linux_unix_socket_incomplete_bracket_returns_none() {
+        let f = make_unix(3, "socket:[99");
+        assert!(
+            pipe_identifier(&f).is_none(),
+            "incomplete socket:[ without closing ] has no extracted inode"
+        );
+    }
+
+    #[test]
     fn pipe_identifier_pipe_fallback_name() {
         let f = make_pipe(3, "some-pipe-name");
         let result = pipe_identifier(&f);

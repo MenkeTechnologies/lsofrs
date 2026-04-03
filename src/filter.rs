@@ -1320,6 +1320,22 @@ mod tests {
     }
 
     #[test]
+    fn dir_filter_root_one_level() {
+        let mut f = empty_filter();
+        f.dir = Some("/".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/foo")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/foo/bar")));
+    }
+
+    #[test]
+    fn dir_recurse_root_matches_nested_paths() {
+        let mut f = empty_filter();
+        f.dir_recurse = Some("/".to_string());
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/foo")));
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/a/b/c/d")));
+    }
+
+    #[test]
     fn from_args_dir_flag() {
         let args = Args::parse_from(["lsofrs", "--dir", "/var/log"]);
         let f = Filter::from_args(&args);

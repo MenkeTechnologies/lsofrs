@@ -170,6 +170,20 @@ fn json_files_have_fd_and_name() {
     }
 }
 
+#[test]
+fn json_wins_when_field_output_also_specified() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(!parsed.is_empty());
+    assert!(parsed[0].get("command").is_some());
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]

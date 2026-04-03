@@ -282,4 +282,15 @@ mod tests {
         assert!(p2.sort_frozen);
         assert!(p2.compact_view);
     }
+
+    #[test]
+    fn prefs_active_tab_roundtrip() {
+        let p = Prefs {
+            active_tab: Some(4),
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.active_tab, Some(4));
+    }
 }

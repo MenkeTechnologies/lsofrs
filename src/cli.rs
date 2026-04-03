@@ -915,4 +915,32 @@ mod tests {
         assert!(args.monitor);
         assert!(args.json);
     }
+
+    #[test]
+    fn parse_json_with_field_output() {
+        let args = Args::parse_from(["lsofrs", "-J", "-F", "pcfn"]);
+        assert!(args.json);
+        assert_eq!(args.field_output.as_deref(), Some("pcfn"));
+    }
+
+    #[test]
+    fn parse_field_output_with_terse() {
+        let args = Args::parse_from(["lsofrs", "-F", "pfn", "-t"]);
+        assert_eq!(args.field_output.as_deref(), Some("pfn"));
+        assert!(args.terse);
+    }
+
+    #[test]
+    fn parse_summary_net_map_csv() {
+        let args = Args::parse_from(["lsofrs", "--summary", "--net-map", "--csv"]);
+        assert!(args.summary);
+        assert!(args.net_map);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_inet_colon_port_only() {
+        let args = Args::parse_from(["lsofrs", "-i", ":443"]);
+        assert_eq!(args.inet.as_deref(), Some(":443"));
+    }
 }
