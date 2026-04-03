@@ -396,6 +396,8 @@ The repo includes `rust-toolchain.toml` (stable + `rustfmt` / `clippy`) so local
 
 On macOS and other non-Linux hosts, `cargo clippy` does not type-check `#[cfg(target_os = "linux")]` code. To catch Linux-only issues before push, install the Linux target and run `cargo clippy --target x86_64-unknown-linux-gnu --all-targets -- -D warnings` (same flags as CI).
 
+To see how many test cases `cargo test` executes (library + binary harnesses + each file under `tests/`), run `cargo test` and read the `test result` lines, or use `cargo test 2>&1 | rg 'test result'`. The number of distinct `#[test]` functions in the tree is lower because modules linked from both `src/lib.rs` and the binary run their unit tests twice.
+
 ### Key Design Decisions
 
 - **Zero-copy FFI**: Raw `repr(C)` structs matched to Darwin kernel headers. No intermediate parsing.

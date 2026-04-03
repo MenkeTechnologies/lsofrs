@@ -1,0 +1,127 @@
+//! JSON and CSV output contracts (non-interactive).
+
+use std::process::Command;
+
+fn lsofrs() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_lsofrs"))
+}
+
+#[test]
+fn json_inet_4_filter_is_array() {
+    let out = lsofrs().args(["-J", "-i", "4"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_inet_6_filter_is_array() {
+    let out = lsofrs().args(["--json", "-i", "6"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_inet_port_filter_is_array() {
+    let out = lsofrs().args(["-J", "-i", ":443"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_tcp_port_filter_is_array() {
+    let out = lsofrs().args(["-J", "-i", "TCP:443"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_4tcp_combo_is_array() {
+    let out = lsofrs().args(["-J", "-i", "4TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_self_pid_has_rfc_header() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--csv", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_self_pid_array_of_one_process() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0]["pid"].as_i64().unwrap(), std::process::id() as i64);
+}
+
+#[test]
+fn terse_self_pid_single_line() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0].trim(), my_pid);
+}
+
+#[test]
+fn field_output_self_pid_has_p_token() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "p", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(&format!("p{my_pid}")));
+}
+
+#[test]
+fn version_stdout_only_version_line() {
+    let out = lsofrs().arg("-V").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].contains("lsofrs"));
+}
+
+#[test]
+fn help_stdout_contains_usage_not_stderr() {
+    let out = lsofrs().arg("-h").output().unwrap();
+    assert!(out.status.success());
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("USAGE"),
+        "help on stdout"
+    );
+}
+
+#[test]
+fn json_unix_socket_filter_is_array() {
+    let out = lsofrs().args(["-J", "-U"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_nfs_flag_is_array() {
+    let out = lsofrs().args(["--json", "-N"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
