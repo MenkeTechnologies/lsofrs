@@ -793,4 +793,56 @@ mod tests {
         assert!(args.json);
         assert!(args.delta);
     }
+
+    #[test]
+    fn parse_tui_with_csv() {
+        let args = Args::parse_from(["lsofrs", "--tui", "--csv"]);
+        assert!(args.tui);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_monitor_with_json() {
+        let args = Args::parse_from(["lsofrs", "-W", "-J"]);
+        assert!(args.monitor);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_follow_with_csv() {
+        let args = Args::parse_from(["lsofrs", "--follow", "999", "--csv"]);
+        assert_eq!(args.follow, Some(999));
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_json_and_mode_and_pid() {
+        let args = Args::parse_from(["lsofrs", "-J", "-a", "-p", "7"]);
+        assert!(args.json);
+        assert!(args.and_mode);
+        assert_eq!(args.pid.as_deref(), Some("7"));
+    }
+
+    #[test]
+    fn parse_tree_json_csv_combo() {
+        let args = Args::parse_from(["lsofrs", "--tree", "-J", "--csv"]);
+        assert!(args.tree);
+        assert!(args.json);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_watch_csv_combo() {
+        let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
+        assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_no_lookup_flags_together() {
+        let args = Args::parse_from(["lsofrs", "-n", "-P", "-i", "TCP"]);
+        assert!(args.no_host_lookup);
+        assert!(args.no_port_lookup);
+        assert_eq!(args.inet.as_deref(), Some("TCP"));
+    }
 }

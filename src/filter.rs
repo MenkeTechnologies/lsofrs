@@ -854,6 +854,21 @@ mod tests {
     }
 
     #[test]
+    fn network_protocol_filter_matches_mixed_case_protocol() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("tcp".to_string()),
+            addr_family: None,
+            addr: None,
+            host: None,
+            port_start: None,
+            port_end: None,
+        }];
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 443, 0)));
+    }
+
+    #[test]
     fn network_port_filter() {
         let mut f = empty_filter();
         f.network = true;
@@ -1210,6 +1225,15 @@ mod tests {
         assert!(f.network);
         assert_eq!(f.network_type, Some(6));
         assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
+    fn from_args_inet_6_only_addr_family() {
+        let args = Args::parse_from(["lsofrs", "-i", "6"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_type, Some(6));
+        assert!(f.network_filters.is_empty());
     }
 
     #[test]

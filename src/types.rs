@@ -353,6 +353,13 @@ mod tests {
     // ── FileType ────────────────────────────────────────────────────
 
     #[test]
+    fn file_type_unknown_empty_string_display() {
+        let ft = FileType::Unknown(String::new());
+        assert_eq!(ft.as_str(), "");
+        assert_eq!(format!("{ft}"), "");
+    }
+
+    #[test]
     fn file_type_as_str_all_variants() {
         assert_eq!(FileType::Reg.as_str(), "REG");
         assert_eq!(FileType::Dir.as_str(), "DIR");

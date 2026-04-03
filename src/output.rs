@@ -569,6 +569,17 @@ mod tests {
     }
 
     #[test]
+    fn print_processes_tty_theme_no_panic() {
+        let theme = Theme::new(true);
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_processes(&procs, &theme, false, false, None);
+    }
+
+    #[test]
     fn print_processes_with_pgid_ppid_no_panic() {
         let theme = Theme::new(false);
         let procs = vec![make_proc(

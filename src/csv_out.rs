@@ -160,4 +160,14 @@ mod tests {
         )];
         print_csv(&procs);
     }
+
+    #[test]
+    fn print_csv_empty_command_string_no_panic() {
+        let procs = vec![make_proc(
+            42,
+            "",
+            vec![make_file(0, FileType::Chr, "/dev/null")],
+        )];
+        print_csv(&procs);
+    }
 }
