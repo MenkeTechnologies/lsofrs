@@ -180,4 +180,14 @@ mod tests {
         )];
         print_csv(&procs);
     }
+
+    #[test]
+    fn print_csv_tab_in_field_no_quotes() {
+        let procs = vec![make_proc(
+            1,
+            "a\tb",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        print_csv(&procs);
+    }
 }

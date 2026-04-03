@@ -279,6 +279,16 @@ mod tests {
     }
 
     #[test]
+    fn pipe_identifier_linux_pipe_incomplete_bracket_uses_fallback() {
+        let f = make_pipe(3, "pipe:[123");
+        let r = pipe_identifier(&f);
+        assert!(r.is_some());
+        let (kind, id) = r.unwrap();
+        assert_eq!(kind, "pipe");
+        assert_eq!(id, "pipe:[123");
+    }
+
+    #[test]
     fn pipe_identifier_pipe_fallback_name() {
         let f = make_pipe(3, "some-pipe-name");
         let result = pipe_identifier(&f);

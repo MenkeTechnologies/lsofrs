@@ -269,4 +269,17 @@ mod tests {
         let p2: Prefs = toml::from_str(&s).unwrap();
         assert_eq!(p2.pinned_pids, vec![1, 2, 999]);
     }
+
+    #[test]
+    fn prefs_sort_frozen_compact_roundtrip() {
+        let p = Prefs {
+            sort_frozen: true,
+            compact_view: true,
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert!(p2.sort_frozen);
+        assert!(p2.compact_view);
+    }
 }

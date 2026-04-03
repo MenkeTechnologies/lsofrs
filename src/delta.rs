@@ -360,4 +360,16 @@ mod tests {
         let theme = Theme::new(false);
         dt.print_summary(&theme);
     }
+
+    #[test]
+    fn gone_count_includes_all_prev_keys_when_curr_cleared() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "gone", vec![("3", "/a"), ("4", "/b")]));
+        dt.count_gone();
+        dt.begin_iteration();
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 2);
+        assert_eq!(dt.new_count, 0);
+    }
 }

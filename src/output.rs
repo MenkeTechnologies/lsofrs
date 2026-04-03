@@ -609,6 +609,12 @@ mod tests {
     }
 
     #[test]
+    fn print_terse_duplicate_pid_no_panic() {
+        let procs = vec![make_proc(42, "x", vec![]), make_proc(42, "y", vec![])];
+        print_terse(&procs);
+    }
+
+    #[test]
     fn print_field_output_no_panic() {
         let procs = vec![make_proc(
             42,

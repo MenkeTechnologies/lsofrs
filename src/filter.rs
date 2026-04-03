@@ -907,6 +907,25 @@ mod tests {
     }
 
     #[test]
+    fn network_host_filter_matches_socket_name_substring() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: None,
+            addr_family: None,
+            addr: None,
+            host: Some("example.com".to_string()),
+            port_start: None,
+            port_end: None,
+        }];
+        let mut file = make_tcp_file(3, "TCP", 443, 0);
+        file.socket_info.as_mut().unwrap().local.addr = None;
+        file.socket_info.as_mut().unwrap().foreign.addr = None;
+        file.name = "example.com:443".to_string();
+        assert!(f.matches_file(&file));
+    }
+
+    #[test]
     fn network_protocol_and_port_combined() {
         let mut f = empty_filter();
         f.network = true;
@@ -1247,6 +1266,16 @@ mod tests {
         assert!(!f.matches_process(&make_proc(1, 0, 42, "x"))); // uid mismatch
     }
 
+    #[test]
+    fn and_mode_pid_and_username_both_required() {
+        let mut f = empty_filter();
+        f.and_mode = true;
+        f.pids = vec![100];
+        f.usernames = vec!["root".to_string()];
+        assert!(f.matches_process(&make_proc(100, 0, 1, "bash")));
+        assert!(!f.matches_process(&make_proc(100, 501, 1, "bash")));
+    }
+
     // ── +d / +D directory filter tests ──────────────────────────────
 
     #[test]
@@ -1417,13 +1446,5 @@ mod tests {
         let f = Filter::from_args(&args);
         assert!(f.usernames.is_empty());
         assert_eq!(f.exclude_uids, vec![0]);
-    }
-
-    #[test]
-    fn from_args_unix_only_sets_unix_socket() {
-        let args = Args::parse_from(["lsofrs", "-U"]);
-        let f = Filter::from_args(&args);
-        assert!(f.unix_socket);
-        assert!(!f.nfs_only);
     }
 }

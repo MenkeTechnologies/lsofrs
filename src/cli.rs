@@ -877,4 +877,42 @@ mod tests {
         assert_eq!(args.top, Some(Some(3)));
         assert!(args.csv_output);
     }
+
+    #[test]
+    fn parse_pipe_chain_stale_json() {
+        let args = Args::parse_from(["lsofrs", "--pipe-chain", "--stale", "-J"]);
+        assert!(args.pipe_chain);
+        assert!(args.stale);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_ports_repeat_csv() {
+        let args = Args::parse_from(["lsofrs", "--ports", "-r", "5", "--csv"]);
+        assert!(args.ports);
+        assert_eq!(args.repeat, Some(5));
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_repeat_with_nul_terminator() {
+        let args = Args::parse_from(["lsofrs", "-r", "2", "-0"]);
+        assert_eq!(args.repeat, Some(2));
+        assert!(args.nul_terminator);
+    }
+
+    #[test]
+    fn parse_leak_detect_bare_with_top() {
+        let args = Args::parse_from(["lsofrs", "--leak-detect", "--top", "4"]);
+        assert_eq!(args.leak_detect, Some(None));
+        assert_eq!(args.top, Some(Some(4)));
+    }
+
+    #[test]
+    fn parse_tree_monitor_json() {
+        let args = Args::parse_from(["lsofrs", "--tree", "-W", "-J"]);
+        assert!(args.tree);
+        assert!(args.monitor);
+        assert!(args.json);
+    }
 }
