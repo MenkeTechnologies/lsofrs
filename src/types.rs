@@ -393,6 +393,11 @@ mod tests {
     // ── TcpState ────────────────────────────────────────────────────
 
     #[test]
+    fn tcp_state_from_raw_unknown_low_code() {
+        assert_eq!(TcpState::from_raw(11), TcpState::Unknown(11));
+    }
+
+    #[test]
     fn tcp_state_from_raw_all() {
         assert_eq!(TcpState::from_raw(0), TcpState::Closed);
         assert_eq!(TcpState::from_raw(1), TcpState::Listen);
