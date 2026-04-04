@@ -649,6 +649,25 @@ fn tree_stale_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_tree_stale_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--tree", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "stale wins over csv and tree"
+    );
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "stale wins over tree"
+    );
+}
+
+#[test]
 fn tree_summary_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--tree", "--summary", "--color", "never"])
