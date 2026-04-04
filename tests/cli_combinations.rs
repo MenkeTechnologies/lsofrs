@@ -776,6 +776,21 @@ fn net_map_csv_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_net_map_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "CSV still wins when --csv appears first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_text_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--color", "never"])
