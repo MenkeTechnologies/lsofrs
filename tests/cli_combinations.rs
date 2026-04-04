@@ -356,6 +356,16 @@ fn pipe_chain_text_color_never_stderr_empty() {
 }
 
 #[test]
+fn pipe_chain_wins_over_csv_argv_order_stderr_empty() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn pipe_chain_json_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--json", "--color", "never"])

@@ -207,6 +207,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_nul_byte_unquoted() {
+        assert_eq!(csv_quote("a\u{0}b"), "a\u{0}b");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }
