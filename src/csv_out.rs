@@ -94,6 +94,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_lf_only_field() {
+        assert_eq!(csv_quote("\n"), "\"\n\"");
+    }
+
+    #[test]
     fn csv_quote_crlf_in_field() {
         assert_eq!(csv_quote("a\r\nb"), "\"a\r\nb\"");
     }

@@ -358,3 +358,18 @@ fn pipe_chain_wins_over_tree_when_both_set() {
         "expected pipe-chain output"
     );
 }
+
+#[test]
+fn ports_wins_over_tree_when_both_set() {
+    let out = lsofrs().args(["--ports", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "ports runs before tree in main"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}

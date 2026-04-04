@@ -240,6 +240,13 @@ fn summary_json_short_flag_before_summary_stderr_empty() {
 }
 
 #[test]
+fn stats_json_short_flag_before_stats_stderr_empty() {
+    let out = lsofrs().args(["-J", "--stats"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn pipe_chain_json_long_flag_before_pipe_chain_same_wrapper() {
     let out = lsofrs().args(["--json", "--pipe-chain"]).output().unwrap();
     assert!(out.status.success());

@@ -1123,6 +1123,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_nul_terminator_with_csv() {
+        let args = Args::parse_from(["lsofrs", "-0", "--csv"]);
+        assert!(args.nul_terminator);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_leak_detect_with_monitor_short() {
+        let args = Args::parse_from(["lsofrs", "--leak-detect", "6,3", "-W"]);
+        assert_eq!(args.leak_detect_params(), Some((6, 3)));
+        assert!(args.monitor);
+    }
+
+    #[test]
     fn parse_leak_detect_bare_with_top() {
         let args = Args::parse_from(["lsofrs", "--leak-detect", "--top", "4"]);
         assert_eq!(args.leak_detect, Some(None));
