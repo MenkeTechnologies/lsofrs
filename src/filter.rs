@@ -1447,6 +1447,15 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_tcp_port_65535() {
+        let args = Args::parse_from(["lsofrs", "-i", "TCP:65535"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(65535));
+    }
+
+    #[test]
     fn from_args_inet_port() {
         let args = Args::parse_from(["lsofrs", "-i", ":8080"]);
         let f = Filter::from_args(&args);
@@ -1766,6 +1775,19 @@ mod tests {
             f.network_filters
                 .iter()
                 .any(|nf| { nf.protocol.as_deref() == Some("UDP") && nf.port_start == Some(443) })
+        );
+    }
+
+    #[test]
+    fn from_args_inet_6udp_port_123() {
+        let args = Args::parse_from(["lsofrs", "-i", "6UDP:123"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.network_type, Some(6));
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| { nf.protocol.as_deref() == Some("UDP") && nf.port_start == Some(123) })
         );
     }
 
@@ -2099,6 +2121,19 @@ mod tests {
             f.network_filters
                 .iter()
                 .any(|nf| nf.protocol.as_deref() == Some("UDP") && nf.port_start == Some(443))
+        );
+    }
+
+    #[test]
+    fn from_args_inet_4udp_port_80() {
+        let args = Args::parse_from(["lsofrs", "-i", "4UDP:80"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.network_type, Some(4));
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.protocol.as_deref() == Some("UDP") && nf.port_start == Some(80))
         );
     }
 

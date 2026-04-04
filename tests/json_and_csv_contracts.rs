@@ -1104,6 +1104,75 @@ fn csv_6tcp_port_80_stderr_empty() {
 }
 
 #[test]
+fn json_tcp_port_65535_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "TCP:65535"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_tcp_port_65535_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "-i", "TCP:65535"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_4udp_port_80_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "4UDP:80"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_4udp_port_80_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "4UDP:80"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_6udp_port_123_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "6UDP:123"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_6udp_port_123_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "6UDP:123"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
 fn json_dir_one_level_flag_stderr_empty() {
     let out = lsofrs().args(["-J", "--dir", "/tmp"]).output().unwrap();
     assert!(out.status.success());

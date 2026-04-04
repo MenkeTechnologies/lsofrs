@@ -651,6 +651,25 @@ fn net_map_summary_color_never_stderr_empty() {
 }
 
 #[test]
+fn summary_net_map_summary_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "net-map still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "expected net-map output"
+    );
+}
+
+#[test]
 fn stale_ports_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--stale", "--ports", "--color", "never"])
