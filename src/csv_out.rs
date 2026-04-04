@@ -247,6 +247,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_word_joiner_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{2060}"), "\u{2060}");
+    }
+
+    #[test]
     fn csv_quote_object_replacement_character_unquoted() {
         assert_eq!(csv_quote("a\u{fffc}b"), "a\u{fffc}b");
     }

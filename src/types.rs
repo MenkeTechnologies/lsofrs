@@ -396,6 +396,12 @@ mod tests {
         assert_eq!(FileType::Unknown("0014".to_string()).as_str(), "0014");
     }
 
+    #[test]
+    fn file_type_reg_display_matches_as_str() {
+        let ft = FileType::Reg;
+        assert_eq!(format!("{ft}"), ft.as_str());
+    }
+
     // ── FdName ────────────────────────────────────────────────────────
 
     #[test]

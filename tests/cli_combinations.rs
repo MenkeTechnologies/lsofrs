@@ -911,6 +911,25 @@ fn pipe_chain_summary_color_never_stderr_empty() {
 }
 
 #[test]
+fn summary_pipe_chain_summary_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "pipe-chain still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
 fn ports_tree_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--ports", "--tree", "--color", "never"])
