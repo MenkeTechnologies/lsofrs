@@ -373,6 +373,48 @@ fn json_udp_port_filter_is_array() {
 }
 
 #[test]
+fn json_tcp_at_host_port_is_array() {
+    let out = lsofrs()
+        .args(["-J", "-i", "TCP@127.0.0.1:443"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_udp_at_host_port_is_array() {
+    let out = lsofrs()
+        .args(["--json", "-i", "UDP@127.0.0.1:53"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_6udp_port_combo_is_array() {
+    let out = lsofrs().args(["-J", "-i", "6UDP:53"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_self_pid_fd_exclude_still_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-d", "^0", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn field_output_self_pid_multichar_fields() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()

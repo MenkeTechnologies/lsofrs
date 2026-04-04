@@ -771,6 +771,57 @@ mod tests {
         assert!(matches!(&filters[0], FdFilter::Name(s) if s.is_empty()));
     }
 
+    #[test]
+    fn inet_filter_whitespace_trimmed_tcp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("  TCP:8080  ", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.port_start, Some(8080));
+    }
+
+    #[test]
+    fn inet_filter_invalid_port_suffix_stores_whole_remainder_as_host() {
+        let mut f = empty_filter();
+        parse_inet_filter("example.com:notaport", &mut f);
+        let nf = &f.network_filters[0];
+        assert!(nf.port_start.is_none());
+        assert_eq!(nf.host.as_deref(), Some("example.com:notaport"));
+    }
+
+    #[test]
+    fn inet_filter_tcp_ipv6_literal_host_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("TCP[::1]:443", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.host.as_deref(), Some("[::1]"));
+        assert_eq!(nf.port_start, Some(443));
+    }
+
+    #[test]
+    fn fd_filter_multi_dash_becomes_name_not_range() {
+        let mut filters = vec![];
+        parse_fd_filter("10-20-30", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Name(s) if s == "10-20-30"));
+    }
+
+    #[test]
+    fn fd_filter_reversed_range_matches_no_interior_fd() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Range(10, 3)];
+        assert!(!f.matches_file(&make_file(5, FileType::Reg, "/tmp/x")));
+        assert!(!f.matches_file(&make_file(10, FileType::Reg, "/tmp/x")));
+        assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+    }
+
+    #[test]
+    fn fd_filter_negative_singleton() {
+        let mut filters = vec![];
+        parse_fd_filter("-3", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(-3, -3)));
+    }
+
     // ── matches_process tests ───────────────────────────────────────
 
     #[test]
@@ -1140,6 +1191,23 @@ mod tests {
         let args = Args::parse_from(["lsofrs", "-d", "^0-2"]);
         let f = Filter::from_args(&args);
         assert!(f.fd_exclude);
+    }
+
+    #[test]
+    fn from_args_fd_multi_dash_token_is_name() {
+        let args = Args::parse_from(["lsofrs", "-d", "10-20-30"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.fd_filters.len(), 1);
+        assert!(matches!(&f.fd_filters[0], FdFilter::Name(s) if s == "10-20-30"));
+    }
+
+    #[test]
+    fn from_args_inet_trimmed_spec() {
+        let args = Args::parse_from(["lsofrs", "-i", "  TCP:9090  "]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(9090));
     }
 
     #[test]
