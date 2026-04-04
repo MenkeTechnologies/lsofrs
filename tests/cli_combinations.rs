@@ -528,6 +528,41 @@ fn tree_stale_color_never_stderr_empty() {
 }
 
 #[test]
+fn tree_summary_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--tree", "--summary", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "tree wins over summary"
+    );
+    assert!(s.contains("OPEN FILES"), "expected tree output");
+}
+
+#[test]
+fn net_map_pipe_chain_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "pipe-chain wins over net-map"
+    );
+    assert!(
+        !s.contains("Network Connection Map"),
+        "net-map should not win"
+    );
+}
+
+#[test]
 fn stale_pipe_chain_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--stale", "--pipe-chain", "--color", "never"])

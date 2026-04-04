@@ -232,6 +232,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_object_replacement_character_unquoted() {
+        assert_eq!(csv_quote("a\u{fffc}b"), "a\u{fffc}b");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }
