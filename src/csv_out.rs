@@ -192,6 +192,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_zwj_sequence_without_comma_unquoted() {
+        assert_eq!(csv_quote("a\u{200d}b"), "a\u{200d}b");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }

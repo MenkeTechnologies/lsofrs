@@ -587,6 +587,17 @@ mod tests {
     }
 
     #[test]
+    fn inet_addr_ipv6_loopback_with_port() {
+        use std::net::{IpAddr, Ipv6Addr};
+        let ia = InetAddr {
+            addr: Some(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+            port: 8443,
+        };
+        assert_eq!(ia.port, 8443);
+        assert!(matches!(ia.addr, Some(IpAddr::V6(_))));
+    }
+
+    #[test]
     fn socket_info_default() {
         let s = SocketInfo::default();
         assert_eq!(s.protocol, "");

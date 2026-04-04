@@ -382,3 +382,25 @@ fn field_output_color_never_self_pid_stderr_empty() {
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }
+
+#[test]
+fn json_stale_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["-J", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stale --json should be an object");
+    assert!(obj.contains_key("stale_fds"));
+}
+
+#[test]
+fn json_theme_matrix_stderr_empty() {
+    let out = lsofrs().args(["-J", "--theme", "matrix"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
