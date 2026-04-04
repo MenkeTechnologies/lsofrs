@@ -575,6 +575,15 @@ mod tests {
         assert_eq!(ia.port, 0);
     }
 
+    #[test]
+    fn socket_info_default() {
+        let s = SocketInfo::default();
+        assert_eq!(s.protocol, "");
+        assert!(s.tcp_state.is_none());
+        assert_eq!(s.local.port, 0);
+        assert_eq!(s.foreign.port, 0);
+    }
+
     // ── OpenFile ────────────────────────────────────────────────────
 
     #[test]

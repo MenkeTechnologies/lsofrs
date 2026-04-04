@@ -1766,4 +1766,25 @@ mod tests {
                 && nf.port_start == Some(5353)
         }));
     }
+
+    #[test]
+    fn from_args_inet_4udp_with_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "4UDP:53"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.network_type, Some(4));
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.protocol.as_deref() == Some("UDP") && nf.port_start == Some(53))
+        );
+    }
+
+    #[test]
+    fn from_args_three_command_regexes() {
+        let args = Args::parse_from(["lsofrs", "-c", "/foo/,/bar/,/baz/"]);
+        let f = Filter::from_args(&args);
+        assert!(f.commands.is_empty());
+        assert_eq!(f.command_regexes.len(), 3);
+    }
 }

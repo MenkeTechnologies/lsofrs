@@ -245,3 +245,22 @@ fn columnar_show_pgid_self_pid_stderr_empty() {
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }
+
+#[test]
+fn exclude_two_usernames_no_crash() {
+    let out = lsofrs().args(["-u", "^root,^nobody"]).output().unwrap();
+    assert!(out.status.success());
+}
+
+#[test]
+fn json_no_dns_no_port_lookup_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-n", "-P", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

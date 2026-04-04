@@ -401,6 +401,17 @@ mod tests {
     }
 
     #[test]
+    fn is_listening_udp_protocol_case_insensitive() {
+        let mut f = make_udp_bound(3, 123);
+        if let Some(ref mut si) = f.socket_info {
+            si.protocol = "udp".to_string();
+        }
+        let result = is_listening(&f).unwrap();
+        assert_eq!(result.0, "UDP");
+        assert_eq!(result.2, 123);
+    }
+
+    #[test]
     fn print_ports_empty_no_panic() {
         let theme = Theme::new(false);
         print_ports(&[], &theme, false);

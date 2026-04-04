@@ -731,4 +731,18 @@ mod tests {
         let t = Theme::new(false);
         assert_eq!(t.row_alt(), "");
     }
+
+    #[test]
+    fn theme_color_codes_empty_when_not_tty() {
+        let t = Theme::new(false);
+        assert_eq!(t.reset(), "");
+        assert_eq!(t.cyan(), "");
+        assert_eq!(t.magenta(), "");
+        assert_eq!(t.green(), "");
+        assert_eq!(t.yellow(), "");
+        assert_eq!(t.red(), "");
+        assert_eq!(t.blue(), "");
+        assert_eq!(t.dim(), "");
+        assert_eq!(t.bold(), "");
+    }
 }

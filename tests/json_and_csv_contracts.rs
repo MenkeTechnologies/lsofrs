@@ -646,3 +646,44 @@ fn json_nfs_only_flag_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn json_6udp_explicit_port_is_array() {
+    let out = lsofrs().args(["-J", "-i", "6UDP:53"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_suppress_warnings_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-w", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_nfs_and_unix_socket_combined_stderr_empty() {
+    let out = lsofrs().args(["-J", "-N", "-U"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_fd_filter_cwd_self_pid_is_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-d", "cwd", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
