@@ -121,6 +121,24 @@ fn summary_json_stderr_empty() {
 }
 
 #[test]
+fn tree_json_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stats_alias_json_stderr_empty() {
+    let out = lsofrs().args(["--stats", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn net_map_json_long_flag_before_net_map_same_wrapper() {
     let out = lsofrs().args(["--json", "--net-map"]).output().unwrap();
     assert!(out.status.success());

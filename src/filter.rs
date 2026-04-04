@@ -1367,6 +1367,20 @@ mod tests {
     }
 
     #[test]
+    fn from_args_dir_plus_d_alias() {
+        let args = Args::parse_from(["lsofrs", "--+d", "/var/log"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.dir.as_deref(), Some("/var/log"));
+    }
+
+    #[test]
+    fn from_args_dir_recurse_plus_upper_d_alias() {
+        let args = Args::parse_from(["lsofrs", "--+D", "/var/log"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.dir_recurse.as_deref(), Some("/var/log"));
+    }
+
+    #[test]
     fn from_args_terse_propagates() {
         let args = Args::parse_from(["lsofrs", "-t"]);
         let f = Filter::from_args(&args);

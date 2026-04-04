@@ -687,6 +687,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_suppress_warnings_with_json() {
+        let args = Args::parse_from(["lsofrs", "-w", "-J", "-p", "1"]);
+        assert!(args.suppress_warnings);
+        assert!(args.json);
+        assert_eq!(args.pid.as_deref(), Some("1"));
+    }
+
+    #[test]
     fn parse_leak_detect_from_cli_with_spec() {
         let args = Args::parse_from(["lsofrs", "--leak-detect", "12,6"]);
         assert_eq!(args.leak_detect, Some(Some("12,6".to_string())));

@@ -79,6 +79,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_comma_only_field() {
+        assert_eq!(csv_quote(","), "\",\"");
+    }
+
+    #[test]
     fn csv_quote_with_quotes() {
         assert_eq!(csv_quote("say \"hi\""), "\"say \"\"hi\"\"\"");
     }
