@@ -76,6 +76,23 @@ fn json_with_user_filter_current_user() {
 }
 
 #[test]
+fn json_long_flag_with_user_filter_current_user() {
+    let u = whoami();
+    let out = lsofrs().args(["--json", "-u", &u]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_long_flag_inet_port_only_is_array() {
+    let out = lsofrs().args(["--json", "-i", ":443"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn columnar_with_user_filter() {
     let u = whoami();
     let out = lsofrs().args(["-u", &u]).output().unwrap();

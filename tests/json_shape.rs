@@ -43,6 +43,19 @@ fn json_self_has_uid_number() {
 }
 
 #[test]
+fn json_long_flag_self_pid_uid_numeric() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let uid = &v[0]["uid"];
+    assert!(
+        uid.as_u64().is_some() || uid.as_i64().is_some(),
+        "uid should be numeric with --json: {uid:?}"
+    );
+}
+
+#[test]
 fn json_self_has_pgid_ppid_numbers() {
     let p = self_json_process();
     assert!(p["pgid"].as_i64().is_some());

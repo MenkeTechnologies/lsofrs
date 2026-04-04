@@ -723,6 +723,13 @@ mod tests {
     }
 
     #[test]
+    fn fd_filter_high_number() {
+        let mut filters = vec![];
+        parse_fd_filter("999", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(999, 999)));
+    }
+
+    #[test]
     fn fd_filter_range() {
         let mut filters = vec![];
         parse_fd_filter("0-10", &mut filters);

@@ -131,6 +131,14 @@ fn json_long_combined_npw_flags_is_array() {
 }
 
 #[test]
+fn field_output_self_pid_stderr_empty_on_success() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "p", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn csv_stderr_empty_on_success() {
     let out = lsofrs().arg("--csv").output().unwrap();
     assert!(out.status.success());
