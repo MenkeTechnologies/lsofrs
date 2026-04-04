@@ -283,3 +283,24 @@ fn stats_json_short_flag_before_stats_same_wrapper() {
     assert!(obj.contains_key("summary"));
     assert!(obj["summary"].is_object());
 }
+
+#[test]
+fn net_map_json_json_flag_before_net_map_stderr_empty() {
+    let out = lsofrs().args(["--json", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn pipe_chain_json_json_flag_before_pipe_chain_stderr_empty() {
+    let out = lsofrs().args(["--json", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stats_json_json_flag_before_stats_stderr_empty() {
+    let out = lsofrs().args(["--json", "--stats"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

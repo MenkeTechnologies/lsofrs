@@ -130,3 +130,52 @@ fn field_output_wins_over_columnar_when_no_higher_mode() {
         "field output should contain p<pid>"
     );
 }
+
+#[test]
+fn stale_wins_over_ports_when_both_set() {
+    let out = lsofrs().args(["--stale", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Listening Ports"),
+        "ports branch must not run when stale is set first in main"
+    );
+}
+
+#[test]
+fn ports_wins_over_pipe_chain_when_both_set() {
+    let out = lsofrs().args(["--ports", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports branch runs before pipe-chain in main: {}",
+        s.lines().take(2).collect::<Vec<_>>().join(" | ")
+    );
+}
+
+#[test]
+fn ports_wins_over_net_map_when_both_set() {
+    let out = lsofrs().args(["--ports", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports branch runs before net-map in main"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_net_map_when_both_set() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--net-map"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "pipe-chain runs before net-map in main: {}",
+        s.lines().take(3).collect::<Vec<_>>().join(" | ")
+    );
+}

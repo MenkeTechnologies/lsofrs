@@ -157,6 +157,18 @@ fn json_self_pid_with_suppress_warnings_still_array() {
 }
 
 #[test]
+fn json_self_pid_color_never_still_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--color", "never", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn csv_tcp_filter_has_header_and_rows() {
     let out = lsofrs().args(["--csv", "-i", "TCP"]).output().unwrap();
     assert!(out.status.success());

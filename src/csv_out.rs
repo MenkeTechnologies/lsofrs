@@ -89,6 +89,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_cr_without_lf_unquoted() {
+        assert_eq!(csv_quote("a\rb"), "a\rb");
+    }
+
+    #[test]
     fn csv_quote_with_quotes() {
         assert_eq!(csv_quote("say \"hi\""), "\"say \"\"hi\"\"\"");
     }

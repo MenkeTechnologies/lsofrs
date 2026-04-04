@@ -1031,6 +1031,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_json_and_mode_and_inet() {
+        let args = Args::parse_from(["lsofrs", "-J", "-a", "-i", "TCP"]);
+        assert!(args.json);
+        assert!(args.and_mode);
+        assert_eq!(args.inet.as_deref(), Some("TCP"));
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));
