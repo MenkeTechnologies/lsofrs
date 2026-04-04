@@ -478,6 +478,56 @@ fn tree_net_map_color_never_stderr_empty() {
 }
 
 #[test]
+fn pipe_chain_tree_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--tree", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "pipe-chain wins over tree"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
+fn ports_pipe_chain_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports wins over pipe-chain"
+    );
+    assert!(!s.contains("IPC Topology"), "pipe-chain should not win");
+}
+
+#[test]
+fn tree_stale_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--tree", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "stale wins over tree"
+    );
+}
+
+#[test]
 fn stale_pipe_chain_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--stale", "--pipe-chain", "--color", "never"])
