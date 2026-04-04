@@ -1293,6 +1293,15 @@ mod tests {
     }
 
     #[test]
+    fn from_args_fd_filter_mem_and_txt() {
+        let args = Args::parse_from(["lsofrs", "-d", "mem,txt"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.fd_filters.len(), 2);
+        assert!(matches!(&f.fd_filters[0], FdFilter::Name(s) if s == "mem"));
+        assert!(matches!(&f.fd_filters[1], FdFilter::Name(s) if s == "txt"));
+    }
+
+    #[test]
     fn from_args_inet_trimmed_spec() {
         let args = Args::parse_from(["lsofrs", "-i", "  TCP:9090  "]);
         let f = Filter::from_args(&args);

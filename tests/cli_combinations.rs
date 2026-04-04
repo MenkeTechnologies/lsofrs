@@ -319,3 +319,23 @@ fn net_map_text_color_never_stderr_empty() {
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }
+
+#[test]
+fn ports_text_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn pipe_chain_text_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

@@ -392,6 +392,12 @@ mod tests {
     }
 
     #[test]
+    fn print_tree_empty_no_panic() {
+        let theme = Theme::new(false);
+        print_tree(&[], &theme, false);
+    }
+
+    #[test]
     fn tree_json_multiple_roots_no_panic() {
         let procs = vec![
             make_proc(1, 0, "init", 1),

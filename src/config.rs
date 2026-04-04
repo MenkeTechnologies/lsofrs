@@ -174,6 +174,19 @@ mod tests {
     }
 
     #[test]
+    fn prefs_roundtrip_theme_only_preserves_other_defaults() {
+        let p = Prefs {
+            theme: Some("classic".into()),
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.theme.as_deref(), Some("classic"));
+        assert!(p2.hover_tooltips);
+        assert!(p2.show_border);
+    }
+
+    #[test]
     #[allow(clippy::field_reassign_with_default)]
     fn prefs_roundtrip_all_fields() {
         let mut ct = HashMap::new();
