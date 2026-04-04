@@ -110,6 +110,12 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_whitespace_only_unquoted() {
+        assert_eq!(csv_quote("   "), "   ");
+        assert_eq!(csv_quote("\t"), "\t");
+    }
+
+    #[test]
     fn csv_quote_comma_and_quotes() {
         assert_eq!(csv_quote("a,\"b\",c"), "\"a,\"\"b\"\",c\"");
     }

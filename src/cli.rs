@@ -911,6 +911,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_csv_and_field_output() {
+        let args = Args::parse_from(["lsofrs", "--csv", "-F", "pn", "-p", "1"]);
+        assert!(args.csv_output);
+        assert_eq!(args.field_output.as_deref(), Some("pn"));
+    }
+
+    #[test]
+    fn parse_net_map_and_field_output() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "-F", "pfn"]);
+        assert!(args.net_map);
+        assert_eq!(args.field_output.as_deref(), Some("pfn"));
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

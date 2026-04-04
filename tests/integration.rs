@@ -728,6 +728,131 @@ fn pipe_chain_takes_precedence_over_terse_text() {
     );
 }
 
+// ── Mode vs field output (single-shot dispatch) ─────────────────────
+
+#[test]
+fn csv_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before -F field output"
+    );
+}
+
+#[test]
+fn stale_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--stale", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "stale runs before -F"
+    );
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when stale wins"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--ports", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "ports runs before -F"
+    );
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when ports wins"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--pipe-chain", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "pipe-chain runs before -F"
+    );
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when pipe-chain wins"
+    );
+}
+
+#[test]
+fn net_map_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--net-map", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Network Connection Map") || stdout.contains("No network connections"),
+        "net-map runs before -F"
+    );
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when net-map wins"
+    );
+}
+
+#[test]
+fn tree_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("OPEN FILES"), "tree runs before -F");
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when tree wins"
+    );
+}
+
+#[test]
+fn summary_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--summary", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Processes:") && stdout.contains("Open files:"));
+    assert!(
+        !stdout.contains(&format!("p{my_pid}")),
+        "field tokens should not appear when summary wins"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
