@@ -666,6 +666,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_top_with_limit_and_monitor_long() {
+        let args = Args::parse_from(["lsofrs", "--top", "5", "--monitor"]);
+        assert_eq!(args.top, Some(Some(5)));
+        assert!(args.monitor);
+    }
+
+    #[test]
     fn parse_tui() {
         let args = Args::parse_from(["lsofrs", "--tui"]);
         assert!(args.tui);

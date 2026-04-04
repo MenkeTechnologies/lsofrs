@@ -119,6 +119,42 @@ fn csv_stderr_empty_on_success() {
 }
 
 #[test]
+fn ports_text_stderr_empty_on_success() {
+    let out = lsofrs().arg("--ports").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn net_map_text_stderr_empty_on_success() {
+    let out = lsofrs().arg("--net-map").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn pipe_chain_text_stderr_empty_on_success() {
+    let out = lsofrs().arg("--pipe-chain").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stale_text_stderr_empty_on_success() {
+    let out = lsofrs().arg("--stale").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn tree_text_self_pid_stderr_empty_on_success() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--tree", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn exclude_user_syntax_no_crash() {
     let out = lsofrs().args(["-u", "^root"]).output().unwrap();
     assert!(out.status.success());

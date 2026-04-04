@@ -125,6 +125,41 @@ fn csv_all_mode_self_pid_stderr_empty() {
 }
 
 #[test]
+fn terse_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn field_output_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "p", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn summary_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--summary", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stats_alias_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--stats", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn terse_self_pid_single_line() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();

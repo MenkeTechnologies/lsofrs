@@ -609,3 +609,33 @@ fn stale_wins_over_csv_when_csv_flag_first() {
         "stale still wins when --csv appears first on argv"
     );
 }
+
+#[test]
+fn ports_wins_over_csv_when_csv_flag_first() {
+    let out = lsofrs().args(["--csv", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "ports still wins when --csv appears first on argv"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_tree_when_tree_flag_first() {
+    let out = lsofrs().args(["--tree", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "pipe-chain still wins when --tree appears first on argv"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
