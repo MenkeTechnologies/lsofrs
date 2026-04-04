@@ -56,6 +56,16 @@ fn summary_json_parses_to_value() {
 }
 
 #[test]
+fn stats_alias_json_has_summary_key() {
+    let out = lsofrs().args(["--stats", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}
+
+#[test]
 fn tree_json_self_pid_parses() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()
@@ -85,6 +95,27 @@ fn net_map_json_stderr_empty() {
 #[test]
 fn ports_json_stderr_empty() {
     let out = lsofrs().args(["--ports", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stale_json_stderr_empty() {
+    let out = lsofrs().args(["--stale", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn pipe_chain_json_stderr_empty() {
+    let out = lsofrs().args(["--pipe-chain", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn summary_json_stderr_empty() {
+    let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }

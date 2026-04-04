@@ -668,6 +668,25 @@ mod tests {
     }
 
     #[test]
+    fn parse_dir_plus_d_long_alias() {
+        let args = Args::parse_from(["lsofrs", "--+d", "/var/tmp"]);
+        assert_eq!(args.dir.as_deref(), Some("/var/tmp"));
+    }
+
+    #[test]
+    fn parse_dir_recurse_plus_upper_d_alias() {
+        let args = Args::parse_from(["lsofrs", "--+D", "/var/log"]);
+        assert_eq!(args.dir_recurse.as_deref(), Some("/var/log"));
+    }
+
+    #[test]
+    fn parse_stats_alias_with_json() {
+        let args = Args::parse_from(["lsofrs", "--stats", "-J"]);
+        assert!(args.summary);
+        assert!(args.json);
+    }
+
+    #[test]
     fn parse_leak_detect_from_cli_with_spec() {
         let args = Args::parse_from(["lsofrs", "--leak-detect", "12,6"]);
         assert_eq!(args.leak_detect, Some(Some("12,6".to_string())));

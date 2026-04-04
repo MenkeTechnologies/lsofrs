@@ -57,7 +57,19 @@ fn summary_with_json_not_columnar_array() {
     let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
-    assert!(!v.is_null());
+    let obj = v.as_object().expect("summary JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}
+
+#[test]
+fn stats_alias_with_json_same_wrapper_as_summary() {
+    let out = lsofrs().args(["--stats", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
 }
 
 #[test]

@@ -137,6 +137,16 @@ fn json_self_pid_with_no_dns_flag_still_array() {
 }
 
 #[test]
+fn json_self_pid_with_no_port_lookup_still_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-P", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+}
+
+#[test]
 fn csv_tcp_filter_has_header_and_rows() {
     let out = lsofrs().args(["--csv", "-i", "TCP"]).output().unwrap();
     assert!(out.status.success());

@@ -84,6 +84,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_single_double_quote_char() {
+        assert_eq!(csv_quote("\""), "\"\"\"\"");
+    }
+
+    #[test]
     fn csv_quote_with_newline() {
         assert_eq!(csv_quote("line1\nline2"), "\"line1\nline2\"");
     }
