@@ -877,6 +877,21 @@ fn stale_summary_color_never_stderr_empty() {
 }
 
 #[test]
+fn summary_stale_summary_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "stale still wins when --summary appears first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_summary_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--summary", "--color", "never"])

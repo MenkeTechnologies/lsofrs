@@ -451,6 +451,12 @@ mod tests {
         assert_eq!(format!("{s}"), s.as_str());
     }
 
+    #[test]
+    fn tcp_state_unknown_display_matches_as_str() {
+        let s = TcpState::Unknown(42);
+        assert_eq!(format!("{s}"), s.as_str());
+    }
+
     // ── DeltaStatus ───────────────────────────────────────────────────
 
     #[test]

@@ -237,6 +237,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_narrow_no_break_space_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{202f}"), "\u{202f}");
+    }
+
+    #[test]
     fn csv_quote_word_joiner_unquoted() {
         assert_eq!(csv_quote("a\u{2060}b"), "a\u{2060}b");
     }
