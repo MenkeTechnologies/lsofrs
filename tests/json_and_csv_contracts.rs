@@ -580,3 +580,69 @@ fn field_output_self_pid_multichar_fields() {
     assert!(s.contains('f'));
     assert!(s.lines().any(|l| l.starts_with('n')));
 }
+
+#[test]
+fn json_6tcp_explicit_port_is_array() {
+    let out = lsofrs().args(["-J", "-i", "6TCP:443"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_with_delta_stderr_empty() {
+    let out = lsofrs().args(["--csv", "--delta"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_stale_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--stale", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stale --json should be an object");
+    assert!(obj.contains_key("stale_fds"));
+}
+
+#[test]
+fn json_color_never_inet_tcp_stderr_empty() {
+    let out = lsofrs()
+        .args(["--color", "never", "-J", "-i", "TCP"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_unix_socket_flag_stderr_empty() {
+    let out = lsofrs().args(["-J", "-U"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_nfs_only_flag_stderr_empty() {
+    let out = lsofrs().args(["-J", "-N"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

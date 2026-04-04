@@ -400,6 +400,12 @@ mod tests {
     }
 
     #[test]
+    fn fd_name_number_zero_and_negative_display() {
+        assert_eq!(FdName::Number(0).as_display(), "0");
+        assert_eq!(FdName::Number(-1).as_display(), "-1");
+    }
+
+    #[test]
     fn fd_name_with_access_number_suffixes() {
         assert_eq!(FdName::Number(3).with_access(Access::Read), "3r");
         assert_eq!(FdName::Number(3).with_access(Access::Write), "3w");
@@ -481,6 +487,11 @@ mod tests {
     #[test]
     fn tcp_state_from_raw_unknown_low_code() {
         assert_eq!(TcpState::from_raw(11), TcpState::Unknown(11));
+    }
+
+    #[test]
+    fn tcp_state_syn_sent_as_str() {
+        assert_eq!(TcpState::SynSent.as_str(), "SYN_SENT");
     }
 
     #[test]

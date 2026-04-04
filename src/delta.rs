@@ -415,6 +415,29 @@ mod tests {
     }
 
     #[test]
+    fn record_duplicate_fd_replaces_entry_same_iteration() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        let f1 = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::ReadWrite,
+            file_type: FileType::Reg,
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        };
+        let f2 = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::ReadWrite,
+            file_type: FileType::Reg,
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        };
+        dt.record(&proc_with_open_files(100, "x", vec![f1, f2]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 1);
+    }
+
+    #[test]
     fn different_access_same_fd_and_name_are_distinct_keys() {
         let mut dt = DeltaTracker::new();
         dt.begin_iteration();

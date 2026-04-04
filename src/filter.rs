@@ -1742,4 +1742,28 @@ mod tests {
         assert!(f.usernames.is_empty());
         assert_eq!(f.exclude_uids, vec![0]);
     }
+
+    #[test]
+    fn from_args_inet_tcp_bracket_ipv6_host() {
+        let args = Args::parse_from(["lsofrs", "-i", "TCP[::1]:22"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.host.as_deref() == Some("[::1]") && nf.port_start == Some(22))
+        );
+    }
+
+    #[test]
+    fn from_args_inet_udp_at_ipv6_bracket_host_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP@[2001:db8::1]:5353"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(f.network_filters.iter().any(|nf| {
+            nf.protocol.as_deref() == Some("UDP")
+                && nf.host.as_deref() == Some("[2001:db8::1]")
+                && nf.port_start == Some(5353)
+        }));
+    }
 }
