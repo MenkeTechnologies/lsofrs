@@ -456,6 +456,22 @@ mod tests {
         assert_eq!(dt.gone_count, 0);
     }
 
+    #[test]
+    fn gone_count_when_second_pid_not_recorded() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "a", vec![("3", "/x")]));
+        dt.record(&make_proc(200, "b", vec![("4", "/y")]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 2);
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "a", vec![("3", "/x")]));
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 0);
+    }
+
     fn proc_with_open_files(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
         Process {
             pid,

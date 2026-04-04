@@ -444,6 +444,25 @@ fn ports_summary_color_never_stderr_empty() {
 }
 
 #[test]
+fn summary_ports_summary_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--ports", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "ports still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
 fn ports_csv_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--ports", "--csv", "--color", "never"])
