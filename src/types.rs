@@ -474,6 +474,11 @@ mod tests {
     }
 
     #[test]
+    fn tcp_state_fin_wait_1_as_str() {
+        assert_eq!(TcpState::FinWait1.as_str(), "FIN_WAIT_1");
+    }
+
+    #[test]
     fn tcp_state_from_raw_all() {
         assert_eq!(TcpState::from_raw(0), TcpState::Closed);
         assert_eq!(TcpState::from_raw(1), TcpState::Listen);

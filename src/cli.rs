@@ -973,4 +973,28 @@ mod tests {
         assert!(args.show_pgid);
         assert!(args.show_ppid);
     }
+
+    #[test]
+    fn parse_net_map_delta_json() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "--delta", "-J"]);
+        assert!(args.net_map);
+        assert!(args.delta);
+        assert!(args.json);
+    }
+
+    #[test]
+    fn parse_stale_ports_csv() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--ports", "--csv"]);
+        assert!(args.stale);
+        assert!(args.ports);
+        assert!(args.csv_output);
+    }
+
+    #[test]
+    fn parse_tree_net_map_json() {
+        let args = Args::parse_from(["lsofrs", "--tree", "--net-map", "-J"]);
+        assert!(args.tree);
+        assert!(args.net_map);
+        assert!(args.json);
+    }
 }

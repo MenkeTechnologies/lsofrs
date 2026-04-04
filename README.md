@@ -396,11 +396,11 @@ The repo includes `rust-toolchain.toml` (stable + `rustfmt` / `clippy`) so local
 
 On macOS and other non-Linux hosts, `cargo clippy` does not type-check `#[cfg(target_os = "linux")]` code. To catch Linux-only issues before push, install the Linux target and run `cargo clippy --target x86_64-unknown-linux-gnu --all-targets -- -D warnings` (same flags as CI).
 
-To see how many test cases `cargo test` executes (library + binary harnesses + each file under `tests/`), run `cargo test` and read the `test result` lines, or use `cargo test 2>&1 | rg 'test result'`. The number of distinct `#[test]` functions in the tree is lower because modules linked from both `src/lib.rs` and the binary run their unit tests twice.
+To see how many test cases `cargo test` executes (library + binary harnesses + each file under `tests/`), run `cargo test` and read the `test result` lines, or use `cargo test 2>&1 | grep 'test result:'`. The number of distinct `#[test]` functions in the tree is lower because modules linked from both `src/lib.rs` and the binary run their unit tests twice.
 
 Columnar header lines include padding derived from live FD data, so integration tests that check `--color` compare title substrings (for example `COMMAND` vs `PROCESS`), not full header string equality across two process spawns.
 
-Dispatch order matters when multiple output modes are set: for example `--csv` runs before `--json`, and `--json` runs before `-t` terse and before `-F` field output. Integration tests cover `-J` with `-F`, `--csv` with `-J`, and `-J` with `-t` so the winning mode stays stable.
+Dispatch order matters when multiple output modes are set: for example `--csv` runs before `--json`, and `--json` runs before `-t` terse and before `-F` field output. Integration tests cover `-J` with `-F`, `--csv` with `-J`, `-J` with `-t`, and `--csv` with `-t` so the winning mode stays stable.
 
 ### Key Design Decisions
 

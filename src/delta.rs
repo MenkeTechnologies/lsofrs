@@ -381,4 +381,15 @@ mod tests {
         dt.count_gone();
         assert_eq!(dt.new_count, 0);
     }
+
+    #[test]
+    fn classify_uses_prev_from_begin_iteration() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a")]));
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a"), ("4", "/b")]));
+        assert_eq!(dt.classify(100, "3u", "/a"), DeltaStatus::Unchanged);
+        assert_eq!(dt.classify(100, "4u", "/b"), DeltaStatus::New);
+    }
 }

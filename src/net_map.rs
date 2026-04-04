@@ -296,6 +296,29 @@ mod tests {
         }
     }
 
+    fn make_udp_conn(fd: i32, foreign_addr: IpAddr, foreign_port: u16) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv4,
+            name: format!("0.0.0.0:5353->{foreign_addr}:{foreign_port}"),
+            socket_info: Some(SocketInfo {
+                protocol: "UDP".to_string(),
+                tcp_state: None,
+                local: InetAddr {
+                    addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+                    port: 5353,
+                },
+                foreign: InetAddr {
+                    addr: Some(foreign_addr),
+                    port: foreign_port,
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn print_net_map_empty_no_panic() {
         let theme = Theme::new(false);
@@ -318,6 +341,19 @@ mod tests {
         let theme = Theme::new(false);
         let remote = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1));
         let procs = vec![make_proc(100, "app", vec![make_tcp6_conn(3, remote, 443)])];
+        print_net_map(&procs, &theme, false);
+        print_net_map(&procs, &theme, true);
+    }
+
+    #[test]
+    fn print_net_map_udp_remote_no_panic() {
+        let theme = Theme::new(false);
+        let remote = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        let procs = vec![make_proc(
+            200,
+            "mdns",
+            vec![make_udp_conn(11, remote, 5353)],
+        )];
         print_net_map(&procs, &theme, false);
         print_net_map(&procs, &theme, true);
     }

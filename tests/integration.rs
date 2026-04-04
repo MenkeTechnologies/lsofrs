@@ -209,6 +209,21 @@ fn json_takes_precedence_over_terse() {
     assert!(parsed.is_array());
 }
 
+#[test]
+fn csv_takes_precedence_over_terse() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "-t", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV branch runs before terse when both flags are set"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]

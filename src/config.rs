@@ -318,4 +318,15 @@ mod tests {
         assert_eq!(p2.active_custom_theme.as_deref(), Some("Mine"));
         assert_eq!(p2.custom_themes["Mine"].c1, 1);
     }
+
+    #[test]
+    fn prefs_hover_tooltips_false_roundtrip() {
+        let p = Prefs {
+            hover_tooltips: false,
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert!(!p2.hover_tooltips);
+    }
 }
