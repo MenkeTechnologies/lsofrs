@@ -402,6 +402,12 @@ mod tests {
         assert_eq!(format!("{ft}"), ft.as_str());
     }
 
+    #[test]
+    fn file_type_dir_display_matches_as_str() {
+        let ft = FileType::Dir;
+        assert_eq!(format!("{ft}"), ft.as_str());
+    }
+
     // ── FdName ────────────────────────────────────────────────────────
 
     #[test]

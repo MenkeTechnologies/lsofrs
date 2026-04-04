@@ -257,6 +257,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_object_replacement_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{fffc}"), "\u{fffc}");
+    }
+
+    #[test]
     fn csv_quote_soft_hyphen_unquoted() {
         assert_eq!(csv_quote("a\u{00ad}b"), "a\u{00ad}b");
     }
