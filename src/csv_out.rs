@@ -202,6 +202,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_form_feed_without_comma_unquoted() {
+        assert_eq!(csv_quote("a\u{000c}b"), "a\u{000c}b");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }

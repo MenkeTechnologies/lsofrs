@@ -388,6 +388,22 @@ fn summary_text_color_always_stderr_empty() {
 }
 
 #[test]
+fn summary_json_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--json", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    match v {
+        serde_json::Value::Object(ref m) => assert!(!m.is_empty()),
+        serde_json::Value::Array(ref a) => assert!(!a.is_empty()),
+        _ => panic!("summary --json should be object or array"),
+    }
+}
+
+#[test]
 fn json_with_theme_classic_stderr_empty() {
     let out = lsofrs()
         .args(["-J", "--theme", "classic"])
