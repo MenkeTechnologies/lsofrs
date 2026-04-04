@@ -444,6 +444,40 @@ fn ports_csv_color_never_stderr_empty() {
 }
 
 #[test]
+fn ports_net_map_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports wins over net-map"
+    );
+    assert!(
+        !s.contains("Network Connection Map"),
+        "net-map should not win"
+    );
+}
+
+#[test]
+fn tree_net_map_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--tree", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "net-map wins over tree"
+    );
+}
+
+#[test]
 fn net_map_csv_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--net-map", "--csv", "--color", "never"])
