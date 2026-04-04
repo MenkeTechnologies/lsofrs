@@ -404,6 +404,19 @@ fn summary_json_color_never_stderr_empty() {
 }
 
 #[test]
+fn stats_json_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stats", "--json", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats --json should be an object");
+    assert!(obj.contains_key("summary"));
+}
+
+#[test]
 fn json_with_theme_classic_stderr_empty() {
     let out = lsofrs()
         .args(["-J", "--theme", "classic"])
