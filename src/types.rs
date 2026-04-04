@@ -451,6 +451,21 @@ mod tests {
         assert_eq!(format!("{}", FileType::IPv4), "IPv4");
     }
 
+    #[test]
+    fn file_type_as_str_fixed_variants() {
+        assert_eq!(FileType::Fifo.as_str(), "FIFO");
+        assert_eq!(FileType::Blk.as_str(), "BLK");
+        assert_eq!(FileType::Sock.as_str(), "sock");
+        assert_eq!(FileType::Link.as_str(), "LINK");
+        assert_eq!(FileType::Pipe.as_str(), "PIPE");
+        assert_eq!(FileType::Kqueue.as_str(), "KQUE");
+        assert_eq!(FileType::Systm.as_str(), "systm");
+        assert_eq!(FileType::Psem.as_str(), "PSEM");
+        assert_eq!(FileType::Pshm.as_str(), "PSHM");
+        assert_eq!(FileType::Atalk.as_str(), "ATALK");
+        assert_eq!(FileType::Fsevents.as_str(), "FSEV");
+    }
+
     // ── Access ──────────────────────────────────────────────────────
 
     #[test]

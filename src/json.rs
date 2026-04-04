@@ -224,4 +224,16 @@ mod tests {
         let procs = vec![make_proc(1, "t", vec![f])];
         print_json(&procs);
     }
+
+    #[test]
+    fn print_json_socket_empty_protocol_omitted_from_json() {
+        let mut f = make_file(5, FileType::IPv4, "*:443");
+        f.socket_info = Some(SocketInfo {
+            protocol: String::new(),
+            tcp_state: Some(TcpState::Listen),
+            ..Default::default()
+        });
+        let procs = vec![make_proc(1, "t", vec![f])];
+        print_json(&procs);
+    }
 }

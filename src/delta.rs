@@ -400,4 +400,54 @@ mod tests {
         assert_eq!(dt.classify(100, "3u", "/a"), DeltaStatus::Unchanged);
         assert_eq!(dt.classify(100, "4u", "/b"), DeltaStatus::New);
     }
+
+    fn proc_with_open_files(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
+        Process {
+            pid,
+            ppid: 1,
+            pgid: 1,
+            uid: 501,
+            command: cmd.to_string(),
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+        }
+    }
+
+    #[test]
+    fn different_access_same_fd_and_name_are_distinct_keys() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        let f_read = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Read,
+            file_type: FileType::Reg,
+            name: "/same".to_string(),
+            ..Default::default()
+        };
+        let f_write = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Write,
+            file_type: FileType::Reg,
+            name: "/same".to_string(),
+            ..Default::default()
+        };
+        dt.record(&proc_with_open_files(100, "x", vec![f_read, f_write]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 2);
+        assert_eq!(dt.gone_count, 0);
+
+        dt.begin_iteration();
+        let only_read = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Read,
+            file_type: FileType::Reg,
+            name: "/same".to_string(),
+            ..Default::default()
+        };
+        dt.record(&proc_with_open_files(100, "x", vec![only_read]));
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 0);
+    }
 }
