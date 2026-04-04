@@ -130,6 +130,42 @@ fn pipe_chain_text_not_json_array() {
 }
 
 #[test]
+fn net_map_text_first_line_not_json_array() {
+    let out = lsofrs().arg("--net-map").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "net-map text should not start with JSON array"
+    );
+}
+
+#[test]
+fn ports_text_first_line_not_json_array() {
+    let out = lsofrs().arg("--ports").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "ports text should not start with JSON array"
+    );
+}
+
+#[test]
+fn stale_text_first_line_not_json_array() {
+    let out = lsofrs().arg("--stale").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "stale text should not start with JSON array"
+    );
+}
+
+#[test]
 fn json_flag_alone_produces_array() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();

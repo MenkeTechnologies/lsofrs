@@ -27,6 +27,14 @@ fn file_arg_dev_null_json() {
 }
 
 #[test]
+fn file_arg_dev_null_json_long_flag() {
+    let out = lsofrs().args(["--json", "/dev/null"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn file_arg_dev_null_columnar() {
     let out = lsofrs().arg("/dev/null").output().unwrap();
     assert!(out.status.success());
@@ -39,6 +47,18 @@ fn fd_range_filter_with_self_pid() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()
         .args(["-J", "-d", "0-20", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_long_flag_fd_range_with_self_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--json", "-d", "0-20", "-p", &my_pid])
         .output()
         .unwrap();
     assert!(out.status.success());
@@ -96,6 +116,14 @@ fn terse_multiple_pids_or() {
 #[test]
 fn json_command_regex_filter() {
     let out = lsofrs().args(["-J", "-c", ".*"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_long_flag_command_regex_filter() {
+    let out = lsofrs().args(["--json", "-c", ".*"]).output().unwrap();
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());

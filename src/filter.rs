@@ -632,6 +632,14 @@ mod tests {
     }
 
     #[test]
+    fn inet_filter_4tcp_bare() {
+        let mut f = empty_filter();
+        parse_inet_filter("4TCP", &mut f);
+        assert_eq!(f.network_type, Some(4));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
     fn inet_filter_4udp() {
         let mut f = empty_filter();
         parse_inet_filter("4UDP", &mut f);
