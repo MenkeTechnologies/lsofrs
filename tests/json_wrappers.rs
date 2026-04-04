@@ -129,3 +129,22 @@ fn tree_json_long_flag_before_tree_same_shape() {
     assert!(!arr.is_empty());
     assert!(arr[0].get("children").is_some());
 }
+
+#[test]
+fn pipe_chain_json_long_flag_before_pipe_chain_same_wrapper() {
+    let out = lsofrs().args(["--json", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("pipe-chain JSON should be an object");
+    assert!(obj.contains_key("pipe_chains"));
+}
+
+#[test]
+fn summary_json_long_flag_before_summary_same_wrapper() {
+    let out = lsofrs().args(["--json", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("summary JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}

@@ -116,6 +116,12 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_backslash_without_comma_unquoted() {
+        assert_eq!(csv_quote(r"\"), r"\");
+        assert_eq!(csv_quote(r"a\b"), r"a\b");
+    }
+
+    #[test]
     fn csv_quote_comma_and_quotes() {
         assert_eq!(csv_quote("a,\"b\",c"), "\"a,\"\"b\"\",c\"");
     }
