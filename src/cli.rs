@@ -888,6 +888,29 @@ mod tests {
     }
 
     #[test]
+    fn parse_net_map_summary_and_terse_flags() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "--summary", "-t"]);
+        assert!(args.net_map);
+        assert!(args.summary);
+        assert!(args.terse);
+    }
+
+    #[test]
+    fn parse_tree_and_terse_flags() {
+        let args = Args::parse_from(["lsofrs", "--tree", "-t"]);
+        assert!(args.tree);
+        assert!(args.terse);
+    }
+
+    #[test]
+    fn parse_stale_json_and_terse_flags() {
+        let args = Args::parse_from(["lsofrs", "--stale", "-J", "-t"]);
+        assert!(args.stale);
+        assert!(args.json);
+        assert!(args.terse);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

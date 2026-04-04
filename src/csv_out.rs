@@ -104,6 +104,12 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_utf8_without_comma_is_unquoted() {
+        assert_eq!(csv_quote("café"), "café");
+        assert_eq!(csv_quote("日本語"), "日本語");
+    }
+
+    #[test]
     fn csv_quote_comma_and_quotes() {
         assert_eq!(csv_quote("a,\"b\",c"), "\"a,\"\"b\"\",c\"");
     }

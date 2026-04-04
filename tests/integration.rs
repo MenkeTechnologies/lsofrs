@@ -668,6 +668,66 @@ fn pipe_chain_takes_precedence_over_summary() {
     );
 }
 
+#[test]
+fn net_map_takes_precedence_over_terse_text() {
+    let out = lsofrs().args(["--net-map", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Network Connection Map") || stdout.contains("No network connections"),
+        "net-map should run before terse"
+    );
+}
+
+#[test]
+fn summary_takes_precedence_over_terse_text() {
+    let out = lsofrs().args(["--summary", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Processes:") && stdout.contains("Open files:"));
+}
+
+#[test]
+fn tree_takes_precedence_over_terse_text() {
+    let out = lsofrs().args(["--tree", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("OPEN FILES"),
+        "tree should run before terse"
+    );
+}
+
+#[test]
+fn stale_json_takes_precedence_over_terse() {
+    let out = lsofrs().args(["--stale", "-J", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.get("stale_fds").is_some());
+}
+
+#[test]
+fn ports_takes_precedence_over_terse_text() {
+    let out = lsofrs().args(["--ports", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "ports should run before terse"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_terse_text() {
+    let out = lsofrs().args(["--pipe-chain", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "pipe-chain should run before terse"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
