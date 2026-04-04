@@ -99,6 +99,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_carriage_return_only_unquoted() {
+        assert_eq!(csv_quote("a\rb"), "a\rb");
+    }
+
+    #[test]
     fn csv_quote_comma_and_quotes() {
         assert_eq!(csv_quote("a,\"b\",c"), "\"a,\"\"b\"\",c\"");
     }

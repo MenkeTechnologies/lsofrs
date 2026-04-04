@@ -575,6 +575,99 @@ fn tree_json_emits_tree_nodes_not_default_lsof_rows() {
     );
 }
 
+#[test]
+fn stale_takes_precedence_over_tree() {
+    let out = lsofrs().args(["--stale", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output"
+    );
+    assert!(
+        !stdout.contains("OPEN FILES"),
+        "tree should not run when stale wins"
+    );
+}
+
+#[test]
+fn stale_takes_precedence_over_summary() {
+    let out = lsofrs().args(["--stale", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output"
+    );
+    assert!(
+        !stdout.contains("lsofrs summary"),
+        "summary should not run when stale wins"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_tree() {
+    let out = lsofrs().args(["--ports", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "expected ports output"
+    );
+    assert!(
+        !stdout.contains("OPEN FILES"),
+        "tree should not run when ports wins"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_summary() {
+    let out = lsofrs().args(["--ports", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "expected ports output"
+    );
+    assert!(
+        !stdout.contains("lsofrs summary"),
+        "summary should not run when ports wins"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_tree() {
+    let out = lsofrs().args(["--pipe-chain", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "expected pipe-chain output"
+    );
+    assert!(
+        !stdout.contains("OPEN FILES"),
+        "tree should not run when pipe-chain wins"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_summary() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--summary"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "expected pipe-chain output"
+    );
+    assert!(
+        !stdout.contains("lsofrs summary"),
+        "summary should not run when pipe-chain wins"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]

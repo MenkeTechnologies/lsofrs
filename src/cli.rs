@@ -867,6 +867,27 @@ mod tests {
     }
 
     #[test]
+    fn parse_stale_and_tree_flags() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--tree"]);
+        assert!(args.stale);
+        assert!(args.tree);
+    }
+
+    #[test]
+    fn parse_ports_and_summary_flags() {
+        let args = Args::parse_from(["lsofrs", "--ports", "--summary"]);
+        assert!(args.ports);
+        assert!(args.summary);
+    }
+
+    #[test]
+    fn parse_pipe_chain_and_tree_flags() {
+        let args = Args::parse_from(["lsofrs", "--pipe-chain", "--tree"]);
+        assert!(args.pipe_chain);
+        assert!(args.tree);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));
