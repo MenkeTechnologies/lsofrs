@@ -1611,12 +1611,30 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_4udp_bare() {
+        let args = Args::parse_from(["lsofrs", "-i", "4UDP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_type, Some(4));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
+    }
+
+    #[test]
     fn from_args_inet_6tcp() {
         let args = Args::parse_from(["lsofrs", "-i", "6TCP"]);
         let f = Filter::from_args(&args);
         assert!(f.network);
         assert_eq!(f.network_type, Some(6));
         assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+    }
+
+    #[test]
+    fn from_args_inet_6udp_bare() {
+        let args = Args::parse_from(["lsofrs", "-i", "6UDP"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_type, Some(6));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
     }
 
     #[test]
