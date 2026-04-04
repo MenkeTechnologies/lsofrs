@@ -366,6 +366,15 @@ mod tests {
     }
 
     #[test]
+    fn open_file_lock_non_space_preserved() {
+        let f = OpenFile {
+            lock: 'X',
+            ..Default::default()
+        };
+        assert_eq!(f.lock, 'X');
+    }
+
+    #[test]
     fn file_type_as_str_all_variants() {
         assert_eq!(FileType::Reg.as_str(), "REG");
         assert_eq!(FileType::Dir.as_str(), "DIR");

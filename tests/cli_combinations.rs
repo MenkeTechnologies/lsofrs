@@ -404,3 +404,27 @@ fn json_theme_matrix_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn net_map_json_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--json", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array() || v.is_object());
+}
+
+#[test]
+fn ports_json_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--json", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_object());
+}

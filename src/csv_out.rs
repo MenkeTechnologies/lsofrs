@@ -197,6 +197,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_vertical_tab_without_comma_unquoted() {
+        assert_eq!(csv_quote("a\u{000b}b"), "a\u{000b}b");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }
