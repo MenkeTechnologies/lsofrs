@@ -388,6 +388,7 @@ mod tests {
         dt.record(&make_proc(100, "empty", vec![]));
         dt.count_gone();
         assert_eq!(dt.new_count, 0);
+        assert_eq!(dt.gone_count, 0);
     }
 
     #[test]

@@ -202,6 +202,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_newline_only_field_is_quoted() {
+        assert_eq!(csv_quote("\n"), "\"\n\"");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }

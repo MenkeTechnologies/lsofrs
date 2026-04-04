@@ -1359,6 +1359,18 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_udp_at_ipv4_host_no_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP@10.0.0.9"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(f.network_filters.iter().any(|nf| {
+            nf.protocol.as_deref() == Some("UDP")
+                && nf.host.as_deref() == Some("10.0.0.9")
+                && nf.port_start.is_none()
+        }));
+    }
+
+    #[test]
     fn from_args_inet_bare() {
         let args = Args::parse_from(["lsofrs", "-i"]);
         let f = Filter::from_args(&args);
