@@ -788,3 +788,75 @@ fn ports_json_color_never_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_object());
 }
+
+#[test]
+fn stale_summary_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--summary", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "stale runs before summary in main"
+    );
+}
+
+#[test]
+fn pipe_chain_summary_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--summary", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "pipe-chain runs before summary in main"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
+fn ports_tree_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--tree", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "ports runs before tree in main"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn tree_ports_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--tree", "--ports", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "ports still wins when --tree appears first on argv"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}

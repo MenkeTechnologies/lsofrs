@@ -829,6 +829,61 @@ fn csv_inet_6tcp_stderr_empty() {
 }
 
 #[test]
+fn csv_inet_bare_4_addr_family_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "4"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn csv_inet_bare_6_addr_family_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "6"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn csv_6udp_bare_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "6UDP"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn csv_udp_at_test_net_host_port_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "-i", "UDP@192.0.2.1:53"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
 fn json_dir_one_level_flag_stderr_empty() {
     let out = lsofrs().args(["-J", "--dir", "/tmp"]).output().unwrap();
     assert!(out.status.success());

@@ -242,6 +242,21 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_bom_prefix_field_unquoted() {
+        assert_eq!(csv_quote("\u{feff}payload"), "\u{feff}payload");
+    }
+
+    #[test]
+    fn csv_quote_fullwidth_comma_unquoted() {
+        assert_eq!(csv_quote("a\u{ff0c}b"), "a\u{ff0c}b");
+    }
+
+    #[test]
+    fn csv_quote_bom_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{feff}"), "\u{feff}");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }
