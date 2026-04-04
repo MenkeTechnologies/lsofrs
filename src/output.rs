@@ -615,6 +615,18 @@ mod tests {
     }
 
     #[test]
+    fn print_processes_with_delta_unchanged_no_panic() {
+        let theme = Theme::new(false);
+        let procs = vec![make_proc(
+            42,
+            "test",
+            vec![make_file(3, FileType::Reg, "/tmp/x")],
+        )];
+        let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::Unchanged;
+        print_processes(&procs, &theme, false, false, Some(&delta));
+    }
+
+    #[test]
     fn print_terse_no_panic() {
         let procs = vec![make_proc(1, "a", vec![]), make_proc(2, "b", vec![])];
         print_terse(&procs);

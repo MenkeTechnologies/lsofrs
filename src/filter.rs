@@ -869,6 +869,23 @@ mod tests {
     }
 
     #[test]
+    fn network_protocol_filter_requires_socket_info() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: Some("TCP".to_string()),
+            addr_family: None,
+            addr: None,
+            host: None,
+            port_start: None,
+            port_end: None,
+        }];
+        let mut file = make_file(3, FileType::IPv4, "*:80");
+        file.socket_info = None;
+        assert!(!f.matches_file(&file));
+    }
+
+    #[test]
     fn network_port_filter() {
         let mut f = empty_filter();
         f.network = true;

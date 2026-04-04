@@ -943,4 +943,34 @@ mod tests {
         let args = Args::parse_from(["lsofrs", "-i", ":443"]);
         assert_eq!(args.inet.as_deref(), Some(":443"));
     }
+
+    #[test]
+    fn parse_positional_after_double_dash() {
+        let args = Args::parse_from(["lsofrs", "--", "/tmp/after-dd"]);
+        assert_eq!(args.files, vec!["/tmp/after-dd"]);
+    }
+
+    #[test]
+    fn parse_json_terse_both_set() {
+        let args = Args::parse_from(["lsofrs", "-J", "-t", "-p", "1"]);
+        assert!(args.json);
+        assert!(args.terse);
+        assert_eq!(args.pid.as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn parse_csv_json_both_set() {
+        let args = Args::parse_from(["lsofrs", "--csv", "-J", "-p", "2"]);
+        assert!(args.csv_output);
+        assert!(args.json);
+        assert_eq!(args.pid.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn parse_show_pgid_ppid_with_json() {
+        let args = Args::parse_from(["lsofrs", "-J", "--pgid-show", "-R", "-p", "1"]);
+        assert!(args.json);
+        assert!(args.show_pgid);
+        assert!(args.show_ppid);
+    }
 }

@@ -469,6 +469,11 @@ mod tests {
     }
 
     #[test]
+    fn tcp_state_syn_recv_as_str() {
+        assert_eq!(TcpState::SynRecv.as_str(), "SYN_RCVD");
+    }
+
+    #[test]
     fn tcp_state_from_raw_all() {
         assert_eq!(TcpState::from_raw(0), TcpState::Closed);
         assert_eq!(TcpState::from_raw(1), TcpState::Listen);

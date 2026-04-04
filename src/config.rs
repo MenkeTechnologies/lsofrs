@@ -293,4 +293,29 @@ mod tests {
         let p2: Prefs = toml::from_str(&s).unwrap();
         assert_eq!(p2.active_tab, Some(4));
     }
+
+    #[test]
+    fn prefs_custom_theme_entry_roundtrip() {
+        let mut themes = HashMap::new();
+        themes.insert(
+            "Mine".to_string(),
+            CustomThemeColors {
+                c1: 1,
+                c2: 2,
+                c3: 3,
+                c4: 4,
+                c5: 5,
+                c6: 6,
+            },
+        );
+        let p = Prefs {
+            custom_themes: themes,
+            active_custom_theme: Some("Mine".into()),
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.active_custom_theme.as_deref(), Some("Mine"));
+        assert_eq!(p2.custom_themes["Mine"].c1, 1);
+    }
 }

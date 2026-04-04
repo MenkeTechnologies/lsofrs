@@ -184,6 +184,31 @@ fn json_wins_when_field_output_also_specified() {
     assert!(parsed[0].get("command").is_some());
 }
 
+#[test]
+fn csv_output_takes_precedence_over_json() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "-J", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV header must appear when --csv is combined with -J"
+    );
+}
+
+#[test]
+fn json_takes_precedence_over_terse() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-t", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(parsed.is_array());
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
