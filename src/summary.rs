@@ -799,6 +799,25 @@ mod tests {
     }
 
     #[test]
+    fn compute_stats_merges_same_uid_across_processes() {
+        let procs = vec![
+            make_proc(10, "first", 1000, vec![make_file(FileType::Reg)]),
+            make_proc(
+                11,
+                "second",
+                1000,
+                vec![make_file(FileType::Dir), make_file(FileType::Chr)],
+            ),
+        ];
+        let (_, _, user_stats, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 3);
+        assert_eq!(user_stats.len(), 1);
+        assert_eq!(user_stats[0].uid, 1000);
+        assert_eq!(user_stats[0].proc_count, 2);
+        assert_eq!(user_stats[0].file_count, 3);
+    }
+
+    #[test]
     fn fmt_num_small() {
         assert_eq!(fmt_num(0), "0");
         assert_eq!(fmt_num(42), "42");

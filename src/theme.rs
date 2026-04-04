@@ -855,6 +855,11 @@ mod tests {
         );
         assert_eq!(ThemeName::from_str_loose("zaibatsu"), ThemeName::Zaibatsu);
         assert_eq!(ThemeName::from_str_loose("megacorp"), ThemeName::Megacorp);
+        assert_eq!(
+            ThemeName::from_str_loose("bio-hazard"),
+            ThemeName::BioHazard
+        );
+        assert_eq!(ThemeName::from_str_loose("darkwave"), ThemeName::Darkwave);
     }
 
     #[test]

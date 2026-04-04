@@ -206,3 +206,21 @@ fn exclude_pid_syntax_no_crash() {
     let out = lsofrs().args(["-p", "^1"]).output().unwrap();
     assert!(out.status.success());
 }
+
+#[test]
+fn json_inet_tcp_filter_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn json_and_mode_with_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-a", "-p", &my_pid, "-u", "nonexistent_user_xyz"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

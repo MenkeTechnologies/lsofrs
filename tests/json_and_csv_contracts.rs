@@ -493,6 +493,40 @@ fn json_pgid_filter_process_group_one_is_array() {
 }
 
 #[test]
+fn json_self_pid_pgid_show_and_ppid_flags_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--pgid-show", "-R", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_inet_only_ipv4_addr_family_stderr_empty() {
+    let out = lsofrs().args(["--json", "-i", "4"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_inet_tcp_filter_has_rfc_header() {
+    let out = lsofrs().args(["--csv", "-i", "TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
 fn field_output_self_pid_multichar_fields() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()

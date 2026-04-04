@@ -626,6 +626,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_show_ppid_short_uppercase_r_flag() {
+        let args = Args::parse_from(["lsofrs", "-R"]);
+        assert!(args.show_ppid);
+    }
+
+    #[test]
     fn parse_pipe_chain_with_json() {
         let args = Args::parse_from(["lsofrs", "--pipe-chain", "--json"]);
         assert!(args.pipe_chain);

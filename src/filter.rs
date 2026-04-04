@@ -810,6 +810,25 @@ mod tests {
     }
 
     #[test]
+    fn inet_filter_udp_at_host_with_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("UDP@172.16.0.5:53", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("UDP"));
+        assert_eq!(nf.host.as_deref(), Some("172.16.0.5"));
+        assert_eq!(nf.port_start, Some(53));
+    }
+
+    #[test]
+    fn network_and_mode_allows_non_network_when_file_path_matches() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.and_mode = true;
+        f.files = vec!["/tmp/marker".to_string()];
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/marker")));
+    }
+
+    #[test]
     fn fd_filter_multi_dash_becomes_name_not_range() {
         let mut filters = vec![];
         parse_fd_filter("10-20-30", &mut filters);
