@@ -103,6 +103,28 @@ fn json_and_mode_self_pid_stderr_empty() {
 }
 
 #[test]
+fn json_long_flag_all_mode_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--json", "-a", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn csv_all_mode_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "-a", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn terse_self_pid_single_line() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();

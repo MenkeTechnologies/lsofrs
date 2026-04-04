@@ -459,3 +459,153 @@ fn ports_wins_over_tree_when_tree_flag_first() {
         "expected ports output"
     );
 }
+
+#[test]
+fn ports_wins_over_pipe_chain_when_pipe_chain_flag_first() {
+    let out = lsofrs().args(["--pipe-chain", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports still wins when --pipe-chain appears first on argv"
+    );
+}
+
+#[test]
+fn ports_wins_over_net_map_when_net_map_flag_first() {
+    let out = lsofrs().args(["--net-map", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports still wins when --net-map appears first on argv"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_net_map_when_net_map_flag_first() {
+    let out = lsofrs()
+        .args(["--net-map", "--pipe-chain"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "pipe-chain still wins when --net-map appears first on argv"
+    );
+}
+
+#[test]
+fn net_map_wins_over_tree_when_tree_flag_first() {
+    let out = lsofrs().args(["--tree", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "net-map still wins when --tree appears first on argv"
+    );
+}
+
+#[test]
+fn csv_wins_over_tree_when_tree_flag_first() {
+    let out = lsofrs().args(["--tree", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV still wins when --tree appears first on argv"
+    );
+}
+
+#[test]
+fn net_map_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs().args(["--summary", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "net-map still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "expected net-map output"
+    );
+}
+
+#[test]
+fn csv_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs().args(["--summary", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV still wins when --summary appears first on argv"
+    );
+}
+
+#[test]
+fn ports_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs().args(["--summary", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "ports still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs()
+        .args(["--summary", "--pipe-chain"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "pipe-chain still wins when --summary appears first on argv"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
+fn stale_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs().args(["--summary", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "stale still wins when --summary appears first on argv"
+    );
+}
+
+#[test]
+fn stale_wins_over_tree_when_tree_flag_first() {
+    let out = lsofrs().args(["--tree", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "stale still wins when --tree appears first on argv"
+    );
+}
+
+#[test]
+fn stale_wins_over_csv_when_csv_flag_first() {
+    let out = lsofrs().args(["--csv", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "stale still wins when --csv appears first on argv"
+    );
+}
