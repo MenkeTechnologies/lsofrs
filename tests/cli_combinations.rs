@@ -501,6 +501,25 @@ fn ports_net_map_color_never_stderr_empty() {
 }
 
 #[test]
+fn net_map_ports_net_map_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--ports", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "ports still wins when --net-map appears first on argv"
+    );
+    assert!(
+        !s.contains("Network Connection Map"),
+        "net-map should not win"
+    );
+}
+
+#[test]
 fn tree_net_map_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--tree", "--net-map", "--color", "never"])

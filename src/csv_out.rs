@@ -217,6 +217,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_line_separator_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{2028}"), "\u{2028}");
+    }
+
+    #[test]
     fn csv_quote_unicode_paragraph_separator_unquoted() {
         assert_eq!(csv_quote("a\u{2029}b"), "a\u{2029}b");
     }
