@@ -57,6 +57,16 @@ fn json_self_files_is_nonempty_array() {
 }
 
 #[test]
+fn json_long_flag_files_array_non_empty_for_self() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    let files = v[0]["files"].as_array().expect("files array");
+    assert!(!files.is_empty());
+}
+
+#[test]
 fn json_each_file_has_fd_type_name_strings() {
     let p = self_json_process();
     for f in p["files"].as_array().unwrap() {

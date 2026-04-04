@@ -695,6 +695,16 @@ mod tests {
         assert_eq!(nf.port_start, Some(3306));
     }
 
+    #[test]
+    fn inet_filter_udp_at_host_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("UDP@10.0.0.5:53", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("UDP"));
+        assert_eq!(nf.host.as_deref(), Some("10.0.0.5"));
+        assert_eq!(nf.port_start, Some(53));
+    }
+
     // ── parse_fd_filter tests ───────────────────────────────────────
 
     #[test]

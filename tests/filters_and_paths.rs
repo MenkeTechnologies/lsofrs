@@ -73,6 +73,14 @@ fn json_inet_all_flag() {
 }
 
 #[test]
+fn json_long_flag_inet_all_bare_is_array() {
+    let out = lsofrs().args(["--json", "-i"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn terse_multiple_pids_or() {
     let a = std::process::id().to_string();
     let out = lsofrs()
@@ -107,9 +115,35 @@ fn show_pgid_json_self() {
 }
 
 #[test]
+fn show_pgid_json_long_flag_self() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--json", "--pgid-show", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+}
+
+#[test]
 fn show_ppid_json_self() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-J", "-R", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+}
+
+#[test]
+fn show_ppid_json_long_flag_self() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--json", "-R", "-p", &my_pid])
+        .output()
+        .unwrap();
     assert!(out.status.success());
     let v: Vec<serde_json::Value> =
         serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();

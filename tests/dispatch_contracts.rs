@@ -139,6 +139,19 @@ fn json_flag_alone_produces_array() {
 }
 
 #[test]
+fn columnar_self_pid_first_line_not_json_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "default columnar output should not start like a JSON array"
+    );
+}
+
+#[test]
 fn terse_flag_after_json_branch_not_reached_with_json() {
     // When -J is set, main hits json::print_json before terse
     let my_pid = std::process::id().to_string();

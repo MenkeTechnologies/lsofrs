@@ -120,6 +120,17 @@ fn json_long_flag_stderr_empty_on_success() {
 }
 
 #[test]
+fn json_long_combined_npw_flags_is_array() {
+    let out = lsofrs()
+        .args(["--json", "-n", "-P", "-w"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn csv_stderr_empty_on_success() {
     let out = lsofrs().arg("--csv").output().unwrap();
     assert!(out.status.success());
