@@ -18,6 +18,28 @@ fn csv_flag_takes_precedence_over_json_flag() {
 }
 
 #[test]
+fn csv_flag_takes_precedence_over_json_when_json_short_first() {
+    let out = lsofrs().args(["-J", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "CSV runs before JSON when -J appears first on argv"
+    );
+}
+
+#[test]
+fn csv_flag_takes_precedence_over_json_when_json_long_first() {
+    let out = lsofrs().args(["--json", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "CSV runs before JSON when --json appears first on argv"
+    );
+}
+
+#[test]
 fn stale_flag_runs_before_csv_in_cli_order() {
     // --stale is handled before --csv in main; stale + csv both set → stale wins
     let out = lsofrs().args(["--stale", "--csv"]).output().unwrap();

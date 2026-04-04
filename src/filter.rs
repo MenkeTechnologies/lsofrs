@@ -586,6 +586,15 @@ mod tests {
     }
 
     #[test]
+    fn inet_filter_udp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("UDP:53", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("UDP"));
+        assert_eq!(nf.port_start, Some(53));
+    }
+
+    #[test]
     fn inet_filter_port_only() {
         let mut f = empty_filter();
         parse_inet_filter(":443", &mut f);
