@@ -229,6 +229,13 @@ mod tests {
     }
 
     #[test]
+    fn is_deleted_false_when_name_append_has_no_deleted_marker() {
+        let mut f = make_deleted_file(3, "/tmp/foo");
+        f.name_append = Some(" (mmap)".to_string());
+        assert!(!is_deleted(&f));
+    }
+
+    #[test]
     fn print_stale_empty_no_panic() {
         let theme = Theme::new(false);
         print_stale(&[], &theme, false);

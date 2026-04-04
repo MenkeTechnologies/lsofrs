@@ -1787,4 +1787,21 @@ mod tests {
         assert!(f.commands.is_empty());
         assert_eq!(f.command_regexes.len(), 3);
     }
+
+    #[test]
+    fn from_args_command_literals_comma_separated_not_regex() {
+        let args = Args::parse_from(["lsofrs", "-c", "lsofrs,bash"]);
+        let f = Filter::from_args(&args);
+        assert!(f.command_regexes.is_empty());
+        assert_eq!(f.commands, vec!["lsofrs".to_string(), "bash".to_string()]);
+    }
+
+    #[test]
+    fn from_args_command_mixed_literal_and_regex() {
+        let args = Args::parse_from(["lsofrs", "-c", "init,/^sshd/,kthreadd"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.commands, vec!["init".to_string(), "kthreadd".to_string()]);
+        assert_eq!(f.command_regexes.len(), 1);
+        assert_eq!(f.command_regexes[0].as_str(), "^sshd");
+    }
 }

@@ -687,3 +687,52 @@ fn json_fd_filter_cwd_self_pid_is_array() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn json_pipe_chain_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--pipe-chain", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array() || v.is_object());
+}
+
+#[test]
+fn csv_nul_terminator_stdout_starts_with_rfc_header() {
+    let out = lsofrs().args(["--csv", "-0"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.split('\0').next().unwrap_or("");
+    let header_line = first.lines().next().unwrap_or("");
+    assert!(
+        header_line.starts_with("COMMAND,PID,USER,"),
+        "first CSV segment header: {header_line:?}"
+    );
+}
+
+#[test]
+fn json_and_mode_self_pid_with_inet_tcp_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-a", "-p", &my_pid, "-i", "TCP"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_inet_bare_6_addr_family_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "6"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
