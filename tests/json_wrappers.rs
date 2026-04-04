@@ -205,6 +205,41 @@ fn tree_json_short_flag_before_tree_stderr_empty() {
 }
 
 #[test]
+fn net_map_json_short_flag_before_net_map_stderr_empty() {
+    let out = lsofrs().args(["-J", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn ports_json_short_flag_before_ports_stderr_empty() {
+    let out = lsofrs().args(["-J", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn stale_json_short_flag_before_stale_stderr_empty() {
+    let out = lsofrs().args(["-J", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn pipe_chain_json_short_flag_before_pipe_chain_stderr_empty() {
+    let out = lsofrs().args(["-J", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn summary_json_short_flag_before_summary_stderr_empty() {
+    let out = lsofrs().args(["-J", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn pipe_chain_json_long_flag_before_pipe_chain_same_wrapper() {
     let out = lsofrs().args(["--json", "--pipe-chain"]).output().unwrap();
     assert!(out.status.success());

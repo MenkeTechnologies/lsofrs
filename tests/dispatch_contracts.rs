@@ -288,3 +288,73 @@ fn csv_wins_over_summary_when_both_set() {
         "CSV runs before summary in main"
     );
 }
+
+#[test]
+fn ports_wins_over_summary_when_both_set() {
+    let out = lsofrs().args(["--ports", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "ports runs before summary in main"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_summary_when_both_set() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--summary"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "pipe-chain runs before summary in main"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
+fn stale_wins_over_summary_when_both_set() {
+    let out = lsofrs().args(["--stale", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "stale runs before summary in main"
+    );
+}
+
+#[test]
+fn stale_wins_over_tree_when_both_set() {
+    let out = lsofrs().args(["--stale", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "stale runs before tree in main"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_tree_when_both_set() {
+    let out = lsofrs().args(["--pipe-chain", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "pipe-chain runs before tree in main"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
