@@ -401,6 +401,21 @@ fn summary_csv_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_summary_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--summary", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV wins over summary even when --csv is first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_net_map_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--net-map", "--color", "never"])
