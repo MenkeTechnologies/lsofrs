@@ -639,3 +639,12 @@ fn pipe_chain_wins_over_tree_when_tree_flag_first() {
         "expected pipe-chain output"
     );
 }
+
+#[test]
+fn json_long_flag_alone_produces_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

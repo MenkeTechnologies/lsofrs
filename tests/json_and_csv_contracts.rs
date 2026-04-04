@@ -98,6 +98,17 @@ fn json_self_pid_array_of_one_process() {
 }
 
 #[test]
+fn json_long_self_pid_array_of_one_process() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> =
+        serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(v.len(), 1);
+    assert_eq!(v[0]["pid"].as_i64().unwrap(), std::process::id() as i64);
+}
+
+#[test]
 fn json_long_flag_self_pid_stderr_empty() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();

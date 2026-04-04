@@ -649,11 +649,31 @@ mod tests {
     }
 
     #[test]
+    fn inet_filter_6tcp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("6TCP:443", &mut f);
+        assert_eq!(f.network_type, Some(6));
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.port_start, Some(443));
+    }
+
+    #[test]
     fn inet_filter_6udp() {
         let mut f = empty_filter();
         parse_inet_filter("6UDP", &mut f);
         assert_eq!(f.network_type, Some(6));
         assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
+    }
+
+    #[test]
+    fn inet_filter_6udp_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("6UDP:53", &mut f);
+        assert_eq!(f.network_type, Some(6));
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("UDP"));
+        assert_eq!(nf.port_start, Some(53));
     }
 
     #[test]
