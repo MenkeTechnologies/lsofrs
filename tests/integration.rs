@@ -434,6 +434,95 @@ fn tree_takes_precedence_over_summary() {
     );
 }
 
+#[test]
+fn stale_takes_precedence_over_ports() {
+    let out = lsofrs().args(["--stale", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output"
+    );
+    assert!(
+        !stdout.contains("Listening"),
+        "ports should not run when stale wins"
+    );
+}
+
+#[test]
+fn stale_takes_precedence_over_net_map() {
+    let out = lsofrs().args(["--stale", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output"
+    );
+    assert!(
+        !stdout.contains("No network connections"),
+        "net-map should not run when stale wins"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_net_map() {
+    let out = lsofrs().args(["--ports", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "expected ports output"
+    );
+    assert!(
+        !stdout.contains("Network Connection Map") && !stdout.contains("No network connections"),
+        "net-map should not run when ports wins"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_pipe_chain() {
+    let out = lsofrs().args(["--ports", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "expected ports output"
+    );
+    assert!(
+        !stdout.contains("IPC Topology"),
+        "pipe-chain should not run when ports wins"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_net_map() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--net-map"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "expected pipe-chain output"
+    );
+    assert!(
+        !stdout.contains("Network Connection Map") && !stdout.contains("No network connections"),
+        "net-map should not run when pipe-chain wins"
+    );
+}
+
+#[test]
+fn summary_long_json_is_wrapped_not_default_array() {
+    let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let s = v
+        .get("summary")
+        .expect("--summary --json should wrap in summary object");
+    assert!(s.is_object(), "summary value should be an object");
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
