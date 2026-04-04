@@ -222,6 +222,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_narrow_no_break_space_unquoted() {
+        assert_eq!(csv_quote("a\u{202f}b"), "a\u{202f}b");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }

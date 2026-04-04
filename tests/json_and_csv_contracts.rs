@@ -1254,3 +1254,19 @@ fn csv_tcp_at_ipv6_bracket_host_port_stderr_empty() {
         .to_string();
     assert!(first.starts_with("COMMAND,PID,USER,"));
 }
+
+#[test]
+fn csv_udp_at_ipv6_bracket_host_port_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "-i", "UDP@[2001:db8::1]:5353"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let first = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    assert!(first.starts_with("COMMAND,PID,USER,"));
+}

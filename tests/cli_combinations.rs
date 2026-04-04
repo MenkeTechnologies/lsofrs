@@ -478,6 +478,49 @@ fn tree_net_map_color_never_stderr_empty() {
 }
 
 #[test]
+fn stale_pipe_chain_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(!s.contains("IPC Topology"), "stale wins over pipe-chain");
+}
+
+#[test]
+fn net_map_summary_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--summary", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "net-map wins over summary"
+    );
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "expected net-map output"
+    );
+}
+
+#[test]
+fn stale_ports_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--ports", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(!s.contains("Listening Ports"), "stale wins over ports");
+}
+
+#[test]
 fn net_map_csv_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--net-map", "--csv", "--color", "never"])
