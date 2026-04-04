@@ -285,6 +285,27 @@ fn stats_json_short_flag_before_stats_same_wrapper() {
 }
 
 #[test]
+fn stale_json_json_flag_before_stale_stderr_empty() {
+    let out = lsofrs().args(["--json", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn ports_json_json_flag_before_ports_stderr_empty() {
+    let out = lsofrs().args(["--json", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn summary_json_json_flag_before_summary_stderr_empty() {
+    let out = lsofrs().args(["--json", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn net_map_json_json_flag_before_net_map_stderr_empty() {
     let out = lsofrs().args(["--json", "--net-map"]).output().unwrap();
     assert!(out.status.success());

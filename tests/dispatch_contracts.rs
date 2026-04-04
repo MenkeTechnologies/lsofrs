@@ -179,3 +179,74 @@ fn pipe_chain_wins_over_net_map_when_both_set() {
         s.lines().take(3).collect::<Vec<_>>().join(" | ")
     );
 }
+
+#[test]
+fn stale_wins_over_pipe_chain_when_both_set() {
+    let out = lsofrs().args(["--stale", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("IPC Topology"),
+        "stale runs before pipe-chain in main"
+    );
+}
+
+#[test]
+fn stale_wins_over_net_map_when_both_set() {
+    let out = lsofrs().args(["--stale", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Network Connection Map"),
+        "stale runs before net-map in main"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_csv_when_both_set() {
+    let out = lsofrs().args(["--pipe-chain", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "pipe-chain runs before CSV in main"
+    );
+}
+
+#[test]
+fn net_map_wins_over_tree_when_both_set() {
+    let out = lsofrs().args(["--net-map", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "net-map runs before tree in main"
+    );
+}
+
+#[test]
+fn tree_wins_over_summary_when_both_set() {
+    let out = lsofrs().args(["--tree", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "tree runs before summary in main"
+    );
+    assert!(
+        s.contains("OPEN FILES"),
+        "expected tree header: {}",
+        s.lines().next().unwrap_or("")
+    );
+}
+
+#[test]
+fn csv_wins_over_tree_when_both_set() {
+    let out = lsofrs().args(["--csv", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV runs before tree in main"
+    );
+}

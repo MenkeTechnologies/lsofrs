@@ -494,6 +494,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_tree_and_summary_flags() {
+        let args = Args::parse_from(["lsofrs", "--tree", "--summary"]);
+        assert!(args.tree);
+        assert!(args.summary);
+    }
+
+    #[test]
     fn parse_tree_with_filters() {
         let args = Args::parse_from(["lsofrs", "--tree", "-u", "root", "-c", "sshd"]);
         assert!(args.tree);
