@@ -814,6 +814,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_top_with_json_and_pid() {
+        let args = Args::parse_from(["lsofrs", "--top", "12", "-J", "-p", "1"]);
+        assert_eq!(args.top, Some(Some(12)));
+        assert!(args.json);
+        assert_eq!(args.pid.as_deref(), Some("1"));
+    }
+
+    #[test]
     fn parse_pipe_chain_with_csv() {
         let args = Args::parse_from(["lsofrs", "--pipe-chain", "--csv"]);
         assert!(args.pipe_chain);

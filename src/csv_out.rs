@@ -99,6 +99,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_spaces_and_commas() {
+        assert_eq!(csv_quote(", ,"), "\", ,\"");
+    }
+
+    #[test]
     fn csv_quote_crlf_in_field() {
         assert_eq!(csv_quote("a\r\nb"), "\"a\r\nb\"");
     }

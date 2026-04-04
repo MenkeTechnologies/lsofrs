@@ -60,6 +60,14 @@ fn csv_self_pid_has_rfc_header() {
 }
 
 #[test]
+fn csv_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--csv", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn json_self_pid_array_of_one_process() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();

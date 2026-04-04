@@ -85,6 +85,17 @@ fn csv_flag_takes_precedence_over_net_map_flag() {
 }
 
 #[test]
+fn csv_wins_over_net_map_when_csv_flag_first() {
+    let out = lsofrs().args(["--csv", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "dispatch order is fixed in main, not argv order"
+    );
+}
+
+#[test]
 fn pipe_chain_text_not_json_array() {
     let out = lsofrs().args(["--pipe-chain"]).output().unwrap();
     assert!(out.status.success());
@@ -232,6 +243,22 @@ fn tree_wins_over_summary_when_both_set() {
     assert!(
         !s.contains("=== lsofrs summary ==="),
         "tree runs before summary in main"
+    );
+    assert!(
+        s.contains("OPEN FILES"),
+        "expected tree header: {}",
+        s.lines().next().unwrap_or("")
+    );
+}
+
+#[test]
+fn tree_wins_over_summary_when_summary_flag_first() {
+    let out = lsofrs().args(["--summary", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "tree still wins when --summary appears first on argv"
     );
     assert!(
         s.contains("OPEN FILES"),
