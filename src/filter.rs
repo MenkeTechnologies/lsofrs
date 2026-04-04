@@ -1915,6 +1915,19 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_4tcp_with_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "4TCP:22"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.network_type, Some(4));
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.protocol.as_deref() == Some("TCP") && nf.port_start == Some(22))
+        );
+    }
+
+    #[test]
     fn from_args_three_command_regexes() {
         let args = Args::parse_from(["lsofrs", "-c", "/foo/,/bar/,/baz/"]);
         let f = Filter::from_args(&args);

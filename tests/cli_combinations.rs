@@ -346,6 +346,40 @@ fn ports_text_color_never_stderr_empty() {
 }
 
 #[test]
+fn ports_csv_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "ports wins over csv in dispatch"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn net_map_csv_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "CSV branch runs before net-map"
+    );
+}
+
+#[test]
 fn pipe_chain_text_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--color", "never"])
