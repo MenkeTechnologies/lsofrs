@@ -482,6 +482,7 @@ mod tests {
     fn file_type_display() {
         assert_eq!(format!("{}", FileType::Reg), "REG");
         assert_eq!(format!("{}", FileType::IPv4), "IPv4");
+        assert_eq!(format!("{}", FileType::Sock), FileType::Sock.as_str());
     }
 
     #[test]

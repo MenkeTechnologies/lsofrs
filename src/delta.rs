@@ -228,6 +228,21 @@ mod tests {
     }
 
     #[test]
+    fn same_fd_number_different_path_counts_gone_and_new() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a")]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 1);
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/b")]));
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 1);
+    }
+
+    #[test]
     fn gone_files_detected() {
         let mut dt = DeltaTracker::new();
 

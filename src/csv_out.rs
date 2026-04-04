@@ -267,6 +267,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_soft_hyphen_only_field_unquoted() {
+        assert_eq!(csv_quote("\u{00ad}"), "\u{00ad}");
+    }
+
+    #[test]
     fn csv_quote_bom_prefix_field_unquoted() {
         assert_eq!(csv_quote("\u{feff}payload"), "\u{feff}payload");
     }
