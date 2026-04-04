@@ -250,3 +250,41 @@ fn csv_wins_over_tree_when_both_set() {
         "CSV runs before tree in main"
     );
 }
+
+#[test]
+fn stale_wins_over_csv_when_both_set() {
+    let out = lsofrs().args(["--stale", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "stale runs before CSV in main"
+    );
+}
+
+#[test]
+fn net_map_wins_over_summary_when_both_set() {
+    let out = lsofrs().args(["--net-map", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("=== lsofrs summary ==="),
+        "net-map runs before summary in main"
+    );
+    assert!(
+        s.contains("Network Connection Map") || s.contains("No network connections"),
+        "expected net-map output: {}",
+        s.lines().take(2).collect::<Vec<_>>().join(" | ")
+    );
+}
+
+#[test]
+fn csv_wins_over_summary_when_both_set() {
+    let out = lsofrs().args(["--csv", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV runs before summary in main"
+    );
+}

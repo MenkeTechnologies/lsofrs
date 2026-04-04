@@ -501,6 +501,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_stale_and_csv_flags() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--csv"]);
+        assert!(args.stale);
+        assert!(args.csv_output);
+    }
+
+    #[test]
     fn parse_tree_with_filters() {
         let args = Args::parse_from(["lsofrs", "--tree", "-u", "root", "-c", "sshd"]);
         assert!(args.tree);

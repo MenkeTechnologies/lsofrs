@@ -183,6 +183,28 @@ fn tree_json_long_flag_before_tree_same_shape() {
 }
 
 #[test]
+fn tree_json_json_flag_before_tree_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--json", "--tree", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn tree_json_short_flag_before_tree_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--tree", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn pipe_chain_json_long_flag_before_pipe_chain_same_wrapper() {
     let out = lsofrs().args(["--json", "--pipe-chain"]).output().unwrap();
     assert!(out.status.success());
