@@ -163,6 +163,14 @@ mod tests {
     }
 
     #[test]
+    fn default_matches_new() {
+        let a = DeltaTracker::new();
+        let b = DeltaTracker::default();
+        assert_eq!(a.new_count, b.new_count);
+        assert_eq!(a.gone_count, b.gone_count);
+    }
+
+    #[test]
     fn new_tracker_starts_empty() {
         let dt = DeltaTracker::new();
         assert_eq!(dt.new_count, 0);

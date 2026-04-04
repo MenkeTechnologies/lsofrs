@@ -415,6 +415,37 @@ mod tests {
     }
 
     #[test]
+    fn net_map_wildcard_foreign_addr_with_port_groups_under_star_colon() {
+        let theme = Theme::new(false);
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![OpenFile {
+                fd: FdName::Number(3),
+                access: Access::ReadWrite,
+                file_type: FileType::IPv4,
+                name: "edge case".to_string(),
+                socket_info: Some(SocketInfo {
+                    protocol: "TCP".to_string(),
+                    tcp_state: Some(TcpState::SynSent),
+                    local: InetAddr {
+                        addr: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                        port: 50000,
+                    },
+                    foreign: InetAddr {
+                        addr: None,
+                        port: 443,
+                    },
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        )];
+        print_net_map(&procs, &theme, false);
+        print_net_map(&procs, &theme, true);
+    }
+
+    #[test]
     fn net_map_sorted_by_count_desc() {
         let theme = Theme::new(false);
         let few = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));

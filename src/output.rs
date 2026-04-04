@@ -703,4 +703,20 @@ mod tests {
         p.uid = 501;
         print_field_output(std::slice::from_ref(&p), "pgRuL", '\n');
     }
+
+    #[test]
+    fn theme_plain_column_titles_when_not_tty() {
+        let t = Theme::new(false);
+        assert_eq!(t.cmd_title(), "COMMAND");
+        assert_eq!(t.name_title(), "NAME");
+        assert_eq!(t.pid_title(), "PID");
+    }
+
+    #[test]
+    fn theme_tty_column_titles() {
+        let t = Theme::new(true);
+        assert_eq!(t.cmd_title(), "PROCESS");
+        assert_eq!(t.name_title(), "T4RGET");
+        assert_eq!(t.pid_title(), "PRC");
+    }
 }

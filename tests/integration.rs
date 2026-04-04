@@ -244,6 +244,97 @@ fn terse_takes_precedence_over_field_output() {
     }
 }
 
+#[test]
+fn stale_takes_precedence_over_terse() {
+    let out = lsofrs().args(["--stale", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "stale runs before terse; expected stale banner or empty message, got: {stdout}"
+    );
+}
+
+#[test]
+fn tree_json_takes_precedence_over_terse() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "-t", "-J", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let v: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    let arr = v.as_array().expect("tree --json should emit a JSON array");
+    assert!(!arr.is_empty());
+    assert!(arr[0].get("pid").is_some());
+}
+
+#[test]
+fn summary_json_takes_precedence_over_terse() {
+    let out = lsofrs().args(["--summary", "-t", "-J"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.get("summary").is_some());
+}
+
+#[test]
+fn net_map_json_takes_precedence_over_terse() {
+    let out = lsofrs().args(["--net-map", "-t", "-J"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.get("net_map").is_some());
+}
+
+#[test]
+fn ports_json_takes_precedence_over_terse() {
+    let out = lsofrs().args(["--ports", "-t", "-J"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.get("listening_ports").is_some());
+}
+
+#[test]
+fn pipe_chain_json_takes_precedence_over_terse() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "-t", "-J"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.get("pipe_chains").is_some());
+}
+
+#[test]
+fn csv_takes_precedence_over_summary() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "--summary", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before --summary when both are set"
+    );
+}
+
+#[test]
+fn csv_takes_precedence_over_tree() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "--tree", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before --tree when both are set"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]

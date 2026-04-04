@@ -400,7 +400,7 @@ To see how many test cases `cargo test` executes (library + binary harnesses + e
 
 Columnar header lines include padding derived from live FD data, so integration tests that check `--color` compare title substrings (for example `COMMAND` vs `PROCESS`), not full header string equality across two process spawns.
 
-Dispatch order matters when multiple output modes are set: for example `--csv` runs before `--json`, and `--json` runs before `-t` terse, which runs before `-F` field output. Integration tests cover `-J` with `-F`, `--csv` with `-J`, `-J` with `-t`, `--csv` with `-t`, and `-t` with `-F` so the winning mode stays stable.
+Dispatch order matters when multiple output modes are set: for example `--stale` and other single-shot modes run before `--csv`; `--csv` runs before `--json`; `--json` runs before `-t` terse, which runs before `-F` field output. Integration tests cover combinations such as `-J` with `-F`, `--csv` with `-J`, `-J` with `-t`, `--csv` with `-t`, `-t` with `-F`, `--stale` with `-t`, `--tree`/`--summary`/`--net-map`/`--ports`/`--pipe-chain` with `-J` and `-t`, and `--csv` with `--summary` or `--tree` so the winning mode stays stable.
 
 ### Key Design Decisions
 
