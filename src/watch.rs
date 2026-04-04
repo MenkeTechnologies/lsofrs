@@ -300,6 +300,15 @@ mod tests {
     }
 
     #[test]
+    fn file_matches_child_path_under_original_operand() {
+        assert!(file_matches(
+            "/etc/hosts/extra",
+            "/private/etc/hosts",
+            "/etc/hosts"
+        ));
+    }
+
+    #[test]
     fn print_snapshot_empty() {
         let theme = Theme::new(false);
         let table = HashMap::new();

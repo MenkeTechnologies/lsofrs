@@ -392,6 +392,15 @@ mod tests {
     }
 
     #[test]
+    fn tree_json_multiple_roots_no_panic() {
+        let procs = vec![
+            make_proc(1, 0, "init", 1),
+            make_proc(500, 49_999, "orphan", 1),
+        ];
+        print_tree_json(&procs);
+    }
+
+    #[test]
     fn tree_with_network_files() {
         let mut p = make_proc(1, 0, "nginx", 0);
         p.files.push(OpenFile {

@@ -383,6 +383,13 @@ mod tests {
     }
 
     #[test]
+    fn is_listening_tcp_missing_tcp_state_excluded() {
+        let mut f = make_tcp_listen(3, 9000);
+        f.socket_info.as_mut().unwrap().tcp_state = None;
+        assert!(is_listening(&f).is_none());
+    }
+
+    #[test]
     fn is_listening_tcp_listen_protocol_case_insensitive() {
         let mut f = make_tcp_listen(3, 443);
         if let Some(ref mut si) = f.socket_info {

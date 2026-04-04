@@ -1234,6 +1234,16 @@ mod tests {
     }
 
     #[test]
+    fn from_args_fd_three_comma_separated_tokens() {
+        let args = Args::parse_from(["lsofrs", "-d", "0,5,cwd"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.fd_filters.len(), 3);
+        assert!(matches!(&f.fd_filters[0], FdFilter::Range(0, 0)));
+        assert!(matches!(&f.fd_filters[1], FdFilter::Range(5, 5)));
+        assert!(matches!(&f.fd_filters[2], FdFilter::Name(s) if s == "cwd"));
+    }
+
+    #[test]
     fn from_args_fd_exclude() {
         let args = Args::parse_from(["lsofrs", "-d", "^0-2"]);
         let f = Filter::from_args(&args);

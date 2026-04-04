@@ -527,6 +527,15 @@ fn csv_inet_tcp_filter_has_rfc_header() {
 }
 
 #[test]
+fn json_pipe_chain_parses_and_stderr_empty() {
+    let out = lsofrs().args(["-J", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array() || v.is_object());
+}
+
+#[test]
 fn field_output_self_pid_multichar_fields() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()

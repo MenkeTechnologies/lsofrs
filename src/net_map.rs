@@ -476,4 +476,17 @@ mod tests {
         // Same PID should appear only once in processes list
         print_net_map(&procs, &theme, true);
     }
+
+    #[test]
+    fn print_net_map_ipv6_foreign_no_panic() {
+        let theme = Theme::new(false);
+        let remote = IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0x1));
+        let procs = vec![make_proc(
+            100,
+            "curl6",
+            vec![make_tcp6_conn(3, remote, 443)],
+        )];
+        print_net_map(&procs, &theme, false);
+        print_net_map(&procs, &theme, true);
+    }
 }

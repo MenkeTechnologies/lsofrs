@@ -53,6 +53,7 @@ fn tree_json_self_pid_is_non_empty_value() {
 fn summary_json_parses_and_has_keys() {
     let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
     assert!(out.status.success());
+    assert!(out.stderr.is_empty());
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     match v {
         serde_json::Value::Object(ref m) => {
