@@ -277,6 +277,45 @@ fn csv_takes_precedence_over_terse() {
 }
 
 #[test]
+fn csv_takes_precedence_over_terse_when_terse_flag_first() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-t", "--csv", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before terse when -t appears first on argv"
+    );
+}
+
+#[test]
+fn json_long_takes_precedence_over_terse_when_terse_flag_first() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-t", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(parsed.is_array());
+}
+
+#[test]
+fn stale_takes_precedence_over_terse_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "stale runs before terse when -t appears first on argv; got: {stdout}"
+    );
+}
+
+#[test]
 fn terse_takes_precedence_over_field_output() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()
@@ -732,8 +771,27 @@ fn net_map_takes_precedence_over_terse_text() {
 }
 
 #[test]
+fn net_map_takes_precedence_over_terse_text_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Network Connection Map") || stdout.contains("No network connections"),
+        "net-map should run before terse when -t appears first on argv"
+    );
+}
+
+#[test]
 fn summary_takes_precedence_over_terse_text() {
     let out = lsofrs().args(["--summary", "-t"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Processes:") && stdout.contains("Open files:"));
+}
+
+#[test]
+fn summary_takes_precedence_over_terse_text_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--summary"]).output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Processes:") && stdout.contains("Open files:"));
@@ -747,6 +805,17 @@ fn tree_takes_precedence_over_terse_text() {
     assert!(
         stdout.contains("OPEN FILES"),
         "tree should run before terse"
+    );
+}
+
+#[test]
+fn tree_takes_precedence_over_terse_text_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--tree"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("OPEN FILES"),
+        "tree should run before terse when -t appears first on argv"
     );
 }
 
@@ -770,6 +839,17 @@ fn ports_takes_precedence_over_terse_text() {
 }
 
 #[test]
+fn ports_takes_precedence_over_terse_text_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "ports should run before terse when -t appears first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_takes_precedence_over_terse_text() {
     let out = lsofrs().args(["--pipe-chain", "-t"]).output().unwrap();
     assert!(out.status.success());
@@ -777,6 +857,17 @@ fn pipe_chain_takes_precedence_over_terse_text() {
     assert!(
         stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
         "pipe-chain should run before terse"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_terse_text_when_terse_flag_first() {
+    let out = lsofrs().args(["-t", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("IPC Topology") || stdout.contains("No pipe/socket IPC connections"),
+        "pipe-chain should run before terse when -t appears first on argv"
     );
 }
 

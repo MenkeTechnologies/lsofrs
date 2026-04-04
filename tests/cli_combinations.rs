@@ -162,6 +162,13 @@ fn summary_text_stderr_empty_on_success() {
 }
 
 #[test]
+fn stats_alias_text_stderr_empty_on_success() {
+    let out = lsofrs().arg("--stats").output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn exclude_user_syntax_no_crash() {
     let out = lsofrs().args(["-u", "^root"]).output().unwrap();
     assert!(out.status.success());
