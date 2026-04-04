@@ -47,6 +47,14 @@ fn json_4tcp_combo_is_array() {
 }
 
 #[test]
+fn columnar_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
 fn csv_self_pid_has_rfc_header() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["--csv", "-p", &my_pid]).output().unwrap();

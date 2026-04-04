@@ -218,6 +218,50 @@ fn json_takes_precedence_over_terse() {
 }
 
 #[test]
+fn json_takes_precedence_over_terse_when_terse_flag_first() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-t", "-J", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert!(parsed.is_array());
+}
+
+#[test]
+fn json_wins_when_field_output_also_specified_when_field_first() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-F", "pn", "-J", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(!parsed.is_empty());
+    assert!(parsed[0].get("command").is_some());
+}
+
+#[test]
+fn terse_takes_precedence_over_field_when_field_flag_first() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-F", "pn", "-t", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        assert!(
+            line.trim().parse::<i32>().is_ok(),
+            "terse should run before -F field output; expected PID line, got '{line}'"
+        );
+    }
+}
+
+#[test]
 fn csv_takes_precedence_over_terse() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()
@@ -750,6 +794,21 @@ fn csv_takes_precedence_over_field_output() {
     assert!(
         stdout.starts_with("COMMAND,"),
         "CSV runs before -F field output"
+    );
+}
+
+#[test]
+fn csv_takes_precedence_over_field_output_when_field_first_on_argv() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-F", "pn", "--csv", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before -F field output even when -F appears first on argv"
     );
 }
 
