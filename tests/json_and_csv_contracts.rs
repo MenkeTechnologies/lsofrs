@@ -862,3 +862,37 @@ fn json_self_pid_fd_exclude_range_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn json_dir_recurse_flag_stderr_empty() {
+    let out = lsofrs()
+        .args(["-J", "--dir-recurse", "/tmp"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_dir_one_level_stderr_empty() {
+    let out = lsofrs().args(["--csv", "--dir", "/tmp"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let first = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .unwrap_or("")
+        .to_string();
+    assert!(first.starts_with("COMMAND,PID,USER,"));
+}
+
+#[test]
+fn json_inet_host_at_only_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "@127.0.0.1"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

@@ -576,6 +576,17 @@ mod tests {
     }
 
     #[test]
+    fn inet_addr_ipv4_with_port() {
+        use std::net::{IpAddr, Ipv4Addr};
+        let ia = InetAddr {
+            addr: Some(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 9))),
+            port: 65535,
+        };
+        assert_eq!(ia.port, 65535);
+        assert_eq!(ia.addr.unwrap().to_string(), "203.0.113.9");
+    }
+
+    #[test]
     fn socket_info_default() {
         let s = SocketInfo::default();
         assert_eq!(s.protocol, "");

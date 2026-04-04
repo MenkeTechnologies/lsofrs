@@ -187,6 +187,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_plain_ascii_no_comma_no_quotes() {
+        assert_eq!(csv_quote("simple-cmd"), "simple-cmd");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }
