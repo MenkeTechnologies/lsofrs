@@ -456,6 +456,43 @@ fn json_self_pid_fd_exclude_still_array() {
 }
 
 #[test]
+fn json_4tcp_port_combo_is_array() {
+    let out = lsofrs().args(["-J", "-i", "4TCP:22"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_tcp_at_host_no_port_is_array() {
+    let out = lsofrs()
+        .args(["--json", "-i", "TCP@10.0.0.5"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_self_pid_show_ppid_is_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-J", "-R", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_pgid_filter_process_group_one_is_array() {
+    let out = lsofrs().args(["-J", "-g", "1"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn field_output_self_pid_multichar_fields() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()

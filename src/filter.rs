@@ -800,6 +800,16 @@ mod tests {
     }
 
     #[test]
+    fn inet_filter_tcp_at_host_no_port() {
+        let mut f = empty_filter();
+        parse_inet_filter("TCP@192.168.1.1", &mut f);
+        let nf = &f.network_filters[0];
+        assert_eq!(nf.protocol.as_deref(), Some("TCP"));
+        assert_eq!(nf.host.as_deref(), Some("192.168.1.1"));
+        assert!(nf.port_start.is_none());
+    }
+
+    #[test]
     fn fd_filter_multi_dash_becomes_name_not_range() {
         let mut filters = vec![];
         parse_fd_filter("10-20-30", &mut filters);
@@ -1045,6 +1055,24 @@ mod tests {
         assert!(f.matches_file(&make_tcp_file(3, "TCP", 443, 0)));
         assert!(f.matches_file(&make_tcp_file(3, "TCP", 0, 443))); // foreign port
         assert!(!f.matches_file(&make_tcp_file(3, "TCP", 80, 0)));
+    }
+
+    #[test]
+    fn network_port_range_matches_local_or_foreign() {
+        let mut f = empty_filter();
+        f.network = true;
+        f.network_filters = vec![NetworkFilter {
+            protocol: None,
+            addr_family: None,
+            addr: None,
+            host: None,
+            port_start: Some(8000),
+            port_end: Some(8010),
+        }];
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 8005, 0)));
+        assert!(f.matches_file(&make_tcp_file(3, "TCP", 0, 8008)));
+        assert!(!f.matches_file(&make_tcp_file(3, "TCP", 7999, 0)));
+        assert!(!f.matches_file(&make_tcp_file(3, "TCP", 0, 7990)));
     }
 
     #[test]

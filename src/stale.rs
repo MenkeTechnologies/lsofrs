@@ -216,6 +216,13 @@ mod tests {
     }
 
     #[test]
+    fn is_deleted_name_append_contains_deleted_substring() {
+        let mut f = make_deleted_file(3, "/tmp/foo");
+        f.name_append = Some("inode (deleted) recycled".to_string());
+        assert!(is_deleted(&f));
+    }
+
+    #[test]
     fn is_deleted_normal_file() {
         let f = make_deleted_file(3, "/tmp/foo");
         assert!(!is_deleted(&f));

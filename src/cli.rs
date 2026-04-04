@@ -620,6 +620,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_pgid_filter_comma_separated() {
+        let args = Args::parse_from(["lsofrs", "-g", "42,99"]);
+        assert_eq!(args.pgid.as_deref(), Some("42,99"));
+    }
+
+    #[test]
     fn parse_pipe_chain_with_json() {
         let args = Args::parse_from(["lsofrs", "--pipe-chain", "--json"]);
         assert!(args.pipe_chain);

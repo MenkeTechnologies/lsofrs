@@ -324,4 +324,21 @@ mod tests {
         }
         assert!(ld.table[&100].history.len() <= HISTORY_SIZE);
     }
+
+    #[test]
+    fn report_no_panic_empty_detector() {
+        let ld = LeakDetector::new(3);
+        let theme = Theme::new(false);
+        ld.report(&theme);
+    }
+
+    #[test]
+    fn report_no_panic_with_flagged_leak() {
+        let mut ld = LeakDetector::new(2);
+        for i in 0..5 {
+            ld.update(&[make_proc(100, "leaky", 10 + i)]);
+        }
+        let theme = Theme::new(false);
+        ld.report(&theme);
+    }
 }
