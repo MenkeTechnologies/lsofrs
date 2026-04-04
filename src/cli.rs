@@ -853,6 +853,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_stale_and_pipe_chain_flags() {
+        let args = Args::parse_from(["lsofrs", "--stale", "--pipe-chain"]);
+        assert!(args.stale);
+        assert!(args.pipe_chain);
+    }
+
+    #[test]
+    fn parse_net_map_and_summary_flags() {
+        let args = Args::parse_from(["lsofrs", "--net-map", "--summary"]);
+        assert!(args.net_map);
+        assert!(args.summary);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

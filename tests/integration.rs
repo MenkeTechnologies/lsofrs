@@ -523,6 +523,58 @@ fn summary_long_json_is_wrapped_not_default_array() {
     assert!(s.is_object(), "summary value should be an object");
 }
 
+#[test]
+fn stale_takes_precedence_over_pipe_chain() {
+    let out = lsofrs().args(["--stale", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output"
+    );
+    assert!(
+        !stdout.contains("IPC Topology"),
+        "pipe-chain should not run when stale wins"
+    );
+}
+
+#[test]
+fn net_map_takes_precedence_over_summary() {
+    let out = lsofrs().args(["--net-map", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Network Connection Map") || stdout.contains("No network connections"),
+        "expected net-map output"
+    );
+    assert!(
+        !stdout.contains("lsofrs summary"),
+        "summary should not run when net-map wins"
+    );
+}
+
+#[test]
+fn tree_json_emits_tree_nodes_not_default_lsof_rows() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "-J", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let arr = v.as_array().expect("tree --json should be a JSON array");
+    assert!(!arr.is_empty());
+    let first = &arr[0];
+    assert!(
+        first.get("children").is_some(),
+        "tree JSON should expose children[]"
+    );
+    assert!(
+        first.get("files").is_none(),
+        "default lsof -J rows include files[]; tree JSON should not"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]

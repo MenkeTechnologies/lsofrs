@@ -241,6 +241,14 @@ mod tests {
     }
 
     #[test]
+    fn leak_flags_at_threshold_one_after_single_fd_increase() {
+        let mut ld = LeakDetector::new(1);
+        ld.update(&[make_proc(100, "leaky", 10)]);
+        ld.update(&[make_proc(100, "leaky", 11)]);
+        assert!(ld.table[&100].flagged);
+    }
+
+    #[test]
     fn leak_not_flagged_below_threshold() {
         let mut ld = LeakDetector::new(5);
         // Only 3 increases
