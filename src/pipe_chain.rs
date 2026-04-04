@@ -225,6 +225,14 @@ mod tests {
     }
 
     #[test]
+    fn pipe_identifier_macos_hex_first_token_only() {
+        let f = make_pipe(3, "->0xf00f00c0 trailing-garbage");
+        let (kind, id) = pipe_identifier(&f).unwrap();
+        assert_eq!(kind, "pipe");
+        assert_eq!(id, "0xf00f00c0");
+    }
+
+    #[test]
     fn pipe_identifier_linux_pipe() {
         let f = make_pipe(3, "pipe:[12345]");
         let result = pipe_identifier(&f);

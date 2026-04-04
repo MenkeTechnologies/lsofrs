@@ -832,6 +832,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_json_long_and_summary_together() {
+        let args = Args::parse_from(["lsofrs", "--json", "--summary"]);
+        assert!(args.json);
+        assert!(args.summary);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

@@ -335,6 +335,105 @@ fn csv_takes_precedence_over_tree() {
     );
 }
 
+#[test]
+fn stale_takes_precedence_over_csv() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--stale", "--csv", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.starts_with("COMMAND,"),
+        "stale runs before CSV export"
+    );
+    assert!(
+        stdout.contains("No stale") || stdout.contains("Stale FD"),
+        "expected stale output, got: {stdout}"
+    );
+}
+
+#[test]
+fn ports_takes_precedence_over_csv() {
+    let out = lsofrs().args(["--ports", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.starts_with("COMMAND,"),
+        "ports runs before CSV export"
+    );
+    assert!(
+        stdout.contains("Listening") || stdout.contains("No listening"),
+        "expected ports banner, got: {stdout}"
+    );
+}
+
+#[test]
+fn pipe_chain_takes_precedence_over_csv() {
+    let out = lsofrs().args(["--pipe-chain", "--csv"]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.starts_with("COMMAND,"),
+        "pipe-chain runs before CSV export"
+    );
+    assert!(
+        stdout.contains("Pipe") || stdout.contains("No pipe"),
+        "expected pipe-chain banner, got: {stdout}"
+    );
+}
+
+#[test]
+fn csv_takes_precedence_over_net_map() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--csv", "--net-map", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,"),
+        "CSV runs before --net-map when both are set"
+    );
+}
+
+#[test]
+fn net_map_takes_precedence_over_tree() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--net-map", "--tree", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Network Connection Map") || stdout.contains("No network"),
+        "net-map runs before tree, expected net-map output"
+    );
+    assert!(
+        !stdout.contains("OPEN FILES"),
+        "tree output should not appear when net-map wins"
+    );
+}
+
+#[test]
+fn tree_takes_precedence_over_summary() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "--summary", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("OPEN FILES"), "tree runs before summary");
+    assert!(
+        !stdout.contains("lsofrs summary"),
+        "summary text should not appear when tree wins"
+    );
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
