@@ -1890,6 +1890,18 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_udp_bracket_ipv6_host_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP[::1]:53"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(f.network_filters.iter().any(|nf| {
+            nf.protocol.as_deref() == Some("UDP")
+                && nf.host.as_deref() == Some("[::1]")
+                && nf.port_start == Some(53)
+        }));
+    }
+
+    #[test]
     fn from_args_inet_udp_at_ipv6_bracket_host_port() {
         let args = Args::parse_from(["lsofrs", "-i", "UDP@[2001:db8::1]:5353"]);
         let f = Filter::from_args(&args);

@@ -356,6 +356,55 @@ fn stale_net_map_color_never_stderr_empty() {
 }
 
 #[test]
+fn stale_csv_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "stale wins over csv"
+    );
+}
+
+#[test]
+fn summary_csv_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV wins over summary"
+    );
+}
+
+#[test]
+fn pipe_chain_net_map_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--pipe-chain", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "pipe-chain wins over net-map"
+    );
+    assert!(
+        !s.contains("Network Connection Map"),
+        "net-map should not win"
+    );
+}
+
+#[test]
 fn net_map_text_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--net-map", "--color", "never"])

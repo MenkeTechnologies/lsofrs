@@ -1217,3 +1217,15 @@ fn csv_tcp_bracket_ipv6_host_port_stderr_empty() {
         .to_string();
     assert!(first.starts_with("COMMAND,PID,USER,"));
 }
+
+#[test]
+fn json_tcp_at_ipv6_bracket_host_port_stderr_empty() {
+    let out = lsofrs()
+        .args(["-J", "-i", "TCP@[2001:db8::1]:443"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
