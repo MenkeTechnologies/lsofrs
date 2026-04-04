@@ -386,6 +386,21 @@ fn stale_csv_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_stale_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "stale wins over csv even when --csv is first on argv"
+    );
+}
+
+#[test]
 fn summary_csv_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--summary", "--csv", "--color", "never"])

@@ -1308,6 +1308,50 @@ fn csv_6tcp_port_22_stderr_empty() {
 }
 
 #[test]
+fn json_6tcp_port_67_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "6TCP:67"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_6tcp_port_67_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "6TCP:67"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_6tcp_port_123_stderr_empty() {
+    let out = lsofrs().args(["-J", "-i", "6TCP:123"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn csv_6tcp_port_123_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "6TCP:123"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
 fn json_4tcp_port_80_stderr_empty() {
     let out = lsofrs().args(["-J", "-i", "4TCP:80"]).output().unwrap();
     assert!(out.status.success());
