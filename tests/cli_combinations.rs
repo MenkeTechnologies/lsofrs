@@ -618,6 +618,29 @@ fn pipe_chain_tree_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_pipe_chain_tree_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--pipe-chain", "--tree", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "pipe-chain wins over csv even when --csv is first on argv"
+    );
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "pipe-chain wins over tree"
+    );
+    assert!(
+        s.contains("IPC Topology") || s.contains("Pipe/Socket") || s.contains("No pipe"),
+        "expected pipe-chain output"
+    );
+}
+
+#[test]
 fn ports_pipe_chain_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--ports", "--pipe-chain", "--color", "never"])
