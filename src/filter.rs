@@ -730,6 +730,13 @@ mod tests {
     }
 
     #[test]
+    fn fd_filter_zero() {
+        let mut filters = vec![];
+        parse_fd_filter("0", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(0, 0)));
+    }
+
+    #[test]
     fn fd_filter_range() {
         let mut filters = vec![];
         parse_fd_filter("0-10", &mut filters);

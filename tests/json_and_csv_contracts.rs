@@ -79,6 +79,22 @@ fn json_long_flag_6tcp_combo_is_array() {
 }
 
 #[test]
+fn json_long_flag_4tcp_combo_is_array() {
+    let out = lsofrs().args(["--json", "-i", "4TCP"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_long_flag_unix_socket_filter_is_array() {
+    let out = lsofrs().args(["--json", "-U"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn columnar_self_pid_stderr_empty() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-p", &my_pid]).output().unwrap();

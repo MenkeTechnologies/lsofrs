@@ -27,6 +27,15 @@ fn json_self_pid_command_is_string() {
 }
 
 #[test]
+fn json_long_flag_self_pid_command_is_string() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(v[0]["command"].as_str().is_some());
+}
+
+#[test]
 fn json_self_pid_matches_os_pid() {
     let p = self_json_process();
     assert_eq!(p["pid"].as_i64().unwrap(), std::process::id() as i64);

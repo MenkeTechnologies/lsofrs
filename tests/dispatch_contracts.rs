@@ -191,6 +191,23 @@ fn tree_text_first_line_not_json_array() {
 }
 
 #[test]
+fn csv_text_first_line_not_json_array_for_self_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--csv", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "CSV header line should not look like a JSON array"
+    );
+    assert!(
+        first.starts_with("COMMAND"),
+        "expected CSV header, got {first:?}"
+    );
+}
+
+#[test]
 fn json_flag_alone_produces_array() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();
