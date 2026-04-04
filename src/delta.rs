@@ -435,6 +435,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn fd_gone_then_same_fd_reappears_counts_as_new() {
+        let mut dt = DeltaTracker::new();
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a")]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 1);
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![]));
+        dt.count_gone();
+        assert_eq!(dt.gone_count, 1);
+        assert_eq!(dt.new_count, 0);
+
+        dt.begin_iteration();
+        dt.record(&make_proc(100, "x", vec![("3", "/a")]));
+        dt.count_gone();
+        assert_eq!(dt.new_count, 1);
+        assert_eq!(dt.gone_count, 0);
+    }
+
     fn proc_with_open_files(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
         Process {
             pid,

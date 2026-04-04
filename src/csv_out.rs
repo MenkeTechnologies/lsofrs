@@ -257,6 +257,26 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_embedded_double_quote_quoted() {
+        assert_eq!(csv_quote("a\"b"), "\"a\"\"b\"");
+    }
+
+    #[test]
+    fn csv_quote_cr_only_unquoted() {
+        assert_eq!(csv_quote("\r"), "\r");
+    }
+
+    #[test]
+    fn csv_quote_tab_only_field_unquoted() {
+        assert_eq!(csv_quote("\t"), "\t");
+    }
+
+    #[test]
+    fn csv_quote_file_separator_unquoted() {
+        assert_eq!(csv_quote("a\u{001c}b"), "a\u{001c}b");
+    }
+
+    #[test]
     fn csv_quote_newline_only_field_is_quoted() {
         assert_eq!(csv_quote("\n"), "\"\n\"");
     }

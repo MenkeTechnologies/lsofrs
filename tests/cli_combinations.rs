@@ -625,6 +625,21 @@ fn stale_ports_color_never_stderr_empty() {
 }
 
 #[test]
+fn ports_stale_ports_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--ports", "--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Listening Ports"),
+        "stale still wins when --ports appears first on argv"
+    );
+}
+
+#[test]
 fn net_map_csv_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--net-map", "--csv", "--color", "never"])
