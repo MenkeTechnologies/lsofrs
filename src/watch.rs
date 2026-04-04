@@ -276,6 +276,15 @@ mod tests {
     }
 
     #[test]
+    fn file_matches_subpath_under_original_when_canon_differs() {
+        assert!(file_matches(
+            "/var/log/syslog/rotated",
+            "/private/var/log/syslog",
+            "/var/log/syslog"
+        ));
+    }
+
+    #[test]
     fn file_matches_no_match() {
         assert!(!file_matches(
             "/tmp/other",

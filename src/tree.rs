@@ -427,4 +427,24 @@ mod tests {
         let theme = Theme::new(false);
         print_tree(&procs, &theme, false);
     }
+
+    #[test]
+    fn tree_truncates_notable_socket_lines_after_five() {
+        let mut p = make_proc(1, 0, "many_socks", 0);
+        for i in 0..6i32 {
+            p.files.push(OpenFile {
+                fd: FdName::Number(i),
+                access: Access::ReadWrite,
+                file_type: FileType::IPv4,
+                name: format!("*:{}", 8000 + i as u16),
+                socket_info: Some(SocketInfo {
+                    protocol: "TCP".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            });
+        }
+        let theme = Theme::new(false);
+        print_tree(&[p], &theme, false);
+    }
 }

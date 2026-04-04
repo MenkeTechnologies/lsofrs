@@ -756,6 +756,49 @@ mod tests {
     }
 
     #[test]
+    fn compute_stats_empty() {
+        let (types, procs, users, total_files) = compute_stats(&[]);
+        assert!(types.is_empty());
+        assert!(procs.is_empty());
+        assert!(users.is_empty());
+        assert_eq!(total_files, 0);
+    }
+
+    #[test]
+    fn compute_stats_totals_types_and_sorting() {
+        let procs = vec![
+            make_proc(
+                1,
+                "heavy",
+                0,
+                vec![
+                    make_file(FileType::Reg),
+                    make_file(FileType::Reg),
+                    make_file(FileType::Pipe),
+                ],
+            ),
+            make_proc(2, "light", 501, vec![make_file(FileType::IPv4)]),
+        ];
+        let (types, proc_stats, user_stats, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 4);
+        assert_eq!(proc_stats.len(), 2);
+        assert_eq!(proc_stats[0].pid, 1);
+        assert_eq!(proc_stats[0].fd_count, 3);
+        assert_eq!(proc_stats[1].pid, 2);
+        assert_eq!(proc_stats[1].fd_count, 1);
+
+        let reg = types.iter().find(|t| t.type_name == "REG").unwrap();
+        assert_eq!(reg.count, 2);
+        let pipe = types.iter().find(|t| t.type_name == "PIPE").unwrap();
+        assert_eq!(pipe.count, 1);
+
+        assert_eq!(user_stats.len(), 2);
+        let u0 = user_stats.iter().find(|u| u.uid == 0).unwrap();
+        assert_eq!(u0.proc_count, 1);
+        assert_eq!(u0.file_count, 3);
+    }
+
+    #[test]
     fn fmt_num_small() {
         assert_eq!(fmt_num(0), "0");
         assert_eq!(fmt_num(42), "42");

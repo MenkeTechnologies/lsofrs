@@ -285,6 +285,44 @@ mod tests {
         }
     }
 
+    fn make_tcp_with_state(fd: i32, port: u16, state: TcpState) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv4,
+            name: format!("127.0.0.1:{port}"),
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                tcp_state: Some(state),
+                local: InetAddr {
+                    addr: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    port,
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn make_sctp_listen(fd: i32, port: u16) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(fd),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv4,
+            name: format!("*:{port}"),
+            socket_info: Some(SocketInfo {
+                protocol: "SCTP".to_string(),
+                tcp_state: None,
+                local: InetAddr {
+                    addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+                    port,
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn is_listening_tcp_listen() {
         let f = make_tcp_listen(3, 8080);
@@ -330,6 +368,29 @@ mod tests {
             si.local.port = 0;
         }
         assert!(is_listening(&f).is_none());
+    }
+
+    #[test]
+    fn is_listening_non_tcp_udp_protocol_excluded() {
+        let f = make_sctp_listen(3, 38412);
+        assert!(is_listening(&f).is_none());
+    }
+
+    #[test]
+    fn is_listening_tcp_time_wait_excluded() {
+        let f = make_tcp_with_state(3, 8080, TcpState::TimeWait);
+        assert!(is_listening(&f).is_none());
+    }
+
+    #[test]
+    fn is_listening_tcp_listen_protocol_case_insensitive() {
+        let mut f = make_tcp_listen(3, 443);
+        if let Some(ref mut si) = f.socket_info {
+            si.protocol = "tcp".to_string();
+        }
+        let result = is_listening(&f).unwrap();
+        assert_eq!(result.0, "TCP");
+        assert_eq!(result.2, 443);
     }
 
     #[test]

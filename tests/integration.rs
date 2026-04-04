@@ -224,6 +224,26 @@ fn csv_takes_precedence_over_terse() {
     );
 }
 
+#[test]
+fn terse_takes_precedence_over_field_output() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-t", "-F", "pn", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for line in stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        assert!(
+            line.trim().parse::<i32>().is_ok(),
+            "terse should run before -F field output; expected PID line, got '{line}'"
+        );
+    }
+}
+
 // ── Field output ────────────────────────────────────────────────────
 
 #[test]
