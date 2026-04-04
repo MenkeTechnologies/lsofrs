@@ -36,6 +36,14 @@ fn version_flag() {
     assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
 }
 
+#[test]
+fn version_flag_long() {
+    let out = lsofrs().arg("--version").output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
+}
+
 // ── Basic output ────────────────────────────────────────────────────
 
 #[test]

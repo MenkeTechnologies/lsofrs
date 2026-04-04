@@ -1017,6 +1017,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_json_long_before_stats() {
+        let args = Args::parse_from(["lsofrs", "--json", "--stats"]);
+        assert!(args.json);
+        assert!(args.summary);
+    }
+
+    #[test]
+    fn parse_json_short_before_stats() {
+        let args = Args::parse_from(["lsofrs", "-J", "--stats"]);
+        assert!(args.json);
+        assert!(args.summary);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

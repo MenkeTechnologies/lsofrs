@@ -263,3 +263,23 @@ fn summary_json_short_flag_before_summary_same_wrapper() {
     assert!(obj.contains_key("summary"));
     assert!(obj["summary"].is_object());
 }
+
+#[test]
+fn stats_json_long_flag_before_stats_same_wrapper() {
+    let out = lsofrs().args(["--json", "--stats"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}
+
+#[test]
+fn stats_json_short_flag_before_stats_same_wrapper() {
+    let out = lsofrs().args(["-J", "--stats"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}

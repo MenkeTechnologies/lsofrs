@@ -84,6 +84,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_crlf_in_field() {
+        assert_eq!(csv_quote("a\r\nb"), "\"a\r\nb\"");
+    }
+
+    #[test]
     fn csv_quote_with_quotes() {
         assert_eq!(csv_quote("say \"hi\""), "\"say \"\"hi\"\"\"");
     }
