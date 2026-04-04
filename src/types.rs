@@ -500,6 +500,12 @@ mod tests {
     }
 
     #[test]
+    fn tcp_state_close_wait_and_last_ack_as_str() {
+        assert_eq!(TcpState::CloseWait.as_str(), "CLOSE_WAIT");
+        assert_eq!(TcpState::LastAck.as_str(), "LAST_ACK");
+    }
+
+    #[test]
     fn tcp_state_from_raw_all() {
         assert_eq!(TcpState::from_raw(0), TcpState::Closed);
         assert_eq!(TcpState::from_raw(1), TcpState::Listen);

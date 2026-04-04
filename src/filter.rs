@@ -920,6 +920,15 @@ mod tests {
     }
 
     #[test]
+    fn command_regex_multiple_any_match() {
+        let mut f = empty_filter();
+        f.command_regexes = vec![Regex::new("^foo").unwrap(), Regex::new("bar$").unwrap()];
+        assert!(f.matches_process(&make_proc(1, 0, 1, "food")));
+        assert!(f.matches_process(&make_proc(1, 0, 1, "xbar")));
+        assert!(!f.matches_process(&make_proc(1, 0, 1, "baz")));
+    }
+
+    #[test]
     fn or_mode_any_match() {
         let mut f = empty_filter();
         f.pids = vec![100];
@@ -1167,6 +1176,16 @@ mod tests {
         f.unix_socket = true;
         assert!(f.matches_file(&make_file(3, FileType::Unix, "/tmp/sock")));
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+    }
+
+    #[test]
+    fn unix_socket_with_network_and_mode_allows_reg_when_path_matches() {
+        let mut f = empty_filter();
+        f.unix_socket = true;
+        f.network = true;
+        f.and_mode = true;
+        f.files = vec!["/tmp/plain".to_string()];
+        assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/plain")));
     }
 
     #[test]
@@ -1454,6 +1473,16 @@ mod tests {
         assert_eq!(f.usernames, vec!["root".to_string()]);
         assert_eq!(f.uids, vec![0]);
         assert_eq!(f.exclude_usernames, vec!["nobody".to_string()]);
+    }
+
+    #[test]
+    fn from_args_exclude_usernames_comma_separated() {
+        let args = Args::parse_from(["lsofrs", "-u", "^nobody,^daemon"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(
+            f.exclude_usernames,
+            vec!["nobody".to_string(), "daemon".to_string()]
+        );
     }
 
     #[test]

@@ -536,6 +536,37 @@ fn json_pipe_chain_parses_and_stderr_empty() {
 }
 
 #[test]
+fn json_stats_alias_has_summary_wrapper_key() {
+    let out = lsofrs().args(["--stats", "--json"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stats --json should be an object");
+    assert!(obj.contains_key("summary"));
+}
+
+#[test]
+fn json_file_operand_dev_null_is_array() {
+    let out = lsofrs().args(["-J", "/dev/null"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_delta_flag_with_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--delta", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn field_output_self_pid_multichar_fields() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs()

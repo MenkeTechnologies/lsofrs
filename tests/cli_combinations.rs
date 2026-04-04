@@ -225,3 +225,23 @@ fn json_and_mode_with_self_pid_stderr_empty() {
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }
+
+#[test]
+fn json_long_flag_bare_inet_all_stderr_empty() {
+    let out = lsofrs().args(["--json", "-i"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn columnar_show_pgid_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--pgid-show", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

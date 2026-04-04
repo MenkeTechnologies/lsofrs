@@ -306,6 +306,12 @@ mod tests {
     }
 
     #[test]
+    fn pipe_identifier_unix_path_without_socket_pattern_returns_none() {
+        let f = make_unix(3, "/var/run/docker.sock");
+        assert!(pipe_identifier(&f).is_none());
+    }
+
+    #[test]
     fn pipe_identifier_pipe_fallback_name() {
         let f = make_pipe(3, "some-pipe-name");
         let result = pipe_identifier(&f);
