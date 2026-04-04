@@ -652,6 +652,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_top_bare_with_monitor_short() {
+        let args = Args::parse_from(["lsofrs", "--top", "-W"]);
+        assert_eq!(args.top, Some(None));
+        assert!(args.monitor);
+    }
+
+    #[test]
     fn parse_tui() {
         let args = Args::parse_from(["lsofrs", "--tui"]);
         assert!(args.tui);

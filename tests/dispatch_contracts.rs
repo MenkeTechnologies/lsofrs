@@ -214,6 +214,17 @@ fn stale_wins_over_pipe_chain_when_both_set() {
 }
 
 #[test]
+fn stale_wins_over_pipe_chain_when_pipe_chain_flag_first() {
+    let out = lsofrs().args(["--pipe-chain", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("IPC Topology"),
+        "stale still wins when --pipe-chain appears first on argv"
+    );
+}
+
+#[test]
 fn stale_wins_over_net_map_when_both_set() {
     let out = lsofrs().args(["--stale", "--net-map"]).output().unwrap();
     assert!(out.status.success());
@@ -225,6 +236,17 @@ fn stale_wins_over_net_map_when_both_set() {
 }
 
 #[test]
+fn stale_wins_over_net_map_when_net_map_flag_first() {
+    let out = lsofrs().args(["--net-map", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Network Connection Map"),
+        "stale still wins when --net-map appears first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_wins_over_csv_when_both_set() {
     let out = lsofrs().args(["--pipe-chain", "--csv"]).output().unwrap();
     assert!(out.status.success());
@@ -232,6 +254,17 @@ fn pipe_chain_wins_over_csv_when_both_set() {
     assert!(
         !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
         "pipe-chain runs before CSV in main"
+    );
+}
+
+#[test]
+fn pipe_chain_wins_over_csv_when_csv_flag_first() {
+    let out = lsofrs().args(["--csv", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "pipe-chain still wins when --csv appears first on argv"
     );
 }
 

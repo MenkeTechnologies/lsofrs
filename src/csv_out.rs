@@ -109,6 +109,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_trailing_comma_in_field() {
+        assert_eq!(csv_quote("x,"), "\"x,\"");
+    }
+
+    #[test]
     fn csv_quote_crlf_in_field() {
         assert_eq!(csv_quote("a\r\nb"), "\"a\r\nb\"");
     }
