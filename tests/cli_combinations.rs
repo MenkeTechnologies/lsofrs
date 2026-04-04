@@ -811,6 +811,21 @@ fn pipe_chain_wins_over_csv_argv_order_stderr_empty() {
 }
 
 #[test]
+fn csv_pipe_chain_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--pipe-chain", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "pipe-chain wins over csv even when --csv is first on argv"
+    );
+}
+
+#[test]
 fn pipe_chain_json_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--pipe-chain", "--json", "--color", "never"])

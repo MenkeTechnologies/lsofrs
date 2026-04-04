@@ -1429,6 +1429,15 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_tcp_port_1() {
+        let args = Args::parse_from(["lsofrs", "-i", "TCP:1"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(1));
+    }
+
+    #[test]
     fn from_args_inet_udp_port_443() {
         let args = Args::parse_from(["lsofrs", "-i", "UDP:443"]);
         let f = Filter::from_args(&args);
@@ -1444,6 +1453,15 @@ mod tests {
         assert!(f.network);
         assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
         assert_eq!(f.network_filters[0].port_start, Some(53));
+    }
+
+    #[test]
+    fn from_args_inet_udp_port_1() {
+        let args = Args::parse_from(["lsofrs", "-i", "UDP:1"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("UDP"));
+        assert_eq!(f.network_filters[0].port_start, Some(1));
     }
 
     #[test]
