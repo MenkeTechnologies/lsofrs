@@ -947,6 +947,49 @@ mod tests {
     }
 
     #[test]
+    fn parse_json_short_before_net_map() {
+        let args = Args::parse_from(["lsofrs", "-J", "--net-map"]);
+        assert!(args.json);
+        assert!(args.net_map);
+    }
+
+    #[test]
+    fn parse_json_short_before_ports() {
+        let args = Args::parse_from(["lsofrs", "-J", "--ports"]);
+        assert!(args.json);
+        assert!(args.ports);
+    }
+
+    #[test]
+    fn parse_json_short_before_stale() {
+        let args = Args::parse_from(["lsofrs", "-J", "--stale"]);
+        assert!(args.json);
+        assert!(args.stale);
+    }
+
+    #[test]
+    fn parse_json_short_before_tree() {
+        let args = Args::parse_from(["lsofrs", "-J", "--tree", "-p", "42"]);
+        assert!(args.json);
+        assert!(args.tree);
+        assert_eq!(args.pid.as_deref(), Some("42"));
+    }
+
+    #[test]
+    fn parse_json_short_before_pipe_chain() {
+        let args = Args::parse_from(["lsofrs", "-J", "--pipe-chain"]);
+        assert!(args.json);
+        assert!(args.pipe_chain);
+    }
+
+    #[test]
+    fn parse_json_short_before_summary() {
+        let args = Args::parse_from(["lsofrs", "-J", "--summary"]);
+        assert!(args.json);
+        assert!(args.summary);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));

@@ -127,6 +127,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_unicode_with_comma_quoted() {
+        assert_eq!(csv_quote("日本語,2"), "\"日本語,2\"");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }

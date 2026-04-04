@@ -49,7 +49,10 @@ fn stale_json_has_stale_fds_key() {
 fn summary_json_parses_to_value() {
     let out = lsofrs().args(["--summary", "--json"]).output().unwrap();
     assert!(out.status.success());
-    let _: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("summary JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
 }
 
 #[test]
@@ -142,6 +145,69 @@ fn pipe_chain_json_long_flag_before_pipe_chain_same_wrapper() {
 #[test]
 fn summary_json_long_flag_before_summary_same_wrapper() {
     let out = lsofrs().args(["--json", "--summary"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("summary JSON should be an object");
+    assert!(obj.contains_key("summary"));
+    assert!(obj["summary"].is_object());
+}
+
+#[test]
+fn net_map_json_short_flag_before_net_map_same_wrapper() {
+    let out = lsofrs().args(["-J", "--net-map"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("net-map JSON should be an object");
+    assert!(obj.contains_key("net_map"));
+    assert!(obj["net_map"].is_array());
+}
+
+#[test]
+fn ports_json_short_flag_before_ports_same_wrapper() {
+    let out = lsofrs().args(["-J", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("ports JSON should be an object");
+    assert!(obj.contains_key("listening_ports"));
+    assert!(obj["listening_ports"].is_array());
+}
+
+#[test]
+fn stale_json_short_flag_before_stale_same_wrapper() {
+    let out = lsofrs().args(["-J", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("stale JSON should be an object");
+    assert!(obj.contains_key("stale_fds"));
+    assert!(obj["stale_fds"].is_array());
+}
+
+#[test]
+fn tree_json_short_flag_before_tree_same_shape() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "--tree", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let arr = v.as_array().expect("tree -J should be a JSON array");
+    assert!(!arr.is_empty());
+    assert!(arr[0].get("children").is_some());
+}
+
+#[test]
+fn pipe_chain_json_short_flag_before_pipe_chain_same_wrapper() {
+    let out = lsofrs().args(["-J", "--pipe-chain"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let obj = v.as_object().expect("pipe-chain JSON should be an object");
+    assert!(obj.contains_key("pipe_chains"));
+}
+
+#[test]
+fn summary_json_short_flag_before_summary_same_wrapper() {
+    let out = lsofrs().args(["-J", "--summary"]).output().unwrap();
     assert!(out.status.success());
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     let obj = v.as_object().expect("summary JSON should be an object");
