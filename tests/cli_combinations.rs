@@ -298,3 +298,24 @@ fn json_command_literal_filter_self_pid_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn tree_self_pid_color_never_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--tree", "--color", "never", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn net_map_text_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

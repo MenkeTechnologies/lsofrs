@@ -736,3 +736,55 @@ fn json_inet_bare_6_addr_family_stderr_empty() {
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
     assert!(v.is_array());
 }
+
+#[test]
+fn json_ports_json_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--ports", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_object());
+}
+
+#[test]
+fn json_net_map_json_self_pid_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["--net-map", "--json", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array() || v.is_object());
+}
+
+#[test]
+fn csv_inet_udp_stderr_empty() {
+    let out = lsofrs().args(["--csv", "-i", "UDP"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        first.starts_with("COMMAND,PID,USER,"),
+        "CSV header: {first}"
+    );
+}
+
+#[test]
+fn json_txt_fd_filter_self_pid_is_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-d", "txt", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

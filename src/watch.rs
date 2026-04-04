@@ -267,6 +267,15 @@ mod tests {
     }
 
     #[test]
+    fn file_matches_name_equal_to_original_operand() {
+        assert!(file_matches(
+            "/tmp/watchfile",
+            "/private/tmp/watchfile",
+            "/tmp/watchfile"
+        ));
+    }
+
+    #[test]
     fn file_matches_subpath() {
         assert!(file_matches(
             "/var/log/syslog/rotated",

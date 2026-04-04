@@ -1231,6 +1231,21 @@ mod tests {
     }
 
     #[test]
+    fn from_args_pgid_trims_whitespace() {
+        let args = Args::parse_from(["lsofrs", "-g", " 10 , 20 "]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.pgids, vec![10, 20]);
+    }
+
+    #[test]
+    fn from_args_user_trims_each_token() {
+        let args = Args::parse_from(["lsofrs", "-u", " root , ^nobody "]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.usernames, vec!["root".to_string()]);
+        assert_eq!(f.exclude_usernames, vec!["nobody".to_string()]);
+    }
+
+    #[test]
     fn from_args_command_prefix() {
         let args = Args::parse_from(["lsofrs", "-c", "nginx"]);
         let f = Filter::from_args(&args);

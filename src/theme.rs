@@ -863,6 +863,26 @@ mod tests {
     }
 
     #[test]
+    fn from_str_loose_kebab_case_additional_themes() {
+        assert_eq!(
+            ThemeName::from_str_loose("plasma-core"),
+            ThemeName::PlasmaCore
+        );
+        assert_eq!(
+            ThemeName::from_str_loose("night-city"),
+            ThemeName::NightCity
+        );
+        assert_eq!(
+            ThemeName::from_str_loose("steel-nerve"),
+            ThemeName::SteelNerve
+        );
+        assert_eq!(
+            ThemeName::from_str_loose("dark-signal"),
+            ThemeName::DarkSignal
+        );
+    }
+
+    #[test]
     fn neon_sprawl_colors() {
         let t = LsofTheme::from_name(ThemeName::NeonSprawl);
         assert!(matches!(t.header_bg, Color::Indexed(234)));
