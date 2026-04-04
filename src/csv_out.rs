@@ -182,6 +182,11 @@ mod tests {
     }
 
     #[test]
+    fn csv_quote_comma_and_emoji() {
+        assert_eq!(csv_quote("ok,🎉"), "\"ok,🎉\"");
+    }
+
+    #[test]
     fn print_csv_empty_no_panic() {
         print_csv(&[]);
     }

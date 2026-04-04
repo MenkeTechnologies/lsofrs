@@ -1311,6 +1311,18 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_colon_port_only() {
+        let args = Args::parse_from(["lsofrs", "-i", ":443"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(
+            f.network_filters
+                .iter()
+                .any(|nf| nf.port_start == Some(443) && nf.port_end == Some(443))
+        );
+    }
+
+    #[test]
     fn from_args_inet_bare() {
         let args = Args::parse_from(["lsofrs", "-i"]);
         let f = Filter::from_args(&args);

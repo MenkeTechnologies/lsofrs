@@ -339,3 +339,23 @@ fn pipe_chain_text_color_never_stderr_empty() {
     assert!(out.status.success());
     assert!(out.stderr.is_empty());
 }
+
+#[test]
+fn stale_text_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}
+
+#[test]
+fn summary_text_color_always_stderr_empty() {
+    let out = lsofrs()
+        .args(["--summary", "--color", "always"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+}

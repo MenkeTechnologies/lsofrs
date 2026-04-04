@@ -827,3 +827,38 @@ fn csv_inet_6tcp_stderr_empty() {
         "CSV header: {first}"
     );
 }
+
+#[test]
+fn json_dir_one_level_flag_stderr_empty() {
+    let out = lsofrs().args(["-J", "--dir", "/tmp"]).output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_rtd_fd_filter_self_pid_is_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-d", "rtd", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
+fn json_self_pid_fd_exclude_range_stderr_empty() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs()
+        .args(["-J", "-d", "^0-10", "-p", &my_pid])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}

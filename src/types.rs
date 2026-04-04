@@ -606,6 +606,16 @@ mod tests {
     }
 
     #[test]
+    fn open_file_full_name_empty_path_with_append() {
+        let f = OpenFile {
+            name: String::new(),
+            name_append: Some("(deleted)".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(f.full_name(), " (deleted)");
+    }
+
+    #[test]
     fn open_file_size_or_offset_str() {
         let f1 = OpenFile {
             size: Some(4096),
