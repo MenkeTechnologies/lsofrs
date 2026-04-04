@@ -719,4 +719,16 @@ mod tests {
         assert_eq!(t.name_title(), "T4RGET");
         assert_eq!(t.pid_title(), "PRC");
     }
+
+    #[test]
+    fn theme_hdr_bg_empty_when_not_tty() {
+        let t = Theme::new(false);
+        assert_eq!(t.hdr_bg(), "");
+    }
+
+    #[test]
+    fn theme_row_alt_empty_when_not_tty() {
+        let t = Theme::new(false);
+        assert_eq!(t.row_alt(), "");
+    }
 }

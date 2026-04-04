@@ -925,6 +925,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_json_long_before_tree() {
+        let args = Args::parse_from(["lsofrs", "--json", "--tree", "-p", "42"]);
+        assert!(args.json);
+        assert!(args.tree);
+        assert_eq!(args.pid.as_deref(), Some("42"));
+    }
+
+    #[test]
+    fn parse_json_long_before_stale() {
+        let args = Args::parse_from(["lsofrs", "--json", "--stale"]);
+        assert!(args.json);
+        assert!(args.stale);
+    }
+
+    #[test]
     fn parse_watch_csv_combo() {
         let args = Args::parse_from(["lsofrs", "--watch", "/var/log/secure", "--csv"]);
         assert_eq!(args.watch.as_deref(), Some("/var/log/secure"));
