@@ -101,6 +101,17 @@ fn json_long_flag_6udp_combo_is_array() {
 }
 
 #[test]
+fn json_long_flag_6tcp_port_filter_is_array() {
+    let out = lsofrs()
+        .args(["--json", "-i", "6TCP:443"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn columnar_with_user_filter() {
     let u = whoami();
     let out = lsofrs().args(["-u", &u]).output().unwrap();

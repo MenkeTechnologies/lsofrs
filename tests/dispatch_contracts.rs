@@ -208,6 +208,32 @@ fn csv_text_first_line_not_json_array_for_self_pid() {
 }
 
 #[test]
+fn terse_self_pid_first_line_not_json_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-t", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "terse PID line should not look like a JSON array"
+    );
+}
+
+#[test]
+fn field_output_self_pid_first_line_not_json_array() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["-F", "p", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let first = stdout.lines().next().unwrap_or("");
+    assert!(
+        !first.trim_start().starts_with('['),
+        "-F field output should not look like a JSON array"
+    );
+}
+
+#[test]
 fn json_flag_alone_produces_array() {
     let my_pid = std::process::id().to_string();
     let out = lsofrs().args(["-J", "-p", &my_pid]).output().unwrap();

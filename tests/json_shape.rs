@@ -42,6 +42,15 @@ fn json_self_pid_matches_os_pid() {
 }
 
 #[test]
+fn json_long_flag_self_pid_matches_os_pid() {
+    let my_pid = std::process::id().to_string();
+    let out = lsofrs().args(["--json", "-p", &my_pid]).output().unwrap();
+    assert!(out.status.success());
+    let v: Vec<serde_json::Value> = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v[0]["pid"].as_i64().unwrap(), std::process::id() as i64);
+}
+
+#[test]
 fn json_self_has_uid_number() {
     let p = self_json_process();
     assert!(

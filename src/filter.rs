@@ -744,6 +744,13 @@ mod tests {
     }
 
     #[test]
+    fn fd_filter_degenerate_range() {
+        let mut filters = vec![];
+        parse_fd_filter("42-42", &mut filters);
+        assert!(matches!(&filters[0], FdFilter::Range(42, 42)));
+    }
+
+    #[test]
     fn fd_filter_named() {
         let mut filters = vec![];
         parse_fd_filter("cwd", &mut filters);

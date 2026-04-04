@@ -87,6 +87,14 @@ fn json_long_flag_4tcp_combo_is_array() {
 }
 
 #[test]
+fn json_long_flag_4udp_combo_is_array() {
+    let out = lsofrs().args(["--json", "-i", "4UDP"]).output().unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert!(v.is_array());
+}
+
+#[test]
 fn json_long_flag_unix_socket_filter_is_array() {
     let out = lsofrs().args(["--json", "-U"]).output().unwrap();
     assert!(out.status.success());
