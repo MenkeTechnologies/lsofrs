@@ -546,6 +546,29 @@ fn csv_ports_csv_flag_first_color_never_stderr_empty() {
 }
 
 #[test]
+fn csv_ports_tree_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--ports", "--tree", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "ports wins over csv and tree even when --csv is first on argv"
+    );
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "ports wins over tree"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
 fn ports_net_map_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--ports", "--net-map", "--color", "never"])
@@ -829,6 +852,21 @@ fn csv_net_map_csv_flag_first_color_never_stderr_empty() {
     assert!(
         stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
         "CSV still wins when --csv appears first on argv"
+    );
+}
+
+#[test]
+fn csv_net_map_tree_csv_flag_first_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--csv", "--net-map", "--tree", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.starts_with("COMMAND,PID,USER,FD,TYPE,DEVICE,SIZE/OFF,NODE,NAME"),
+        "CSV wins over net-map and tree even when --csv is first on argv"
     );
 }
 
