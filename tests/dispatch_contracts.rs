@@ -154,6 +154,17 @@ fn stale_wins_over_ports_when_both_set() {
 }
 
 #[test]
+fn stale_wins_over_ports_when_ports_flag_first() {
+    let out = lsofrs().args(["--ports", "--stale"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Listening Ports"),
+        "stale still wins when --ports appears first on argv"
+    );
+}
+
+#[test]
 fn ports_wins_over_pipe_chain_when_both_set() {
     let out = lsofrs().args(["--ports", "--pipe-chain"]).output().unwrap();
     assert!(out.status.success());
@@ -394,6 +405,21 @@ fn ports_wins_over_tree_when_both_set() {
     assert!(
         !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
         "ports runs before tree in main"
+    );
+    assert!(
+        s.contains("Listening Ports") || s.contains("No listening ports"),
+        "expected ports output"
+    );
+}
+
+#[test]
+fn ports_wins_over_tree_when_tree_flag_first() {
+    let out = lsofrs().args(["--tree", "--ports"]).output().unwrap();
+    assert!(out.status.success());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("PID   USER     FDs  CMD  ──  OPEN FILES"),
+        "ports still wins when --tree appears first on argv"
     );
     assert!(
         s.contains("Listening Ports") || s.contains("No listening ports"),

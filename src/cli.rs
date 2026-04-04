@@ -771,6 +771,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_watch_and_follow_flags_together() {
+        let args = Args::parse_from(["lsofrs", "--watch", "/tmp/x", "--follow", "42"]);
+        assert_eq!(args.watch.as_deref(), Some("/tmp/x"));
+        assert_eq!(args.follow, Some(42));
+    }
+
+    #[test]
     fn parse_nul_terminator_with_json() {
         let args = Args::parse_from(["lsofrs", "-0", "-J"]);
         assert!(args.nul_terminator);
