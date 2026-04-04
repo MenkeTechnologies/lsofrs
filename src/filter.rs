@@ -1902,6 +1902,18 @@ mod tests {
     }
 
     #[test]
+    fn from_args_inet_tcp_at_ipv6_bracket_host_port() {
+        let args = Args::parse_from(["lsofrs", "-i", "TCP@[2001:db8::1]:443"]);
+        let f = Filter::from_args(&args);
+        assert!(f.network);
+        assert!(f.network_filters.iter().any(|nf| {
+            nf.protocol.as_deref() == Some("TCP")
+                && nf.host.as_deref() == Some("[2001:db8::1]")
+                && nf.port_start == Some(443)
+        }));
+    }
+
+    #[test]
     fn from_args_inet_4udp_with_port() {
         let args = Args::parse_from(["lsofrs", "-i", "4UDP:53"]);
         let f = Filter::from_args(&args);

@@ -326,6 +326,36 @@ fn tree_json_color_never_self_pid_stderr_empty() {
 }
 
 #[test]
+fn tree_csv_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--tree", "--csv", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        s.starts_with("COMMAND,PID,USER,FD,TYPE"),
+        "CSV wins over tree in dispatch"
+    );
+}
+
+#[test]
+fn stale_net_map_color_never_stderr_empty() {
+    let out = lsofrs()
+        .args(["--stale", "--net-map", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    let s = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !s.contains("Network Connection Map"),
+        "stale wins over net-map"
+    );
+}
+
+#[test]
 fn net_map_text_color_never_stderr_empty() {
     let out = lsofrs()
         .args(["--net-map", "--color", "never"])
