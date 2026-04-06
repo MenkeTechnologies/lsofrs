@@ -43,6 +43,8 @@ cargo build --release
 sudo cp target/release/lsofrs /usr/local/sbin/
 ```
 
+The same build also emits `target/release/lsf` (short name; same binary). Copy that too if you want both on `PATH`.
+
 Or install directly:
 
 ```bash

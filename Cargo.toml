@@ -9,7 +9,16 @@ repository = "https://github.com/MenkeTechnologies/lsofrs"
 keywords = ["lsof", "process", "files", "sockets", "diagnostics"]
 categories = ["command-line-utilities", "os"]
 readme = "README.md"
+default-run = "lsofrs"
 exclude = ["screenshots/", "*.png"]
+
+[[bin]]
+name = "lsf"
+path = "src/main.rs"
+
+[[bin]]
+name = "lsofrs"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
