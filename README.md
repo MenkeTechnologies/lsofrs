@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.7.0
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.7.1
 
 **`lsf`** is the shorter form of **`lsofrs`** (same binary; quicker to type).
 
