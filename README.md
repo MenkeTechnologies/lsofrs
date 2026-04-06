@@ -26,6 +26,8 @@
 
 **lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.7.0
 
+**`lsf`** is the shorter form of **`lsofrs`** (same binary; quicker to type).
+
 A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
 
 If a process has a file descriptor, `lsofrs` sees it.
@@ -43,7 +45,7 @@ cargo build --release
 sudo cp target/release/lsofrs /usr/local/sbin/
 ```
 
-The same build also emits `target/release/lsf` (short name; same binary). Copy that too if you want both on `PATH`.
+The same build also emits `target/release/lsf` (shorter form of `lsofrs`; same binary). Copy that too if you want both on `PATH`.
 
 Or install directly:
 
