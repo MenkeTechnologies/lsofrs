@@ -42,7 +42,7 @@ If a process has a file descriptor, `lsofrs` sees it.
 
 ```bash
 cargo build --release
-sudo cp target/release/lsofrs /usr/local/sbin/
+sudo cp target/release/lsf /usr/local/sbin/
 ```
 
 The same build also emits `target/release/lsf` (shorter form of `lsofrs`; same binary). Copy that too if you want both on `PATH`.
@@ -65,47 +65,47 @@ man lsofrs
 ## // USAGE
 
 ```bash
-lsofrs                           # list all open files
-lsofrs -p 1234                   # files for PID 1234
-lsofrs -c Chrome                 # files for Chrome processes
-lsofrs -u root                   # files for root user
-lsofrs -i                        # network connections only
-lsofrs -i :8080                  # who's listening on port 8080
-lsofrs /path/to/file             # who has this file open
-lsofrs -t -c nginx               # just PIDs (for scripting)
+lsf                           # list all open files
+lsf -p 1234                   # files for PID 1234
+lsf -c Chrome                 # files for Chrome processes
+lsf -u root                   # files for root user
+lsf -i                        # network connections only
+lsf -i :8080                  # who's listening on port 8080
+lsf /path/to/file             # who has this file open
+lsf -t -c nginx               # just PIDs (for scripting)
 ```
 
 ### Network Filters
 
 ```bash
-lsofrs -i                        # all network files
-lsofrs -i 4                      # IPv4 only
-lsofrs -i 6                      # IPv6 only
-lsofrs -i TCP                    # TCP only
-lsofrs -i :443                   # port 443
-lsofrs -i TCP:443                # TCP port 443
+lsf -i                        # all network files
+lsf -i 4                      # IPv4 only
+lsf -i 6                      # IPv6 only
+lsf -i TCP                    # TCP only
+lsf -i :443                   # port 443
+lsf -i TCP:443                # TCP port 443
 ```
 
 ### Output Formats
 
 ```bash
-lsofrs                           # columnar (default, cyberpunk-themed on TTY)
-lsofrs --json                    # JSON array output
-lsofrs -J                        # JSON (short form)
-lsofrs -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)
-lsofrs -t                        # terse (PIDs only)
+lsf                           # columnar (default, cyberpunk-themed on TTY)
+lsf --json                    # JSON array output
+lsf -J                        # JSON (short form)
+lsf -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)
+lsf -t                        # terse (PIDs only)
 ```
 
 ### Selection Combinators
 
 ```bash
-lsofrs -p 1234,5678              # multiple PIDs
-lsofrs -u root,wizard            # multiple users
-lsofrs -p ^1234                  # exclude PID 1234
-lsofrs -u ^root                  # exclude root
-lsofrs -a -p 1234 -i             # AND: PID 1234 AND network
-lsofrs -d 0-10                   # FD range 0-10
-lsofrs -c '/nginx|apache/'       # regex command match
+lsf -p 1234,5678              # multiple PIDs
+lsf -u root,wizard            # multiple users
+lsf -p ^1234                  # exclude PID 1234
+lsf -u ^root                  # exclude root
+lsf -a -p 1234 -i             # AND: PID 1234 AND network
+lsf -d 0-10                   # FD range 0-10
+lsf -c '/nginx|apache/'       # regex command match
 ```
 
 ---
@@ -117,9 +117,9 @@ lsofrs -c '/nginx|apache/'       # regex command match
 Full-screen tabbed dashboard with all modes in one interface. 7 clickable tabs, 31 color themes, mouse support, hover/right-click tooltips, theme chooser + editor, config persistence.
 
 ```bash
-lsofrs --tui                     # launch TUI (restores last tab/theme)
-lsofrs --tui --theme matrix      # launch with Matrix theme
-sudo lsofrs --tui                # full visibility (all processes)
+lsf --tui                     # launch TUI (restores last tab/theme)
+lsf --tui --theme matrix      # launch with Matrix theme
+sudo lsf --tui                # full visibility (all processes)
 ```
 
 **Tabs**: TOP | SUMMARY | PORTS | TREE | NET-MAP | PIPES | STALE — click or press Tab/1-7 to switch.
@@ -137,10 +137,10 @@ sudo lsofrs --tui                # full visibility (all processes)
 Live auto-refreshing dashboard of the top processes sorted by FD count. Like `iotop` for file descriptors — shows FD type distribution bars, delta tracking, and per-process breakdowns.
 
 ```bash
-lsofrs --top                     # top 20 processes by FD count
-lsofrs --top 10                  # top 10 only
-lsofrs --top -r 5                # refresh every 5 seconds
-lsofrs --top -u root             # top FD consumers for root
+lsf --top                     # top 20 processes by FD count
+lsf --top 10                  # top 10 only
+lsf --top -r 5                # refresh every 5 seconds
+lsf --top -u root             # top FD consumers for root
 ```
 
 **Top-specific keys**: `s` cycle sort, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#-interactive-controls) for common keys.
@@ -150,9 +150,9 @@ lsofrs --top -u root             # top FD consumers for root
 Monitor who opens and closes a specific file over time. Prints timestamped `+OPEN`/`-CLOSE` events as they happen — like a lightweight `inotifywait` / `fs_usage` for a single path.
 
 ```bash
-lsofrs --watch /var/log/syslog          # watch syslog
-lsofrs --watch /tmp/myapp.sock          # watch a socket file
-lsofrs --watch /dev/null -r 2           # poll every 2 seconds
+lsf --watch /var/log/syslog          # watch syslog
+lsf --watch /tmp/myapp.sock          # watch a socket file
+lsf --watch /dev/null -r 2           # poll every 2 seconds
 ```
 
 Each event shows timestamp, open/close tag, PID, user, FD, and command. When piped, prints a single snapshot and exits.
@@ -162,9 +162,9 @@ Each event shows timestamp, open/close tag, PID, user, FD, and command. When pip
 Find file descriptors pointing to deleted files — a common source of disk space leaks, zombie file handles, and security issues.
 
 ```bash
-lsofrs --stale                   # find all deleted-file FDs
-lsofrs --stale -u www-data       # deleted files held by www-data
-lsofrs --stale --json            # JSON output
+lsf --stale                   # find all deleted-file FDs
+lsf --stale -u www-data       # deleted files held by www-data
+lsf --stale --json            # JSON output
 ```
 
 ### Listening Ports (`--ports`)
@@ -172,9 +172,9 @@ lsofrs --stale --json            # JSON output
 Quick "what's listening where" summary — like `ss -tlnp` but cross-platform (macOS + Linux).
 
 ```bash
-lsofrs --ports                   # show all listening TCP/UDP ports
-lsofrs --ports --json            # JSON output
-lsofrs --ports -u root           # ports opened by root only
+lsf --ports                   # show all listening TCP/UDP ports
+lsf --ports --json            # JSON output
+lsf --ports -u root           # ports opened by root only
 ```
 
 ### Pipe Chain (`--pipe-chain`)
@@ -182,9 +182,9 @@ lsofrs --ports -u root           # ports opened by root only
 Trace pipe and unix socket pairs between processes — visualize the IPC topology.
 
 ```bash
-lsofrs --pipe-chain              # show all inter-process pipe/socket connections
-lsofrs --pipe-chain --json       # JSON output
-lsofrs --pipe-chain -c Chrome    # pipes within Chrome process tree
+lsf --pipe-chain              # show all inter-process pipe/socket connections
+lsf --pipe-chain --json       # JSON output
+lsf --pipe-chain -c Chrome    # pipes within Chrome process tree
 ```
 
 ### Network Map (`--net-map`)
@@ -192,9 +192,9 @@ lsofrs --pipe-chain -c Chrome    # pipes within Chrome process tree
 Group network connections by remote host — see which servers your system talks to and how many connections each has.
 
 ```bash
-lsofrs --net-map                 # connections grouped by remote host
-lsofrs --net-map --json          # JSON output
-lsofrs --net-map -u wizard       # only wizard's connections
+lsf --net-map                 # connections grouped by remote host
+lsf --net-map --json          # JSON output
+lsf --net-map -u wizard       # only wizard's connections
 ```
 
 ### CSV Export (`--csv`)
@@ -202,9 +202,9 @@ lsofrs --net-map -u wizard       # only wizard's connections
 Pure CSV output for pipelines, spreadsheets, and data analysis. RFC 4180-compliant quoting.
 
 ```bash
-lsofrs --csv                     # full CSV dump
-lsofrs --csv -i TCP              # CSV of TCP connections only
-lsofrs --csv -p 1234 > out.csv   # export PID 1234 to file
+lsf --csv                     # full CSV dump
+lsf --csv -i TCP              # CSV of TCP connections only
+lsf --csv -p 1234 > out.csv   # export PID 1234 to file
 ```
 
 ### Process Tree (`--tree`)
@@ -212,10 +212,10 @@ lsofrs --csv -p 1234 > out.csv   # export PID 1234 to file
 Hierarchical process tree view with FD counts, type breakdowns, and network connection counts. Like `pstree` meets `lsof`.
 
 ```bash
-lsofrs --tree                    # full process tree with FD stats
-lsofrs --tree -u root            # tree for root's processes
-lsofrs --tree -c Chrome          # tree for Chrome and helpers
-lsofrs --tree --json             # JSON tree with nested children
+lsf --tree                    # full process tree with FD stats
+lsf --tree -u root            # tree for root's processes
+lsf --tree -c Chrome          # tree for Chrome and helpers
+lsf --tree --json             # JSON tree with nested children
 ```
 
 Each node shows: PID, user, FD count, command name, type breakdown (`[REG:12 IPv4:3 PIPE:2]`), and network connection count. Notable files (sockets, pipes) are listed inline under each process.
@@ -225,9 +225,9 @@ Each node shows: PID, user, FD count, command name, type breakdown (`[REG:12 IPv
 Full-screen alternate-buffer display like `top(1)`. Auto-refreshes with interactive controls.
 
 ```bash
-lsofrs --monitor                 # full-screen monitor
-lsofrs -W -r 2                   # refresh every 2 seconds
-lsofrs -W -c Chrome              # monitor Chrome only
+lsf --monitor                 # full-screen monitor
+lsf -W -r 2                   # refresh every 2 seconds
+lsf -W -c Chrome              # monitor Chrome only
 ```
 
 **Controls**: `s`=sort, `r`=reverse, `f`=filter, `p`=pause, `?`=help, `q`=quit
@@ -237,8 +237,8 @@ lsofrs -W -c Chrome              # monitor Chrome only
 Watch a single process's FDs in real-time. New opens highlighted `+NEW` in green, closes `-DEL` in red.
 
 ```bash
-lsofrs --follow 1234             # watch PID 1234
-lsofrs --follow 1234 -r 2        # 2-second refresh
+lsf --follow 1234             # watch PID 1234
+lsf --follow 1234 -r 2        # 2-second refresh
 ```
 
 ### FD Leak Detection (`--leak-detect`)
@@ -246,9 +246,9 @@ lsofrs --follow 1234 -r 2        # 2-second refresh
 Monitors per-process FD counts over time. Flags processes with monotonically increasing FD counts.
 
 ```bash
-lsofrs --leak-detect             # default: 5s interval, 3 increase threshold
-lsofrs --leak-detect=10,5        # 10s interval, flag after 5 consecutive increases
-lsofrs --leak-detect -u wizard   # monitor only wizard's processes
+lsf --leak-detect             # default: 5s interval, 3 increase threshold
+lsf --leak-detect=10,5        # 10s interval, flag after 5 consecutive increases
+lsf --leak-detect -u wizard   # monitor only wizard's processes
 ```
 
 ### Summary / Statistics (`--summary`)
@@ -256,10 +256,10 @@ lsofrs --leak-detect -u wizard   # monitor only wizard's processes
 Aggregate FD breakdown with bar charts, top processes, per-user totals. Add `-r N` for live auto-refreshing TUI mode.
 
 ```bash
-lsofrs --summary                 # text report (single-shot)
-lsofrs --summary -r 2            # live TUI, refresh every 2s
-lsofrs --summary --json          # JSON report
-lsofrs --summary -i              # network-only summary
+lsf --summary                 # text report (single-shot)
+lsf --summary -r 2            # live TUI, refresh every 2s
+lsf --summary --json          # JSON report
+lsf --summary -i              # network-only summary
 ```
 
 ### Delta Highlighting (`--delta`)
@@ -267,8 +267,8 @@ lsofrs --summary -i              # network-only summary
 Color-code changes between repeat iterations. New FDs in green, gone in red.
 
 ```bash
-lsofrs --delta -r 2              # repeat every 2s with change highlighting
-lsofrs --delta -r 1 -c myapp     # watch myapp changes
+lsf --delta -r 2              # repeat every 2s with change highlighting
+lsf --delta -r 1 -c myapp     # watch myapp changes
 ```
 
 ---
