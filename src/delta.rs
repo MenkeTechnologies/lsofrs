@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 type DeltaKey = (i32, String, String); // (pid, fd, name)
@@ -99,17 +100,9 @@ impl DeltaTracker {
                 let _ = writeln!(
                     out,
                     "{red}{cmd:<15} {pid:>7} {user:<8} {fd:<6} {type_:<5} {name} [GONE]{reset}",
-                    cmd = if entry.command.len() > 15 {
-                        &entry.command[..15]
-                    } else {
-                        &entry.command
-                    },
+                    cmd = truncate_max_bytes(&entry.command, 15),
                     pid = entry.pid,
-                    user = if username.len() > 8 {
-                        &username[..8]
-                    } else {
-                        &username
-                    },
+                    user = truncate_max_bytes(&username, 8),
                     fd = entry.fd,
                     type_ = entry.file_type,
                     name = entry.name,

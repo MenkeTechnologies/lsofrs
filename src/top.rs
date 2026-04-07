@@ -6,6 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use crate::filter::Filter;
+use crate::strutil::truncate_max_bytes;
 use crate::theme::LsofTheme;
 use crate::tui_app::{TuiMode, TuiState, set_cell, set_str};
 use crate::types::*;
@@ -494,16 +495,8 @@ fn render_top(
             }
         }
 
-        let user_display = if e.username.len() > 8 {
-            &e.username[..8]
-        } else {
-            &e.username
-        };
-        let cmd = if e.command.len() > 30 {
-            &e.command[..30]
-        } else {
-            &e.command
-        };
+        let user_display = truncate_max_bytes(&e.username, 8);
+        let cmd = truncate_max_bytes(&e.command, 30);
 
         let mut col_x = area.x + 1;
 

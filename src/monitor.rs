@@ -12,6 +12,7 @@ use crossterm::{
 
 use crate::filter::Filter;
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 const SORT_PID: usize = 0;
@@ -246,16 +247,8 @@ fn print_monitor_procs(
 
     for p in procs {
         let username = p.username();
-        let user = if username.len() > 8 {
-            &username[..8]
-        } else {
-            &username
-        };
-        let cmd = if p.command.len() > 15 {
-            &p.command[..15]
-        } else {
-            &p.command
-        };
+        let user = truncate_max_bytes(&username, 8);
+        let cmd = truncate_max_bytes(&p.command, 15);
 
         let mut first = true;
         for f in &p.files {

@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use serde::Serialize;
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 #[derive(Serialize)]
@@ -117,11 +118,7 @@ fn print_stale_text(entries: &[StaleEntry], theme: &Theme) {
 
     for (i, e) in entries.iter().enumerate() {
         let alt = if i % 2 == 1 { theme.row_alt() } else { "" };
-        let user_display = if e.user.len() > 8 {
-            &e.user[..8]
-        } else {
-            &e.user
-        };
+        let user_display = truncate_max_bytes(&e.user, 8);
         let size_str = e.size.map(|s| s.to_string()).unwrap_or_default();
 
         // Highlight "(deleted)" in red within the name

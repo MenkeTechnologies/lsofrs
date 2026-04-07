@@ -354,6 +354,7 @@ src/
 ├── linux.rs     # Linux /proc filesystem — process/FD enumeration (rayon parallel)
 ├── freebsd.rs   # FreeBSD sysctl + procfs — process/FD enumeration
 ├── filter.rs    # Selection & filtering (PID, user, command, FD, network)
+├── strutil.rs   # Safe UTF-8 truncation for fixed-width display (no mid-codepoint slices)
 ├── output.rs    # Columnar & field output formatting, ANSI theming
 ├── json.rs      # JSON serialization via serde
 ├── monitor.rs   # Live full-screen mode (crossterm alternate screen)

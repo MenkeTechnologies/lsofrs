@@ -20,6 +20,7 @@ mod output;
 mod pipe_chain;
 mod ports;
 mod stale;
+mod strutil;
 mod summary;
 mod theme;
 mod top;

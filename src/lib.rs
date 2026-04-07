@@ -19,4 +19,5 @@ pub mod linux;
 pub mod net_map;
 pub mod output;
 pub mod pipe_chain;
+pub mod strutil;
 pub mod types;

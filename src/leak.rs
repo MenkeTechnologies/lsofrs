@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 const HISTORY_SIZE: usize = 16;
@@ -158,11 +159,7 @@ impl LeakDetector {
                     .collect::<Vec<_>>()
                     .join("->");
 
-                let cmd = if entry.command.len() > 15 {
-                    &entry.command[..15]
-                } else {
-                    &entry.command
-                };
+                let cmd = truncate_max_bytes(&entry.command, 15);
 
                 let _ = writeln!(
                     out,

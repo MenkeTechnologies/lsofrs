@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use serde::Serialize;
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 #[derive(Serialize)]
@@ -157,16 +158,8 @@ fn print_ports_text(entries: &[PortEntry], theme: &Theme) {
 
     for (i, e) in entries.iter().enumerate() {
         let alt = if i % 2 == 1 { theme.row_alt() } else { "" };
-        let user_display = if e.user.len() > 8 {
-            &e.user[..8]
-        } else {
-            &e.user
-        };
-        let cmd_display = if e.command.len() > 20 {
-            &e.command[..20]
-        } else {
-            &e.command
-        };
+        let user_display = truncate_max_bytes(&e.user, 8);
+        let cmd_display = truncate_max_bytes(&e.command, 20);
 
         let _ = writeln!(
             out,

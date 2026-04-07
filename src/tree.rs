@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::{self, Write};
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 use crate::types::*;
 
 struct TreeNode {
@@ -103,18 +104,10 @@ fn print_node(
     let username = users::get_user_by_uid(node.uid)
         .map(|u| u.name().to_string_lossy().into_owned())
         .unwrap_or_else(|| node.uid.to_string());
-    let user_display = if username.len() > 8 {
-        &username[..8]
-    } else {
-        &username
-    };
+    let user_display = truncate_max_bytes(&username, 8);
 
     let fd_count = node.files.len();
-    let cmd = if node.command.len() > 20 {
-        &node.command[..20]
-    } else {
-        &node.command
-    };
+    let cmd = truncate_max_bytes(&node.command, 20);
 
     // FD type breakdown
     let mut type_counts: HashMap<&str, usize> = HashMap::new();

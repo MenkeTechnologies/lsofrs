@@ -9,6 +9,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use crate::filter::Filter;
+use crate::strutil::truncate_max_bytes;
 use crate::theme::LsofTheme;
 use crate::tui_app::{TuiMode, TuiState, set_str};
 use crate::types::*;
@@ -213,16 +214,8 @@ fn render_summary_text(
         let username = users::get_user_by_uid(ps.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| ps.uid.to_string());
-        let cmd = if ps.command.len() > 15 {
-            &ps.command[..15]
-        } else {
-            &ps.command
-        };
-        let user = if username.len() > 8 {
-            &username[..8]
-        } else {
-            &username
-        };
+        let cmd = truncate_max_bytes(&ps.command, 15);
+        let user = truncate_max_bytes(&username, 8);
         let _ = writeln!(
             buf,
             "  {mag}{:>7}{r}  {cyan}{:<15}{r}  {yellow}{:<8}{r}  {:>8}",
@@ -251,11 +244,7 @@ fn render_summary_text(
         bold = theme.bold(),
     );
     for us in users.iter().take(20) {
-        let uname = if us.username.len() > 10 {
-            &us.username[..10]
-        } else {
-            &us.username
-        };
+        let uname = truncate_max_bytes(&us.username, 10);
         let _ = writeln!(
             buf,
             "  {yellow}{:<10}{r}  {:>8}  {:>8}",
@@ -553,16 +542,8 @@ fn render_summary_ratatui(
         let username = users::get_user_by_uid(ps.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| ps.uid.to_string());
-        let cmd = if ps.command.len() > 15 {
-            &ps.command[..15]
-        } else {
-            &ps.command
-        };
-        let user = if username.len() > 8 {
-            &username[..8]
-        } else {
-            &username
-        };
+        let cmd = truncate_max_bytes(&ps.command, 15);
+        let user = truncate_max_bytes(&username, 8);
 
         let pid_str = format!("{:>7}", ps.pid);
         set_str(buf, cx, row, &pid_str, pid_s, 7);
@@ -597,11 +578,7 @@ fn render_summary_ratatui(
         if row >= area.y + area.height {
             break;
         }
-        let uname = if us.username.len() > 10 {
-            &us.username[..10]
-        } else {
-            &us.username
-        };
+        let uname = truncate_max_bytes(&us.username, 10);
         let user_str = format!("{:<10}", uname);
         set_str(buf, cx, row, &user_str, user_s, 10);
         let nums = format!(

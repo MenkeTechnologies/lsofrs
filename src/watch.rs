@@ -7,6 +7,7 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 
 use crate::output::Theme;
+use crate::strutil::truncate_max_bytes;
 
 struct WatchEntry {
     pid: i32,
@@ -157,12 +158,8 @@ fn print_event(theme: &Theme, tag: &str, pid: i32, cmd: &str, uid: u32, fd: &str
         (theme.red(), "-")
     };
 
-    let cmd_display = if cmd.len() > 20 { &cmd[..20] } else { cmd };
-    let user_display = if username.len() > 8 {
-        &username[..8]
-    } else {
-        &username
-    };
+    let cmd_display = truncate_max_bytes(cmd, 20);
+    let user_display = truncate_max_bytes(&username, 8);
 
     let now = chrono::Local::now().format("%H:%M:%S");
     let nl = if theme.is_tty { "\r\n" } else { "\n" };
@@ -219,16 +216,8 @@ fn print_snapshot(
         let username = users::get_user_by_uid(e.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| e.uid.to_string());
-        let user_display = if username.len() > 8 {
-            &username[..8]
-        } else {
-            &username
-        };
-        let cmd = if e.command.len() > 25 {
-            &e.command[..25]
-        } else {
-            &e.command
-        };
+        let user_display = truncate_max_bytes(&username, 8);
+        let cmd = truncate_max_bytes(&e.command, 25);
 
         let _ = writeln!(
             out,

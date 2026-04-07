@@ -19,6 +19,7 @@ use ratatui::style::Color;
 
 use crate::config;
 use crate::filter::Filter;
+use crate::strutil::truncate_max_bytes;
 use crate::summary::SummaryLiveMode;
 use crate::theme::{LsofTheme, ThemeName};
 use crate::top::TopMode;
@@ -898,7 +899,7 @@ impl TabbedTui {
                 if !top5.is_empty() {
                     lines.push(("  Top by FDs".into(), String::new()));
                     for (cmd, pid, fds) in &top5 {
-                        let label = if cmd.len() > 16 { &cmd[..16] } else { cmd };
+                        let label = truncate_max_bytes(cmd, 16);
                         lines.push((format!("  {label}"), format!("PID:{pid} FDs:{fds}")));
                     }
                 }
@@ -1967,11 +1968,7 @@ fn render_ports(
         if pinned.contains(&r.pid) {
             set_str(buf, area.x, row, "\u{2605}", pin_s.patch(alt_s), 2);
         }
-        let cmd = if r.command.len() > 20 {
-            &r.command[..20]
-        } else {
-            &r.command
-        };
+        let cmd = truncate_max_bytes(&r.command, 20);
 
         if compact {
             // Compact: PORT PID COMMAND
@@ -2000,11 +1997,7 @@ fn render_ports(
                 w.saturating_sub(18),
             );
         } else {
-            let user = if r.user.len() > 8 {
-                &r.user[..8]
-            } else {
-                &r.user
-            };
+            let user = truncate_max_bytes(&r.user, 8);
             set_str(
                 buf,
                 cx,
@@ -2143,11 +2136,7 @@ fn render_stale(
                 pid_s.patch(alt_s),
                 7,
             );
-            let name = if r.name.len() as u16 > w.saturating_sub(12) {
-                &r.name[..w.saturating_sub(12) as usize]
-            } else {
-                &r.name
-            };
+            let name = truncate_max_bytes(&r.name, w.saturating_sub(12) as usize);
             set_str(
                 buf,
                 cx + 9,
@@ -2157,17 +2146,9 @@ fn render_stale(
                 w.saturating_sub(11),
             );
         } else {
-            let user = if r.user.len() > 8 {
-                &r.user[..8]
-            } else {
-                &r.user
-            };
+            let user = truncate_max_bytes(&r.user, 8);
             let size_str = r.size.map(|s| s.to_string()).unwrap_or_default();
-            let name = if r.name.len() as u16 > w.saturating_sub(50) {
-                &r.name[..w.saturating_sub(50) as usize]
-            } else {
-                &r.name
-            };
+            let name = truncate_max_bytes(&r.name, w.saturating_sub(50) as usize);
 
             set_str(
                 buf,
@@ -2278,16 +2259,8 @@ fn render_tree(
         }
         let indent_str = "    ".repeat(r.indent);
         let prefix = format!("{}{}", indent_str, r.connector);
-        let user = if r.user.len() > 8 {
-            &r.user[..8]
-        } else {
-            &r.user
-        };
-        let cmd = if r.command.len() > 20 {
-            &r.command[..20]
-        } else {
-            &r.command
-        };
+        let user = truncate_max_bytes(&r.user, 8);
+        let cmd = truncate_max_bytes(&r.command, 20);
 
         let mut x = cx;
         set_str(buf, x, row, &prefix, dim_s, prefix.len() as u16);
@@ -2374,11 +2347,7 @@ fn render_net_map(
                 set_cell(buf, x, row, " ", alt_s);
             }
         }
-        let host = if r.host.len() > 20 {
-            &r.host[..20]
-        } else {
-            &r.host
-        };
+        let host = truncate_max_bytes(&r.host, 20);
 
         if compact {
             set_str(
@@ -2398,11 +2367,7 @@ fn render_net_map(
                 5,
             );
             let proc_w = w.saturating_sub(30);
-            let procs = if r.processes.len() as u16 > proc_w {
-                &r.processes[..proc_w as usize]
-            } else {
-                &r.processes
-            };
+            let procs = truncate_max_bytes(&r.processes, proc_w as usize);
             set_str(buf, cx + 29, row, procs, cmd_s.patch(alt_s), proc_w);
         } else {
             set_str(
@@ -2438,11 +2403,7 @@ fn render_net_map(
                 10,
             );
             let proc_w = w.saturating_sub(52);
-            let procs = if r.processes.len() as u16 > proc_w {
-                &r.processes[..proc_w as usize]
-            } else {
-                &r.processes
-            };
+            let procs = truncate_max_bytes(&r.processes, proc_w as usize);
             set_str(buf, cx + 52, row, procs, cmd_s.patch(alt_s), proc_w);
         }
         row += 1;
@@ -2522,14 +2483,10 @@ fn render_pipes(
 
         if compact {
             let ep_w = w.saturating_sub(2);
-            let eps = if r.endpoints.len() as u16 > ep_w {
-                &r.endpoints[..ep_w as usize]
-            } else {
-                &r.endpoints
-            };
+            let eps = truncate_max_bytes(&r.endpoints, ep_w as usize);
             set_str(buf, cx, row, eps, cmd_s.patch(alt_s), ep_w);
         } else {
-            let id = if r.id.len() > 20 { &r.id[..20] } else { &r.id };
+            let id = truncate_max_bytes(&r.id, 20);
             set_str(
                 buf,
                 cx,
@@ -2547,11 +2504,7 @@ fn render_pipes(
                 20,
             );
             let ep_w = w.saturating_sub(30);
-            let eps = if r.endpoints.len() as u16 > ep_w {
-                &r.endpoints[..ep_w as usize]
-            } else {
-                &r.endpoints
-            };
+            let eps = truncate_max_bytes(&r.endpoints, ep_w as usize);
             set_str(buf, cx + 30, row, eps, cmd_s.patch(alt_s), ep_w);
         }
         row += 1;
