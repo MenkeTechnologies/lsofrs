@@ -24,7 +24,7 @@
 
 ## // WHAT IS THIS
 
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.7.1
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.8.0
 
 **`lsf`** is the shorter form of **`lsofrs`** (same binary; quicker to type).
 
@@ -409,41 +409,41 @@ Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **F
 
 ## // PERFORMANCE
 
-Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~900 processes / ~8000 open files, rayon parallel gathering):
+Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~470 processes / ~5000 open files, rayon parallel gathering):
 
 ### All Open Files (default)
 
 | Tool | Mean | Min–Max | Speedup |
 |------|------|---------|---------|
-| **lsofrs** (Rust) | **58 ms** | 40–111 ms | — |
-| lsof 4.91 (C) | 5,555 ms | 5,194–8,343 ms | **95x** slower |
-| lsofng (C) | 13,202 ms | 11,299–16,336 ms | **226x** slower |
+| **lsofrs** (Rust) | **14.2 ms** | 13.6–15.0 ms | — |
+| lsof 4.91 (C) | 169.8 ms | 162.7–176.5 ms | **12x** slower |
+| lsofng (C) | 173.0 ms | 169.6–178.3 ms | **12x** slower |
 
 ### Network Connections (`-i TCP`)
 
 | Tool | Mean | Min–Max | Speedup |
 |------|------|---------|---------|
-| **lsofrs** | **9 ms** | 9–10 ms | — |
-| lsof 4.91 | 5,117 ms | 5,098–5,229 ms | **555x** slower |
-| lsofng | 10,520 ms | 10,097–13,792 ms | **1,141x** slower |
+| **lsofrs** | **7.2 ms** | 6.5–7.8 ms | — |
+| lsofng | 88.1 ms | 86.7–89.4 ms | **12x** slower |
+| lsof 4.91 | 91.7 ms | 89.6–93.2 ms | **13x** slower |
 
 ### Terse Output (`-t`, PIDs only)
 
 | Tool | Mean | Min–Max | Speedup |
 |------|------|---------|---------|
-| **lsofrs** | **14 ms** | 12–16 ms | — |
-| lsofng | 149 ms | 133–216 ms | **10x** slower |
-| lsof 4.91 | 273 ms | 249–298 ms | **19x** slower |
+| **lsofrs** | **6.9 ms** | 6.2–8.3 ms | — |
+| lsof 4.91 | 101.4 ms | 97.5–107.2 ms | **15x** slower |
+| lsofng | 142.9 ms | 135.6–150.2 ms | **21x** slower |
 
 ### Structured Output (`-J` JSON / `-F` field)
 
 | Tool | Mean | Min–Max | Speedup |
 |------|------|---------|---------|
-| **lsofrs** `-J` | **41 ms** | 40–42 ms | — |
-| lsofng `-J` | 164 ms | 142–336 ms | **4x** slower |
-| lsof `-F pcfn` | 5,552 ms | 5,171–7,391 ms | **134x** slower |
+| **lsofrs** `-J` | **29.3 ms** | 27.7–31.3 ms | — |
+| lsofng `-J` | 136.7 ms | 120.8–152.6 ms | **5x** slower |
+| lsof `-F pcfn` | 156.1 ms | 150.3–162.4 ms | **5x** slower |
 
-The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI structs gives lsofrs a **95–1,141x** advantage over traditional lsof implementations.
+The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI structs and OnceCell-cached username lookups gives lsofrs a **5–21x** advantage over traditional lsof implementations.
 
 ---
 
