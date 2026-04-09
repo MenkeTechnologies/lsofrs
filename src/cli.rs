@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsofrs",
-    version = "4.7.1",
+    version = env!("CARGO_PKG_VERSION"),
     about = "List System Open Files — modern Rust implementation",
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\

@@ -29,7 +29,7 @@ pub fn print_csv(procs: &[Process]) {
                 "{},{},{},{},{},{},{},{},{}",
                 csv_quote(&p.command),
                 p.pid,
-                csv_quote(&user),
+                csv_quote(user),
                 csv_quote(&f.fd.with_access(f.access)),
                 csv_quote(f.file_type.as_str()),
                 csv_quote(&f.device_str()),

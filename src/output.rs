@@ -192,7 +192,7 @@ pub fn print_processes(
     let mut row = 0usize;
     for p in procs {
         let username = p.username();
-        let user_display = truncate_max_bytes(&username, 8);
+        let user_display = truncate_max_bytes(username, 8);
         let cmd_display = truncate_max_bytes(&p.command, 15);
 
         let mut first = true;

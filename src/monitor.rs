@@ -247,7 +247,7 @@ fn print_monitor_procs(
 
     for p in procs {
         let username = p.username();
-        let user = truncate_max_bytes(&username, 8);
+        let user = truncate_max_bytes(username, 8);
         let cmd = truncate_max_bytes(&p.command, 15);
 
         let mut first = true;

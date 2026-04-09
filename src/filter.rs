@@ -28,7 +28,7 @@ pub struct Filter {
     pub files: Vec<String>,
     /// Precomputed: each file path with a trailing `/` for prefix matching.
     files_with_slash: Vec<String>,
-    pub dir: Option<String>,         // +d: one level
+    pub dir: Option<String>, // +d: one level
     /// Precomputed dir prefix with trailing `/`.
     dir_prefix: Option<String>,
     pub dir_recurse: Option<String>, // +D: recursive
@@ -340,9 +340,11 @@ impl Filter {
 
         // File name filter — uses precomputed slash-suffixed paths
         if !self.files.is_empty() {
-            let file_match = self.files.iter().zip(self.files_with_slash.iter()).any(
-                |(path, path_slash)| file.name == *path || file.name.starts_with(path_slash),
-            );
+            let file_match = self
+                .files
+                .iter()
+                .zip(self.files_with_slash.iter())
+                .any(|(path, path_slash)| file.name == *path || file.name.starts_with(path_slash));
             if !file_match && !self.network && !self.nfs_only && !self.unix_socket {
                 return false;
             }
