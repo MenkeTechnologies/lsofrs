@@ -124,7 +124,7 @@ fn gather_via_procfs() -> Vec<Process> {
     processes
 }
 
-/// Read process info from /proc/<pid>/status (FreeBSD procfs format)
+/// Read process info from `/proc/<pid>/status` (FreeBSD procfs format)
 fn read_proc_info(proc_dir: &Path) -> Option<(String, i32, i32, u32)> {
     // FreeBSD linprocfs provides Linux-compatible /proc/<pid>/stat
     let stat_path = proc_dir.join("stat");
@@ -144,7 +144,7 @@ fn read_proc_info(proc_dir: &Path) -> Option<(String, i32, i32, u32)> {
     None
 }
 
-/// Parse Linux-compatible /proc/<pid>/stat (from linprocfs)
+/// Parse Linux-compatible `/proc/<pid>/stat` (from linprocfs)
 fn parse_linux_stat(stat: &str) -> Option<(String, i32, i32, u32)> {
     let comm_start = stat.find('(')?;
     let comm_end = stat.rfind(')')?;
@@ -160,7 +160,7 @@ fn parse_linux_stat(stat: &str) -> Option<(String, i32, i32, u32)> {
     Some((command, ppid, pgid, uid))
 }
 
-/// Parse FreeBSD native /proc/<pid>/status
+/// Parse FreeBSD native `/proc/<pid>/status`
 /// Format: comm pid ppid pgid sid tty_dev flags start user_time sys_time ...
 fn parse_freebsd_status(status: &str) -> Option<(String, i32, i32, u32)> {
     let fields: Vec<&str> = status.split_whitespace().collect();

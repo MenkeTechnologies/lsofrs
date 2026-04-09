@@ -104,7 +104,7 @@ pub fn gather_processes() -> Vec<Process> {
     processes
 }
 
-/// Read process info from /proc/<pid>/stat and /proc/<pid>/status
+/// Read process info from `/proc/<pid>/stat` and `/proc/<pid>/status`
 fn read_proc_info(proc_dir: &Path) -> Option<(String, i32, i32, u32)> {
     // Read /proc/<pid>/stat for command, ppid, pgid
     let stat = fs::read_to_string(proc_dir.join("stat")).ok()?;
@@ -117,7 +117,7 @@ fn read_proc_info(proc_dir: &Path) -> Option<(String, i32, i32, u32)> {
     Some((command, ppid, pgid, uid))
 }
 
-/// Parse /proc/<pid>/stat
+/// Parse `/proc/<pid>/stat`
 /// Format: pid (comm) state ppid pgid ...
 fn parse_stat(stat: &str) -> Option<(String, i32, i32)> {
     // comm can contain spaces and parens, so find the last ')'
@@ -134,7 +134,7 @@ fn parse_stat(stat: &str) -> Option<(String, i32, i32)> {
     Some((command, ppid, pgid))
 }
 
-/// Parse UID from /proc/<pid>/status
+/// Parse UID from `/proc/<pid>/status`
 fn parse_uid(status: &str) -> Option<u32> {
     for line in status.lines() {
         if let Some(rest) = line.strip_prefix("Uid:") {
