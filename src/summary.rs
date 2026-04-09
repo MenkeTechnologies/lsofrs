@@ -80,7 +80,7 @@ fn compute_stats(procs: &[Process]) -> (Vec<TypeStats>, Vec<ProcStats>, Vec<User
 
         let entry = user_map
             .entry(p.uid)
-            .or_insert_with(|| (p.username(), 0, 0));
+            .or_insert_with(|| (p.username().to_string(), 0, 0));
         entry.1 += 1;
         entry.2 += fd_count;
 
@@ -663,16 +663,7 @@ mod tests {
     use super::*;
 
     fn make_proc(pid: i32, cmd: &str, uid: u32, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: pid,
-            uid,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pid, uid, cmd.to_string(), files)
     }
 
     fn make_file(ft: FileType) -> OpenFile {

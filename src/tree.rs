@@ -308,13 +308,13 @@ mod tests {
     use super::*;
 
     fn make_proc(pid: i32, ppid: i32, cmd: &str, n_files: usize) -> Process {
-        Process {
+        Process::new(
             pid,
             ppid,
-            pgid: pid,
-            uid: 501,
-            command: cmd.to_string(),
-            files: (0..n_files)
+            pid,
+            501,
+            cmd.to_string(),
+            (0..n_files)
                 .map(|i| OpenFile {
                     fd: FdName::Number(i as i32),
                     access: Access::Read,
@@ -323,9 +323,7 @@ mod tests {
                     ..Default::default()
                 })
                 .collect(),
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        )
     }
 
     #[test]

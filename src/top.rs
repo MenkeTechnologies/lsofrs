@@ -231,7 +231,7 @@ impl TopMode {
                     pgid: p.pgid,
                     uid: p.uid,
                     command: p.command.clone(),
-                    username: p.username(),
+                    username: p.username().to_string(),
                     fd_count: p.files.len(),
                     reg_count: reg,
                     sock_count: sock,

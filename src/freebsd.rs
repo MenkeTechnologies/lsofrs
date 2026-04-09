@@ -109,16 +109,7 @@ fn gather_via_procfs() -> Vec<Process> {
             }
         }
 
-        processes.push(Process {
-            pid,
-            ppid,
-            pgid,
-            uid,
-            command,
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        });
+        processes.push(Process::new(pid, ppid, pgid, uid, command, files));
     }
 
     processes
@@ -597,16 +588,14 @@ fn gather_via_sysctl() -> Vec<Process> {
                 .into_owned()
         };
 
-        processes.push(Process {
+        processes.push(Process::new(
             pid,
-            ppid: kp.ki_ppid,
-            pgid: kp.ki_pgid,
-            uid: kp.ki_uid,
+            kp.ki_ppid,
+            kp.ki_pgid,
+            kp.ki_uid,
             command,
-            files: Vec::new(),
-            sel_flags: 0,
-            sel_state: 0,
-        });
+            Vec::new(),
+        ));
     }
 
     processes

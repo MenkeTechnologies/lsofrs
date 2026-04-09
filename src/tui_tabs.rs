@@ -1290,7 +1290,7 @@ impl TabbedTui {
     fn update_ports(&mut self, procs: &[Process]) {
         self.port_rows.clear();
         for p in procs {
-            let user = p.username();
+            let user = p.username().to_string();
             for f in &p.files {
                 if let Some(si) = &f.socket_info {
                     let proto = si.protocol.to_uppercase();
@@ -1333,7 +1333,7 @@ impl TabbedTui {
     fn update_stale(&mut self, procs: &[Process]) {
         self.stale_rows.clear();
         for p in procs {
-            let user = p.username();
+            let user = p.username().to_string();
             for f in &p.files {
                 let deleted = f.name.contains("(deleted)")
                     || f.name_append

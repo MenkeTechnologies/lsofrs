@@ -968,16 +968,14 @@ fn process_pid(pid: pid_t) -> Option<Process> {
         }
     }
 
-    Some(Process {
+    Some(Process::new(
         pid,
-        ppid: tai.pbsd.pbi_ppid as i32,
-        pgid: tai.pbsd.pbi_pgid as i32,
-        uid: tai.pbsd.pbi_uid,
-        command: cmd,
+        tai.pbsd.pbi_ppid as i32,
+        tai.pbsd.pbi_pgid as i32,
+        tai.pbsd.pbi_uid,
+        cmd,
         files,
-        sel_flags: 0,
-        sel_state: 0,
-    })
+    ))
 }
 
 /// Gather all process information from the system

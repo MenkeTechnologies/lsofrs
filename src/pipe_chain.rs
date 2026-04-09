@@ -182,16 +182,7 @@ mod tests {
     use super::*;
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: pid,
-            uid: 0,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pid, 0, cmd.to_string(), files)
     }
 
     fn make_pipe(fd: i32, name: &str) -> OpenFile {

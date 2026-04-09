@@ -471,16 +471,7 @@ mod tests {
     // ── ColWidths tests ─────────────────────────────────────────────
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: pid,
-            uid: 0,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pid, 0, cmd.to_string(), files)
     }
 
     fn make_file(fd: i32, ft: FileType, name: &str) -> OpenFile {
@@ -526,16 +517,7 @@ mod tests {
 
     #[test]
     fn col_widths_ppid_only_with_flag() {
-        let p = Process {
-            pid: 1,
-            ppid: 123456,
-            pgid: 1,
-            uid: 0,
-            command: "x".to_string(),
-            files: vec![],
-            sel_flags: 0,
-            sel_state: 0,
-        };
+        let p = Process::new(1, 123456, 1, 0, "x".to_string(), vec![]);
         let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false);
         let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, true);
         assert_eq!(w_no.ppid, 4);

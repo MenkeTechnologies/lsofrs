@@ -31,7 +31,7 @@ pub fn print_stale(procs: &[Process], theme: &Theme, json: bool) {
     let entries: Vec<StaleEntry> = procs
         .iter()
         .flat_map(|p| {
-            let user = p.username();
+            let user = p.username().to_string();
             let cmd = p.command.clone();
             p.files
                 .iter()
@@ -176,16 +176,7 @@ mod tests {
     use super::*;
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: pid,
-            uid: 0,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pid, 0, cmd.to_string(), files)
     }
 
     fn make_deleted_file(fd: i32, name: &str) -> OpenFile {
@@ -284,7 +275,7 @@ mod tests {
         let entries: Vec<StaleEntry> = procs
             .iter()
             .flat_map(|p| {
-                let user = p.username();
+                let user = p.username().to_string();
                 let cmd = p.command.clone();
                 p.files
                     .iter()

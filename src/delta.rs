@@ -134,13 +134,13 @@ mod tests {
     use super::*;
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<(&str, &str)>) -> Process {
-        Process {
+        Process::new(
             pid,
-            ppid: 1,
-            pgid: 1,
-            uid: 501,
-            command: cmd.to_string(),
-            files: files
+            1,
+            1,
+            501,
+            cmd.to_string(),
+            files
                 .into_iter()
                 .map(|(fd, name)| OpenFile {
                     fd: FdName::Number(fd.parse().unwrap()),
@@ -150,9 +150,7 @@ mod tests {
                     ..Default::default()
                 })
                 .collect(),
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        )
     }
 
     #[test]
@@ -514,16 +512,7 @@ mod tests {
     }
 
     fn proc_with_open_files(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: 1,
-            uid: 501,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, 1, 501, cmd.to_string(), files)
     }
 
     #[test]

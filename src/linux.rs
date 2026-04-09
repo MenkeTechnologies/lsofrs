@@ -68,16 +68,7 @@ fn process_pid(pid: i32, socket_map: &HashMap<u64, SocketEntry>) -> Option<Proce
         }
     }
 
-    Some(Process {
-        pid,
-        ppid,
-        pgid,
-        uid,
-        command,
-        files,
-        sel_flags: 0,
-        sel_state: 0,
-    })
+    Some(Process::new(pid, ppid, pgid, uid, command, files))
 }
 
 /// Gather all process information from /proc

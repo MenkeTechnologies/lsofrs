@@ -5,6 +5,8 @@ use regex::Regex;
 use crate::cli::Args;
 use crate::types::*;
 
+use std::net::IpAddr;
+
 #[derive(Default)]
 pub struct Filter {
     pub pids: Vec<i32>,
@@ -24,8 +26,14 @@ pub struct Filter {
     pub nfs_only: bool,
     pub unix_socket: bool,
     pub files: Vec<String>,
+    /// Precomputed: each file path with a trailing `/` for prefix matching.
+    files_with_slash: Vec<String>,
     pub dir: Option<String>,         // +d: one level
+    /// Precomputed dir prefix with trailing `/`.
+    dir_prefix: Option<String>,
     pub dir_recurse: Option<String>, // +D: recursive
+    /// Precomputed dir_recurse prefix with trailing `/`.
+    dir_recurse_prefix: Option<String>,
     pub and_mode: bool,
     pub terse: bool,
 }
@@ -33,28 +41,16 @@ pub struct Filter {
 impl Filter {
     pub fn from_args(args: &Args) -> Self {
         let mut f = Self {
-            pids: Vec::new(),
-            exclude_pids: Vec::new(),
-            uids: Vec::new(),
-            exclude_uids: Vec::new(),
-            usernames: Vec::new(),
-            exclude_usernames: Vec::new(),
-            pgids: Vec::new(),
-            commands: Vec::new(),
-            command_regexes: Vec::new(),
-            fd_filters: Vec::new(),
-            fd_exclude: false,
-            network: false,
-            network_type: None,
-            network_filters: Vec::new(),
             nfs_only: args.nfs,
             unix_socket: args.unix_socket,
-            files: args.files.clone(),
-            dir: args.dir.clone(),
-            dir_recurse: args.dir_recurse.clone(),
             and_mode: args.and_mode,
             terse: args.terse,
+            ..Default::default()
         };
+
+        f.set_files(args.files.clone());
+        f.set_dir(args.dir.clone());
+        f.set_dir_recurse(args.dir_recurse.clone());
 
         // Parse PIDs
         if let Some(ref pids) = args.pid {
@@ -149,8 +145,9 @@ impl Filter {
         if self.exclude_uids.contains(&proc.uid) {
             return false;
         }
-        for name in &self.exclude_usernames {
-            if proc.username() == *name {
+        if !self.exclude_usernames.is_empty() {
+            let uname = proc.username();
+            if self.exclude_usernames.iter().any(|n| n == uname) {
                 return false;
             }
         }
@@ -176,7 +173,7 @@ impl Filter {
         }
         if !self.usernames.is_empty() {
             let uname = proc.username();
-            matches.push(self.usernames.contains(&uname));
+            matches.push(self.usernames.iter().any(|u| u == uname));
         }
         if !self.pgids.is_empty() {
             matches.push(self.pgids.contains(&proc.pgid));
@@ -199,18 +196,44 @@ impl Filter {
         }
     }
 
+    fn ensure_slash(p: &str) -> String {
+        if p.ends_with('/') {
+            p.to_string()
+        } else {
+            format!("{p}/")
+        }
+    }
+
+    /// Set file paths and precompute slash-suffixed variants.
+    pub fn set_files(&mut self, files: Vec<String>) {
+        self.files_with_slash = files.iter().map(|p| Self::ensure_slash(p)).collect();
+        self.files = files;
+    }
+
+    /// Set `+d` directory and precompute its prefix.
+    pub fn set_dir(&mut self, dir: Option<String>) {
+        self.dir_prefix = dir.as_ref().map(|d| Self::ensure_slash(d));
+        self.dir = dir;
+    }
+
+    /// Set `+D` recursive directory and precompute its prefix.
+    pub fn set_dir_recurse(&mut self, dir: Option<String>) {
+        self.dir_recurse_prefix = dir.as_ref().map(|d| Self::ensure_slash(d));
+        self.dir_recurse = dir;
+    }
+
     pub fn matches_file(&self, file: &OpenFile) -> bool {
         // FD filter
         if !self.fd_filters.is_empty() {
             let fd_match = match &file.fd {
                 FdName::Number(n) => self.fd_filters.iter().any(|f| match f {
                     FdFilter::Range(lo, hi) => *n >= *lo && *n <= *hi,
-                    FdFilter::Name(s) => n.to_string() == *s,
+                    FdFilter::Name(s) => s.parse::<i32>().ok().is_some_and(|v| v == *n),
                 }),
                 other => {
                     let name = other.as_display();
                     self.fd_filters.iter().any(|f| match f {
-                        FdFilter::Name(s) => *s == name,
+                        FdFilter::Name(s) => *s == *name,
                         _ => false,
                     })
                 }
@@ -272,20 +295,20 @@ impl Filter {
                             return false;
                         }
                     }
-                    // Host check
+                    // Host check — compare parsed IpAddr when possible, fall back to string
                     if let Some(ref host) = nf.host {
                         if let Some(ref si) = file.socket_info {
-                            let local_match = si
-                                .local
-                                .addr
-                                .as_ref()
-                                .is_some_and(|a| a.to_string() == *host);
-                            let foreign_match = si
-                                .foreign
-                                .addr
-                                .as_ref()
-                                .is_some_and(|a| a.to_string() == *host);
-                            let name_match = file.name.contains(host);
+                            let local_match = match (&si.local.addr, &nf.parsed_host) {
+                                (Some(a), Some(h)) => a == h,
+                                (Some(a), None) => a.to_string() == *host,
+                                _ => false,
+                            };
+                            let foreign_match = match (&si.foreign.addr, &nf.parsed_host) {
+                                (Some(a), Some(h)) => a == h,
+                                (Some(a), None) => a.to_string() == *host,
+                                _ => false,
+                            };
+                            let name_match = file.name.contains(host.as_str());
                             if !local_match && !foreign_match && !name_match {
                                 return false;
                             }
@@ -315,25 +338,19 @@ impl Filter {
             return false;
         }
 
-        // File name filter
+        // File name filter — uses precomputed slash-suffixed paths
         if !self.files.is_empty() {
-            let file_match = self
-                .files
-                .iter()
-                .any(|path| file.name == *path || file.name.starts_with(&format!("{path}/")));
+            let file_match = self.files.iter().zip(self.files_with_slash.iter()).any(
+                |(path, path_slash)| file.name == *path || file.name.starts_with(path_slash),
+            );
             if !file_match && !self.network && !self.nfs_only && !self.unix_socket {
                 return false;
             }
         }
 
         // +d DIR: files directly in directory (one level, no deeper subdirs)
-        if let Some(ref dir) = self.dir {
-            let prefix = if dir.ends_with('/') {
-                dir.clone()
-            } else {
-                format!("{dir}/")
-            };
-            if !file.name.starts_with(&prefix) {
+        if let Some(ref prefix) = self.dir_prefix {
+            if !file.name.starts_with(prefix) {
                 return false;
             }
             // One level only: no additional '/' after the prefix
@@ -345,12 +362,8 @@ impl Filter {
 
         // +D DIR: files recursively under directory
         if let Some(ref dir) = self.dir_recurse {
-            let prefix = if dir.ends_with('/') {
-                dir.clone()
-            } else {
-                format!("{dir}/")
-            };
-            if !file.name.starts_with(&prefix) && file.name != *dir {
+            let prefix = self.dir_recurse_prefix.as_ref().unwrap();
+            if !file.name.starts_with(prefix) && file.name != *dir {
                 return false;
             }
         }
@@ -399,6 +412,7 @@ pub fn parse_inet_filter(spec: &str, filter: &mut Filter) {
         addr_family: None,
         addr: None,
         host: None,
+        parsed_host: None,
         port_start: None,
         port_end: None,
     };
@@ -448,6 +462,16 @@ pub fn parse_inet_filter(spec: &str, filter: &mut Filter) {
         nf.host = Some(remaining.to_string());
     }
 
+    // Precompute parsed IpAddr for host comparison in hot loop
+    if let Some(ref host) = nf.host {
+        // Strip brackets for IPv6 like [::1]
+        let bare = host
+            .strip_prefix('[')
+            .and_then(|h| h.strip_suffix(']'))
+            .unwrap_or(host);
+        nf.parsed_host = bare.parse::<IpAddr>().ok();
+    }
+
     filter.network_filters.push(nf);
 }
 
@@ -459,42 +483,11 @@ mod tests {
     // ── Helper constructors ─────────────────────────────────────────
 
     fn empty_filter() -> Filter {
-        Filter {
-            pids: vec![],
-            exclude_pids: vec![],
-            uids: vec![],
-            exclude_uids: vec![],
-            usernames: vec![],
-            exclude_usernames: vec![],
-            pgids: vec![],
-            commands: vec![],
-            command_regexes: vec![],
-            fd_filters: vec![],
-            fd_exclude: false,
-            network: false,
-            network_type: None,
-            network_filters: vec![],
-            nfs_only: false,
-            unix_socket: false,
-            files: vec![],
-            dir: None,
-            dir_recurse: None,
-            and_mode: false,
-            terse: false,
-        }
+        Filter::default()
     }
 
     fn make_proc(pid: i32, uid: u32, pgid: i32, cmd: &str) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid,
-            uid,
-            command: cmd.to_string(),
-            files: vec![],
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pgid, uid, cmd.to_string(), vec![])
     }
 
     fn make_file(fd: i32, ft: FileType, name: &str) -> OpenFile {
@@ -824,7 +817,7 @@ mod tests {
         let mut f = empty_filter();
         f.network = true;
         f.and_mode = true;
-        f.files = vec!["/tmp/marker".to_string()];
+        f.set_files(vec!["/tmp/marker".to_string()]);
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/marker")));
     }
 
@@ -1029,6 +1022,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -1045,6 +1039,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -1060,6 +1055,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -1077,6 +1073,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: Some(443),
             port_end: Some(443),
         }];
@@ -1094,6 +1091,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: Some(8000),
             port_end: Some(8010),
         }];
@@ -1112,6 +1110,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: Some("10.0.0.1".to_string()),
+            parsed_host: "10.0.0.1".parse().ok(),
             port_start: None,
             port_end: None,
         }];
@@ -1133,6 +1132,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: Some("example.com".to_string()),
+            parsed_host: None, // not an IP
             port_start: None,
             port_end: None,
         }];
@@ -1152,6 +1152,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: Some(80),
             port_end: Some(80),
         }];
@@ -1184,14 +1185,14 @@ mod tests {
         f.unix_socket = true;
         f.network = true;
         f.and_mode = true;
-        f.files = vec!["/tmp/plain".to_string()];
+        f.set_files(vec!["/tmp/plain".to_string()]);
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/plain")));
     }
 
     #[test]
     fn file_path_filter() {
         let mut f = empty_filter();
-        f.files = vec!["/var/log/syslog".to_string()];
+        f.set_files(vec!["/var/log/syslog".to_string()]);
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/other")));
     }
@@ -1199,7 +1200,7 @@ mod tests {
     #[test]
     fn file_path_dir_prefix() {
         let mut f = empty_filter();
-        f.files = vec!["/var/log".to_string()];
+        f.set_files(vec!["/var/log".to_string()]);
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/logs/other")));
     }
@@ -1649,7 +1650,7 @@ mod tests {
     fn network_with_file_filter_allows_non_network() {
         let mut f = empty_filter();
         f.network = true;
-        f.files = vec!["/tmp/x".to_string()];
+        f.set_files(vec!["/tmp/x".to_string()]);
         // non-network file matching file filter should pass
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
     }
@@ -1663,6 +1664,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -1679,6 +1681,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: None,
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -1696,6 +1699,7 @@ mod tests {
             addr_family: None,
             addr: None,
             host: Some("example.com".to_string()),
+            parsed_host: None,
             port_start: None,
             port_end: None,
         }];
@@ -2098,7 +2102,7 @@ mod tests {
     #[test]
     fn dir_filter_one_level() {
         let mut f = empty_filter();
-        f.dir = Some("/var/log".to_string());
+        f.set_dir(Some("/var/log".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/auth.log")));
         // Subdirectory should NOT match (one level only)
@@ -2112,7 +2116,7 @@ mod tests {
     #[test]
     fn dir_filter_trailing_slash() {
         let mut f = empty_filter();
-        f.dir = Some("/var/log/".to_string());
+        f.set_dir(Some("/var/log/".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/var/log/nginx/access.log")));
     }
@@ -2120,7 +2124,7 @@ mod tests {
     #[test]
     fn dir_recurse_filter() {
         let mut f = empty_filter();
-        f.dir_recurse = Some("/var/log".to_string());
+        f.set_dir_recurse(Some("/var/log".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/syslog")));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/nginx/access.log")));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/var/log/a/b/c/d.log")));
@@ -2132,14 +2136,14 @@ mod tests {
     #[test]
     fn dir_recurse_matches_dir_itself() {
         let mut f = empty_filter();
-        f.dir_recurse = Some("/var/log".to_string());
+        f.set_dir_recurse(Some("/var/log".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Dir, "/var/log")));
     }
 
     #[test]
     fn dir_filter_root_one_level() {
         let mut f = empty_filter();
-        f.dir = Some("/".to_string());
+        f.set_dir(Some("/".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/foo")));
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/foo/bar")));
     }
@@ -2147,7 +2151,7 @@ mod tests {
     #[test]
     fn dir_recurse_root_matches_nested_paths() {
         let mut f = empty_filter();
-        f.dir_recurse = Some("/".to_string());
+        f.set_dir_recurse(Some("/".to_string()));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/foo")));
         assert!(f.matches_file(&make_file(3, FileType::Reg, "/a/b/c/d")));
     }

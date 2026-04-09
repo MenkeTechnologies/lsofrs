@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::fmt;
 use std::net::IpAddr;
 
@@ -189,15 +191,15 @@ pub enum FdName {
 }
 
 impl FdName {
-    pub fn as_display(&self) -> String {
+    pub fn as_display(&self) -> Cow<'_, str> {
         match self {
-            Self::Cwd => "cwd".to_string(),
-            Self::Rtd => "rtd".to_string(),
-            Self::Txt => "txt".to_string(),
-            Self::Mem => "mem".to_string(),
-            Self::Err => "err".to_string(),
-            Self::Number(n) => format!("{n}"),
-            Self::Other(s) => s.clone(),
+            Self::Cwd => Cow::Borrowed("cwd"),
+            Self::Rtd => Cow::Borrowed("rtd"),
+            Self::Txt => Cow::Borrowed("txt"),
+            Self::Mem => Cow::Borrowed("mem"),
+            Self::Err => Cow::Borrowed("err"),
+            Self::Number(n) => Cow::Owned(format!("{n}")),
+            Self::Other(s) => Cow::Borrowed(s),
         }
     }
 
@@ -212,7 +214,7 @@ impl FdName {
                 };
                 format!("{n}{suffix}")
             }
-            _ => self.as_display(),
+            _ => self.as_display().into_owned(),
         }
     }
 }
@@ -300,7 +302,7 @@ impl OpenFile {
 }
 
 /// A process entry
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Process {
     pub pid: i32,
     pub ppid: i32,
@@ -310,13 +312,62 @@ pub struct Process {
     pub files: Vec<OpenFile>,
     pub sel_flags: u16,
     pub sel_state: u8,
+    username_cache: OnceCell<String>,
+}
+
+impl Clone for Process {
+    fn clone(&self) -> Self {
+        Self {
+            pid: self.pid,
+            ppid: self.ppid,
+            pgid: self.pgid,
+            uid: self.uid,
+            command: self.command.clone(),
+            files: self.files.clone(),
+            sel_flags: self.sel_flags,
+            sel_state: self.sel_state,
+            username_cache: match self.username_cache.get() {
+                Some(s) => {
+                    let cell = OnceCell::new();
+                    let _ = cell.set(s.clone());
+                    cell
+                }
+                None => OnceCell::new(),
+            },
+        }
+    }
 }
 
 impl Process {
-    pub fn username(&self) -> String {
-        users::get_user_by_uid(self.uid)
-            .map(|u| u.name().to_string_lossy().into_owned())
-            .unwrap_or_else(|| self.uid.to_string())
+    /// Create a new process with default selection state.
+    pub fn new(
+        pid: i32,
+        ppid: i32,
+        pgid: i32,
+        uid: u32,
+        command: String,
+        files: Vec<OpenFile>,
+    ) -> Self {
+        Self {
+            pid,
+            ppid,
+            pgid,
+            uid,
+            command,
+            files,
+            sel_flags: 0,
+            sel_state: 0,
+            username_cache: OnceCell::new(),
+        }
+    }
+
+    /// Cached username lookup — the syscall runs at most once per Process.
+    pub fn username(&self) -> &str {
+        self.username_cache.get_or_init(|| {
+            users::get_user_by_uid(self.uid)
+                .map(|u| u.name().to_string_lossy().into_owned())
+                .unwrap_or_else(|| self.uid.to_string())
+        })
     }
 }
 
@@ -327,6 +378,8 @@ pub struct NetworkFilter {
     pub addr_family: Option<u8>,
     pub addr: Option<IpAddr>,
     pub host: Option<String>,
+    /// Precomputed: `host` parsed as IpAddr for O(1) comparison (None if hostname).
+    pub parsed_host: Option<IpAddr>,
     pub port_start: Option<u16>,
     pub port_end: Option<u16>,
 }
@@ -736,31 +789,13 @@ mod tests {
 
     #[test]
     fn process_username_for_root() {
-        let p = Process {
-            pid: 1,
-            ppid: 0,
-            pgid: 1,
-            uid: 0,
-            command: "launchd".to_string(),
-            files: vec![],
-            sel_flags: 0,
-            sel_state: 0,
-        };
+        let p = Process::new(1, 0, 1, 0, "launchd".to_string(), vec![]);
         assert_eq!(p.username(), "root");
     }
 
     #[test]
     fn process_username_unknown_uid() {
-        let p = Process {
-            pid: 1,
-            ppid: 0,
-            pgid: 1,
-            uid: 99999,
-            command: "test".to_string(),
-            files: vec![],
-            sel_flags: 0,
-            sel_state: 0,
-        };
+        let p = Process::new(1, 0, 1, 99999, "test".to_string(), vec![]);
         // Unknown UID falls back to numeric string
         assert_eq!(p.username(), "99999");
     }

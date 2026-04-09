@@ -58,7 +58,7 @@ pub fn print_ports(procs: &[Process], theme: &Theme, json: bool) {
     let mut by_port: BTreeMap<u16, Vec<PortEntry>> = BTreeMap::new();
 
     for p in procs {
-        let user = p.username();
+        let user = p.username().to_string();
         for f in &p.files {
             if let Some((proto, addr, port)) = is_listening(f) {
                 by_port.entry(port).or_default().push(PortEntry {
@@ -209,16 +209,7 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
     fn make_proc(pid: i32, cmd: &str, files: Vec<OpenFile>) -> Process {
-        Process {
-            pid,
-            ppid: 1,
-            pgid: pid,
-            uid: 0,
-            command: cmd.to_string(),
-            files,
-            sel_flags: 0,
-            sel_state: 0,
-        }
+        Process::new(pid, 1, pid, 0, cmd.to_string(), files)
     }
 
     fn make_tcp_listen(fd: i32, port: u16) -> OpenFile {
