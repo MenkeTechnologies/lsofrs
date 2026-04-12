@@ -342,4 +342,61 @@ mod tests {
         let p2: Prefs = toml::from_str(&s).unwrap();
         assert!(!p2.hover_tooltips);
     }
+
+    #[test]
+    fn prefs_refresh_rate_zero_roundtrip() {
+        let p = Prefs {
+            refresh_rate: Some(0),
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.refresh_rate, Some(0));
+    }
+
+    #[test]
+    fn prefs_theme_empty_string_roundtrip() {
+        let p = Prefs {
+            theme: Some(String::new()),
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.theme.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn prefs_multiple_custom_themes_roundtrip() {
+        let mut ct = HashMap::new();
+        ct.insert(
+            "A".into(),
+            CustomThemeColors {
+                c1: 1,
+                c2: 2,
+                c3: 3,
+                c4: 4,
+                c5: 5,
+                c6: 6,
+            },
+        );
+        ct.insert(
+            "B".into(),
+            CustomThemeColors {
+                c1: 10,
+                c2: 20,
+                c3: 30,
+                c4: 40,
+                c5: 50,
+                c6: 60,
+            },
+        );
+        let p = Prefs {
+            custom_themes: ct,
+            ..Default::default()
+        };
+        let s = toml::to_string_pretty(&p).unwrap();
+        let p2: Prefs = toml::from_str(&s).unwrap();
+        assert_eq!(p2.custom_themes.len(), 2);
+        assert_eq!(p2.custom_themes["B"].c1, 10);
+    }
 }

@@ -524,6 +524,55 @@ mod tests {
         assert!(w_yes.ppid >= 6);
     }
 
+    #[test]
+    fn col_widths_fd_grows_for_cwd_token() {
+        let f = OpenFile {
+            fd: FdName::Cwd,
+            access: Access::ReadWrite,
+            file_type: FileType::Dir,
+            name: "/".to_string(),
+            ..Default::default()
+        };
+        let p = make_proc(1, "x", vec![f]);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        assert!(w.fd >= "cwd".len());
+    }
+
+    #[test]
+    fn col_widths_type_grows_for_unknown_long_label() {
+        let f = OpenFile {
+            fd: FdName::Number(0),
+            access: Access::Read,
+            file_type: FileType::Unknown("VERYLONGTYPE".to_string()),
+            name: "/x".to_string(),
+            ..Default::default()
+        };
+        let p = make_proc(1, "x", vec![f]);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        assert!(w.type_ >= "VERYLONGTYPE".len());
+    }
+
+    #[test]
+    fn col_widths_size_off_includes_0t_prefix_for_offset() {
+        let mut f = make_file(1, FileType::Reg, "/x");
+        f.offset = Some(4096);
+        let p = make_proc(1, "x", vec![f]);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        assert!(w.size_off >= "0t4096".len());
+    }
+
+    #[test]
+    fn col_widths_node_from_protocol_when_no_inode() {
+        let mut f = make_file(5, FileType::IPv4, "*:80");
+        f.socket_info = Some(crate::types::SocketInfo {
+            protocol: "TCP".to_string(),
+            ..Default::default()
+        });
+        let p = make_proc(1, "x", vec![f]);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        assert!(w.node >= "TCP".len());
+    }
+
     // ── print_processes smoke tests ─────────────────────────────────
 
     #[test]

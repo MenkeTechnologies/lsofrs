@@ -800,6 +800,35 @@ mod tests {
     }
 
     #[test]
+    fn fmt_num_billions() {
+        assert_eq!(fmt_num(1_234_567_890), "1,234,567,890");
+    }
+
+    #[test]
+    fn compute_stats_proc_stats_tiebreak_lower_pid_first() {
+        let procs = vec![
+            make_proc(
+                20,
+                "later",
+                0,
+                vec![make_file(FileType::Reg), make_file(FileType::Reg)],
+            ),
+            make_proc(
+                10,
+                "earlier",
+                0,
+                vec![make_file(FileType::Reg), make_file(FileType::Chr)],
+            ),
+        ];
+        let (_, proc_stats, _, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 4);
+        assert_eq!(proc_stats[0].pid, 10);
+        assert_eq!(proc_stats[0].fd_count, 2);
+        assert_eq!(proc_stats[1].pid, 20);
+        assert_eq!(proc_stats[1].fd_count, 2);
+    }
+
+    #[test]
     fn render_summary_ratatui_empty() {
         let theme = LsofTheme::from_name(crate::theme::ThemeName::NeonSprawl);
         let area = Rect::new(0, 0, 100, 40);
@@ -817,5 +846,59 @@ mod tests {
     fn summary_live_mode_help_keys_empty() {
         let mode = SummaryLiveMode::new();
         assert!(mode.help_keys().is_empty());
+    }
+
+    #[test]
+    fn compute_stats_equal_fd_count_sorts_by_pid_ascending() {
+        let procs = vec![
+            make_proc(500, "later", 0, vec![make_file(FileType::Reg)]),
+            make_proc(100, "earlier", 0, vec![make_file(FileType::Chr)]),
+        ];
+        let (_, proc_stats, _, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 2);
+        assert_eq!(proc_stats[0].pid, 100);
+        assert_eq!(proc_stats[1].pid, 500);
+    }
+
+    #[test]
+    fn compute_stats_type_counts_aggregate_across_all_processes() {
+        let procs = vec![
+            make_proc(
+                1,
+                "a",
+                0,
+                vec![make_file(FileType::Reg), make_file(FileType::Reg)],
+            ),
+            make_proc(2, "b", 0, vec![make_file(FileType::Reg)]),
+        ];
+        let (types, _, _, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 3);
+        let reg = types.iter().find(|t| t.type_name == "REG").unwrap();
+        assert_eq!(reg.count, 3);
+    }
+
+    #[test]
+    fn compute_stats_zero_file_process_still_in_proc_stats() {
+        let procs = vec![make_proc(999, "empty", 0, vec![])];
+        let (_, proc_stats, _, total_files) = compute_stats(&procs);
+        assert_eq!(total_files, 0);
+        assert_eq!(proc_stats.len(), 1);
+        assert_eq!(proc_stats[0].fd_count, 0);
+        assert_eq!(proc_stats[0].pid, 999);
+    }
+
+    #[test]
+    fn fmt_num_exactly_1000() {
+        assert_eq!(fmt_num(1000), "1,000");
+    }
+
+    #[test]
+    fn fmt_num_one_billion() {
+        assert_eq!(fmt_num(1_000_000_000), "1,000,000,000");
+    }
+
+    #[test]
+    fn fmt_num_single_digit_nonzero() {
+        assert_eq!(fmt_num(7), "7");
     }
 }

@@ -23,8 +23,7 @@ struct NetMapProcess {
     command: String,
 }
 
-pub fn print_net_map(procs: &[Process], theme: &Theme, json: bool) {
-    // Collect connections grouped by remote address
+fn collect_net_map_entries(procs: &[Process]) -> Vec<NetMapEntry> {
     let mut groups: HashMap<String, RemoteGroup> = HashMap::new();
 
     for p in procs {
@@ -81,7 +80,6 @@ pub fn print_net_map(procs: &[Process], theme: &Theme, json: bool) {
         }
     }
 
-    // Sort by connection count descending
     let mut entries: Vec<NetMapEntry> = groups
         .into_values()
         .map(|g| NetMapEntry {
@@ -94,7 +92,11 @@ pub fn print_net_map(procs: &[Process], theme: &Theme, json: bool) {
         .collect();
 
     entries.sort_by(|a, b| b.connection_count.cmp(&a.connection_count));
+    entries
+}
 
+pub fn print_net_map(procs: &[Process], theme: &Theme, json: bool) {
+    let entries = collect_net_map_entries(procs);
     if json {
         print_net_map_json(&entries);
     } else {
@@ -479,5 +481,128 @@ mod tests {
         )];
         print_net_map(&procs, &theme, false);
         print_net_map(&procs, &theme, true);
+    }
+
+    #[test]
+    fn collect_net_map_empty() {
+        assert!(collect_net_map_entries(&[]).is_empty());
+    }
+
+    #[test]
+    fn collect_net_map_merges_two_connections_same_remote_host() {
+        let remote = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let procs = vec![
+            make_proc(100, "curl", vec![make_tcp_conn(3, remote, 80)]),
+            make_proc(200, "wget", vec![make_tcp_conn(4, remote, 443)]),
+        ];
+        let e = collect_net_map_entries(&procs);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].remote_host, "10.0.0.1");
+        assert_eq!(e[0].connection_count, 2);
+        assert_eq!(e[0].processes.len(), 2);
+    }
+
+    #[test]
+    fn collect_net_map_dedupes_same_pid_in_group() {
+        let remote = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![make_tcp_conn(3, remote, 80), make_tcp_conn(4, remote, 443)],
+        )];
+        let e = collect_net_map_entries(&procs);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].connection_count, 2);
+        assert_eq!(e[0].processes.len(), 1);
+        assert_eq!(e[0].processes[0].pid, 100);
+    }
+
+    #[test]
+    fn collect_net_map_sorted_descending_by_connection_count() {
+        let few = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+        let many = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![
+                make_tcp_conn(3, few, 53),
+                make_tcp_conn(4, many, 443),
+                make_tcp_conn(5, many, 443),
+                make_tcp_conn(6, many, 80),
+            ],
+        )];
+        let e = collect_net_map_entries(&procs);
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].remote_host, "8.8.8.8");
+        assert_eq!(e[0].connection_count, 3);
+        assert_eq!(e[1].remote_host, "1.1.1.1");
+        assert_eq!(e[1].connection_count, 1);
+    }
+
+    #[test]
+    fn collect_net_map_wildcard_foreign_uses_star_colon_port_key() {
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![OpenFile {
+                fd: FdName::Number(3),
+                access: Access::ReadWrite,
+                file_type: FileType::IPv4,
+                name: "edge".to_string(),
+                socket_info: Some(SocketInfo {
+                    protocol: "TCP".to_string(),
+                    tcp_state: Some(TcpState::SynSent),
+                    local: InetAddr {
+                        addr: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                        port: 50000,
+                    },
+                    foreign: InetAddr {
+                        addr: None,
+                        port: 443,
+                    },
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        )];
+        let e = collect_net_map_entries(&procs);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].remote_host, "*:443");
+        assert_eq!(e[0].ports, vec![443]);
+    }
+
+    #[test]
+    fn collect_net_map_protocols_uppercased_unique() {
+        let remote = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+        let mut udp = make_udp_conn(3, remote, 53);
+        udp.socket_info.as_mut().unwrap().protocol = "udp".to_string();
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![make_tcp_conn(3, remote, 80), udp],
+        )];
+        let e = collect_net_map_entries(&procs);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].protocols, vec!["TCP", "UDP"]);
+    }
+
+    #[test]
+    fn collect_net_map_skips_non_ip_socket_type() {
+        let procs = vec![make_proc(
+            100,
+            "app",
+            vec![OpenFile {
+                fd: FdName::Number(3),
+                access: Access::ReadWrite,
+                file_type: FileType::Unix,
+                name: "/run/sock".to_string(),
+                socket_info: Some(SocketInfo {
+                    protocol: "UNIX".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        )];
+        assert!(collect_net_map_entries(&procs).is_empty());
     }
 }

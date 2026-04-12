@@ -403,6 +403,21 @@ pub enum DeltaStatus {
 mod tests {
     use super::*;
 
+    #[test]
+    fn sel_proc_matches_documented_union() {
+        assert_eq!(SEL_PROC, SEL_CMD | SEL_PGID | SEL_PID | SEL_UID);
+    }
+
+    #[test]
+    fn sel_file_matches_documented_union() {
+        assert_eq!(SEL_FILE, SEL_FD | SEL_NFS | SEL_NLINK | SEL_NM);
+    }
+
+    #[test]
+    fn sel_nw_matches_documented_union() {
+        assert_eq!(SEL_NW, SEL_NA | SEL_NET | SEL_UNX);
+    }
+
     // ── FileType ────────────────────────────────────────────────────
 
     #[test]
@@ -798,5 +813,55 @@ mod tests {
         let p = Process::new(1, 0, 1, 99999, "test".to_string(), vec![]);
         // Unknown UID falls back to numeric string
         assert_eq!(p.username(), "99999");
+    }
+
+    #[test]
+    fn process_clone_preserves_pid_command_and_files() {
+        let files = vec![OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Read,
+            file_type: FileType::Reg,
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        }];
+        let p = Process::new(100, 1, 100, 0, "worker".to_string(), files);
+        let q = p.clone();
+        assert_eq!(q.pid, p.pid);
+        assert_eq!(q.command, p.command);
+        assert_eq!(q.files.len(), 1);
+        assert_eq!(q.files[0].name, "/tmp/x");
+    }
+
+    #[test]
+    fn process_clone_reuses_cached_username_when_populated() {
+        let p = Process::new(1, 0, 1, 0, "init".to_string(), vec![]);
+        let n = p.username().to_string();
+        let q = p.clone();
+        assert_eq!(q.username(), n.as_str());
+    }
+
+    #[test]
+    fn open_file_node_str_prefers_inode_over_socket_protocol() {
+        let f = OpenFile {
+            inode: Some(777),
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(f.node_str(), "777");
+    }
+
+    #[test]
+    fn open_file_node_str_empty_protocol_skips_to_empty_without_inode() {
+        let f = OpenFile {
+            socket_info: Some(SocketInfo {
+                protocol: String::new(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(f.node_str(), "");
     }
 }

@@ -619,6 +619,7 @@ fn render_top(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui_app::TuiMode;
 
     fn make_entry(pid: i32, cmd: &str, fds: usize, prev: Option<usize>) -> TopEntry {
         TopEntry {
@@ -934,5 +935,74 @@ mod tests {
     fn top_mode_title() {
         let mode = TopMode::new(20);
         assert_eq!(mode.title(), "top");
+    }
+
+    fn proc_with_reg_files(pid: i32, n: usize) -> Process {
+        let files: Vec<OpenFile> = (0..n)
+            .map(|i| OpenFile {
+                fd: FdName::Number(i as i32),
+                access: Access::Read,
+                file_type: FileType::Reg,
+                name: format!("/f{i}"),
+                ..Default::default()
+            })
+            .collect();
+        Process::new(pid, 1, pid, 0, format!("cmd{pid}"), files)
+    }
+
+    #[test]
+    fn top_mode_new_zero_uses_default_top_n() {
+        let mode = TopMode::new(0);
+        assert_eq!(mode.show_n, DEFAULT_TOP_N);
+    }
+
+    #[test]
+    fn top_mode_new_positive_passthrough() {
+        assert_eq!(TopMode::new(7).show_n, 7);
+    }
+
+    #[test]
+    fn top_mode_update_from_procs_top_n_by_fds_order() {
+        let mut mode = TopMode::new(10);
+        mode.update_from_procs(&[
+            proc_with_reg_files(10, 3),
+            proc_with_reg_files(20, 30),
+            proc_with_reg_files(30, 10),
+        ]);
+        let top = mode.top_n_by_fds(2);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0].1, 20);
+        assert_eq!(top[0].2, 30);
+        assert_eq!(top[1].1, 30);
+        assert_eq!(top[1].2, 10);
+        assert_eq!(mode.total_procs, 3);
+        assert_eq!(mode.total_fds, 43);
+    }
+
+    #[test]
+    fn top_mode_user_breakdown_counts_processes() {
+        let mut mode = TopMode::new(20);
+        mode.update_from_procs(&[proc_with_reg_files(1, 1), proc_with_reg_files(2, 1)]);
+        let ub = mode.user_breakdown();
+        let sum: usize = ub.iter().map(|(_, c)| c).sum();
+        assert_eq!(sum, 2);
+    }
+
+    #[test]
+    fn top_mode_visible_count_limited_by_show_n() {
+        let mut mode = TopMode::new(2);
+        let procs: Vec<Process> = (1..=6).map(|i| proc_with_reg_files(i, 1)).collect();
+        mode.update_from_procs(&procs);
+        assert_eq!(mode.entry_count(), 6);
+        assert_eq!(mode.visible_count(), 2);
+    }
+
+    #[test]
+    fn top_mode_get_tooltip_lines_include_pid_and_rank() {
+        let mut mode = TopMode::new(20);
+        mode.update_from_procs(&[proc_with_reg_files(4242, 4)]);
+        let lines = mode.get_tooltip_lines(0);
+        assert!(lines.iter().any(|(_, v)| v == "4242"));
+        assert!(lines.iter().any(|(_, v)| v == "#1"));
     }
 }

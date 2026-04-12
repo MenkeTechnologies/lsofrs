@@ -197,6 +197,19 @@ mod tests {
     }
 
     #[test]
+    fn is_deleted_plain_path_false() {
+        let f = make_deleted_file(1, "/tmp/regular");
+        assert!(!is_deleted(&f));
+    }
+
+    #[test]
+    fn is_deleted_append_without_keyword_false() {
+        let mut f = make_deleted_file(1, "/tmp/x");
+        f.name_append = Some("(gone)".to_string());
+        assert!(!is_deleted(&f));
+    }
+
+    #[test]
     fn is_deleted_name_append() {
         let mut f = make_deleted_file(3, "/tmp/foo");
         f.name_append = Some("(deleted)".to_string());

@@ -905,4 +905,43 @@ mod tests {
             assert_eq!(s.len(), 6);
         }
     }
+
+    /// Every built-in theme's display name (spaces removed, ASCII lower) must parse back to itself.
+    #[test]
+    fn from_str_loose_roundtrips_display_name_slug() {
+        for &name in ThemeName::ALL {
+            let slug: String = name
+                .display_name()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>()
+                .to_ascii_lowercase();
+            assert_eq!(
+                ThemeName::from_str_loose(&slug),
+                name,
+                "slug {:?} for {:?}",
+                slug,
+                name.display_name()
+            );
+        }
+    }
+
+    #[test]
+    fn from_str_loose_strips_separators_in_long_names() {
+        assert_eq!(
+            ThemeName::from_str_loose("blade___runner"),
+            ThemeName::BladeRunner
+        );
+        assert_eq!(
+            ThemeName::from_str_loose("  SOLAR   FLARE  "),
+            ThemeName::SolarFlare
+        );
+    }
+
+    #[test]
+    fn lsof_theme_from_custom_sets_display_name() {
+        let t = LsofTheme::from_custom("My Palette", 1, 2, 3, 4, 5, 6);
+        assert_eq!(t.display_name(), "My Palette");
+        assert!(t.custom_name.as_deref() == Some("My Palette"));
+    }
 }

@@ -307,6 +307,15 @@ mod tests {
     }
 
     #[test]
+    fn file_matches_descends_from_original_when_canonical_differs() {
+        assert!(file_matches(
+            "/tmp/watchme/nested/file",
+            "/private/tmp/watchme",
+            "/tmp/watchme"
+        ));
+    }
+
+    #[test]
     fn print_snapshot_empty() {
         let theme = Theme::new(false);
         let table = HashMap::new();

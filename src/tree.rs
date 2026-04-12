@@ -3,9 +3,83 @@
 use std::collections::HashMap;
 use std::io::{self, Write};
 
+use serde::Serialize;
+
 use crate::output::Theme;
 use crate::strutil::truncate_max_bytes;
 use crate::types::*;
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct JsonTreeNode {
+    pid: i32,
+    ppid: i32,
+    command: String,
+    uid: u32,
+    fd_count: usize,
+    net_count: usize,
+    children: Vec<JsonTreeNode>,
+}
+
+fn build_tree_json_forest(procs: &[Process]) -> Vec<JsonTreeNode> {
+    let mut nodes: HashMap<i32, (i32, String, u32, usize, usize)> = HashMap::new();
+    let mut children_map: HashMap<i32, Vec<i32>> = HashMap::new();
+
+    for p in procs {
+        let net = p
+            .files
+            .iter()
+            .filter(|f| matches!(f.file_type, FileType::IPv4 | FileType::IPv6))
+            .count();
+        nodes.insert(
+            p.pid,
+            (p.ppid, p.command.clone(), p.uid, p.files.len(), net),
+        );
+        children_map.entry(p.ppid).or_default().push(p.pid);
+    }
+
+    for v in children_map.values_mut() {
+        v.sort();
+    }
+
+    fn build(
+        pid: i32,
+        nodes: &HashMap<i32, (i32, String, u32, usize, usize)>,
+        children_map: &HashMap<i32, Vec<i32>>,
+    ) -> JsonTreeNode {
+        let (ppid, cmd, uid, fds, net) = nodes.get(&pid).cloned().unwrap_or_default();
+        let children = children_map
+            .get(&pid)
+            .map(|kids| {
+                kids.iter()
+                    .filter(|&&k| k != pid)
+                    .map(|&k| build(k, nodes, children_map))
+                    .collect()
+            })
+            .unwrap_or_default();
+        JsonTreeNode {
+            pid,
+            ppid,
+            command: cmd,
+            uid,
+            fd_count: fds,
+            net_count: net,
+            children,
+        }
+    }
+
+    let roots: Vec<i32> = nodes
+        .iter()
+        .filter(|&(&pid, &(ppid, ..))| !nodes.contains_key(&ppid) || ppid == pid)
+        .map(|(&pid, _)| pid)
+        .collect();
+
+    let mut r: Vec<_> = roots
+        .iter()
+        .map(|&pid| build(pid, &nodes, &children_map))
+        .collect();
+    r.sort_by_key(|n| n.pid);
+    r
+}
 
 struct TreeNode {
     pid: i32,
@@ -223,80 +297,7 @@ fn print_node(
 }
 
 fn print_tree_json(procs: &[Process]) {
-    use serde::Serialize;
-
-    #[derive(Serialize)]
-    struct JsonTreeNode {
-        pid: i32,
-        ppid: i32,
-        command: String,
-        uid: u32,
-        fd_count: usize,
-        net_count: usize,
-        children: Vec<JsonTreeNode>,
-    }
-
-    let mut nodes: HashMap<i32, (i32, String, u32, usize, usize)> = HashMap::new();
-    let mut children_map: HashMap<i32, Vec<i32>> = HashMap::new();
-
-    for p in procs {
-        let net = p
-            .files
-            .iter()
-            .filter(|f| matches!(f.file_type, FileType::IPv4 | FileType::IPv6))
-            .count();
-        nodes.insert(
-            p.pid,
-            (p.ppid, p.command.clone(), p.uid, p.files.len(), net),
-        );
-        children_map.entry(p.ppid).or_default().push(p.pid);
-    }
-
-    for v in children_map.values_mut() {
-        v.sort();
-    }
-
-    fn build(
-        pid: i32,
-        nodes: &HashMap<i32, (i32, String, u32, usize, usize)>,
-        children_map: &HashMap<i32, Vec<i32>>,
-    ) -> JsonTreeNode {
-        let (ppid, cmd, uid, fds, net) = nodes.get(&pid).cloned().unwrap_or_default();
-        let children = children_map
-            .get(&pid)
-            .map(|kids| {
-                kids.iter()
-                    .filter(|&&k| k != pid)
-                    .map(|&k| build(k, nodes, children_map))
-                    .collect()
-            })
-            .unwrap_or_default();
-        JsonTreeNode {
-            pid,
-            ppid,
-            command: cmd,
-            uid,
-            fd_count: fds,
-            net_count: net,
-            children,
-        }
-    }
-
-    let roots: Vec<i32> = nodes
-        .iter()
-        .filter(|&(&pid, &(ppid, ..))| !nodes.contains_key(&ppid) || ppid == pid)
-        .map(|(&pid, _)| pid)
-        .collect();
-
-    let tree: Vec<JsonTreeNode> = {
-        let mut r: Vec<_> = roots
-            .iter()
-            .map(|&pid| build(pid, &nodes, &children_map))
-            .collect();
-        r.sort_by_key(|n| n.pid);
-        r
-    };
-
+    let tree = build_tree_json_forest(procs);
     let out = io::stdout();
     let mut out = out.lock();
     let _ = serde_json::to_writer_pretty(&mut out, &tree);
@@ -452,5 +453,104 @@ mod tests {
         }
         let theme = Theme::new(false);
         print_tree(&[p], &theme, false);
+    }
+
+    #[test]
+    fn build_tree_json_forest_empty() {
+        assert!(build_tree_json_forest(&[]).is_empty());
+    }
+
+    #[test]
+    fn build_tree_json_parent_child_structure() {
+        let procs = vec![make_proc(1, 0, "init", 1), make_proc(100, 1, "bash", 2)];
+        let forest = build_tree_json_forest(&procs);
+        assert_eq!(forest.len(), 1);
+        assert_eq!(forest[0].pid, 1);
+        assert_eq!(forest[0].children.len(), 1);
+        assert_eq!(forest[0].children[0].pid, 100);
+        assert_eq!(forest[0].children[0].ppid, 1);
+        assert_eq!(forest[0].children[0].fd_count, 2);
+    }
+
+    #[test]
+    fn build_tree_json_net_count_only_ip_sockets() {
+        let mut p = make_proc(1, 0, "srv", 0);
+        p.files.push(OpenFile {
+            fd: FdName::Number(3),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv4,
+            name: "*:80".to_string(),
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        p.files.push(OpenFile {
+            fd: FdName::Number(4),
+            access: Access::ReadWrite,
+            file_type: FileType::IPv6,
+            name: "[::]:443".to_string(),
+            socket_info: Some(SocketInfo {
+                protocol: "TCP".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        p.files.push(OpenFile {
+            fd: FdName::Number(5),
+            access: Access::ReadWrite,
+            file_type: FileType::Pipe,
+            name: "pipe:[1]".to_string(),
+            ..Default::default()
+        });
+        let forest = build_tree_json_forest(&[p]);
+        assert_eq!(forest.len(), 1);
+        assert_eq!(forest[0].fd_count, 3);
+        assert_eq!(forest[0].net_count, 2);
+    }
+
+    #[test]
+    fn build_tree_json_two_roots_sorted_by_pid() {
+        let procs = vec![
+            make_proc(200, 0, "second", 1),
+            make_proc(100, 0, "first", 1),
+        ];
+        let forest = build_tree_json_forest(&procs);
+        assert_eq!(forest.len(), 2);
+        assert_eq!(forest[0].pid, 100);
+        assert_eq!(forest[1].pid, 200);
+    }
+
+    #[test]
+    fn build_tree_json_orphan_missing_parent_is_root() {
+        let procs = vec![make_proc(500, 99_999, "orphan", 3)];
+        let forest = build_tree_json_forest(&procs);
+        assert_eq!(forest.len(), 1);
+        assert_eq!(forest[0].pid, 500);
+        assert_eq!(forest[0].ppid, 99_999);
+        assert!(forest[0].children.is_empty());
+    }
+
+    #[test]
+    fn build_tree_json_self_parent_forms_root() {
+        let procs = vec![make_proc(1, 1, "init", 2)];
+        let forest = build_tree_json_forest(&procs);
+        assert_eq!(forest.len(), 1);
+        assert_eq!(forest[0].pid, 1);
+        assert_eq!(forest[0].ppid, 1);
+    }
+
+    #[test]
+    fn build_tree_json_deep_chain_children_nested() {
+        let procs = vec![
+            make_proc(1, 0, "a", 1),
+            make_proc(2, 1, "b", 1),
+            make_proc(3, 2, "c", 1),
+        ];
+        let forest = build_tree_json_forest(&procs);
+        assert_eq!(forest[0].children.len(), 1);
+        assert_eq!(forest[0].children[0].children.len(), 1);
+        assert_eq!(forest[0].children[0].children[0].pid, 3);
     }
 }

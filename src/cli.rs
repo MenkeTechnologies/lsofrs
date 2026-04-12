@@ -1280,4 +1280,62 @@ mod tests {
         assert!(args.net_map);
         assert!(args.json);
     }
+
+    #[test]
+    fn leak_detect_params_trailing_comma_uses_default_threshold() {
+        let args = Args {
+            leak_detect: Some(Some("12,".to_string())),
+            ..Args::parse_from(["lsofrs"])
+        };
+        let (i, t) = args.leak_detect_params().unwrap();
+        assert_eq!(i, 12);
+        assert_eq!(t, 3);
+    }
+
+    #[test]
+    fn leak_detect_params_leading_comma_interval_defaults_threshold_parsed() {
+        let args = Args {
+            leak_detect: Some(Some(",9".to_string())),
+            ..Args::parse_from(["lsofrs"])
+        };
+        let (i, t) = args.leak_detect_params().unwrap();
+        assert_eq!(i, 5);
+        assert_eq!(t, 9);
+    }
+
+    #[test]
+    fn leak_detect_params_invalid_interval_valid_threshold() {
+        let args = Args {
+            leak_detect: Some(Some("oops,7".to_string())),
+            ..Args::parse_from(["lsofrs"])
+        };
+        let (i, t) = args.leak_detect_params().unwrap();
+        assert_eq!(i, 5);
+        assert_eq!(t, 7);
+    }
+
+    #[test]
+    fn parse_top_limit_10() {
+        let args = Args::parse_from(["lsofrs", "--top", "10"]);
+        assert_eq!(args.top, Some(Some(10)));
+    }
+
+    #[test]
+    fn parse_color_auto() {
+        let args = Args::parse_from(["lsofrs", "--color", "auto"]);
+        assert_eq!(args.color, "auto");
+    }
+
+    #[test]
+    fn parse_delta_repeat_combo() {
+        let args = Args::parse_from(["lsofrs", "--delta", "-r", "3"]);
+        assert!(args.delta);
+        assert_eq!(args.repeat, Some(3));
+    }
+
+    #[test]
+    fn parse_command_comma_separated_literals() {
+        let args = Args::parse_from(["lsofrs", "-c", "sshd,nginx"]);
+        assert_eq!(args.command.as_deref(), Some("sshd,nginx"));
+    }
 }
