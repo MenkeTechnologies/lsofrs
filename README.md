@@ -10,35 +10,45 @@
     ░        ░        ░ ░           ░           ░
 ```
 
-<p align="center">
-  <a href="https://github.com/MenkeTechnologies/lsofrs/actions/workflows/ci.yml"><img src="https://github.com/MenkeTechnologies/lsofrs/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://crates.io/crates/lsofrs"><img src="https://img.shields.io/crates/v/lsofrs.svg" alt="crates.io"></a>
-  <a href="https://crates.io/crates/lsofrs"><img src="https://img.shields.io/crates/d/lsofrs.svg" alt="downloads"></a>
-  <a href="https://docs.rs/lsofrs"><img src="https://docs.rs/lsofrs/badge.svg" alt="docs.rs"></a>
-  <a href="https://github.com/MenkeTechnologies/lsofrs/blob/main/LICENSE"><img src="https://img.shields.io/crates/l/lsofrs.svg" alt="license"></a>
-</p>
+[![CI](https://github.com/MenkeTechnologies/lsofrs/actions/workflows/ci.yml/badge.svg)](https://github.com/MenkeTechnologies/lsofrs/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/lsofrs.svg)](https://crates.io/crates/lsofrs)
+[![Downloads](https://img.shields.io/crates/d/lsofrs.svg)](https://crates.io/crates/lsofrs)
+[![Docs.rs](https://docs.rs/lsofrs/badge.svg)](https://docs.rs/lsofrs)
+ [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://menketechnologies.github.io/lsofrs/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+### `[LIST SYSTEM OPEN FILES // RUST CORE // 5-21× FASTER THAN lsof]`
 
 > *"Rewritten in Rust. Faster. Safer. The same cyberpunk soul."*
 
----
+**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t. A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches. If a process has a file descriptor, `lsofrs` sees it. **`lsf`** is the shorter form of **`lsofrs`** (same binary; quicker to type).
 
-## // WHAT IS THIS
-
-**lsofrs** — **L**ist **S**ystem **O**pen **F**iles in **R**u**s**t — v4.8.0
-
-**`lsf`** is the shorter form of **`lsofrs`** (same binary; quicker to type).
-
-A Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng), the modernized lsof diagnostic tool. Maps the invisible topology between processes and the files they hold open: regular files, directories, sockets, pipes, devices, kqueues — anything the kernel touches.
-
-If a process has a file descriptor, `lsofrs` sees it.
+### [`Read the Docs`](https://menketechnologies.github.io/lsofrs/) &middot; [`Engineering Report`](https://menketechnologies.github.io/lsofrs/report.html) · [`lsofng`](https://github.com/MenkeTechnologies/lsofng) · [`strykelang`](https://github.com/MenkeTechnologies/strykelang) · [`zshrs`](https://github.com/MenkeTechnologies/zshrs)
 
 ---
+
+## Table of Contents
+
+- [\[0x00\] What Is This](#0x00-what-is-this)
+- [\[0x01\] Jack In — Build From Source](#0x01-jack-in--build-from-source)
+- [\[0x02\] Usage](#0x02-usage)
+- [\[0x03\] Advanced Modes](#0x03-advanced-modes)
+- [\[0x04\] Cyberpunk Theme](#0x04-cyberpunk-theme)
+- [\[0x05\] Interactive Controls](#0x05-interactive-controls)
+- [\[0x06\] Architecture](#0x06-architecture)
+- [\[0x07\] Performance](#0x07-performance)
+- [\[0x08\] License](#0x08-license)
+- [\[0xFF\] Credits](#0xff-credits)
+
+---
+
+## [0x00] WHAT IS THIS
 
 ![lsofrs --help](screenshots/help.png)
 
 ---
 
-## // JACK IN — BUILD FROM SOURCE
+## [0x01] JACK IN — BUILD FROM SOURCE
 
 ```bash
 cargo build --release
@@ -62,7 +72,7 @@ man lsofrs
 
 ---
 
-## // USAGE
+## [0x02] USAGE
 
 ```bash
 lsf                           # list all open files
@@ -110,7 +120,7 @@ lsf -c '/nginx|apache/'       # regex command match
 
 ---
 
-## // ADVANCED MODES
+## [0x03] ADVANCED MODES
 
 ### Unified TUI (`--tui`)
 
@@ -273,7 +283,7 @@ lsf --delta -r 1 -c myapp     # watch myapp changes
 
 ---
 
-## // CYBERPUNK THEME
+## [0x04] CYBERPUNK THEME
 
 When output goes to a TTY, lsofrs activates cyberpunk-themed column headers and ANSI coloring:
 
@@ -292,7 +302,7 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 
 ---
 
-## // INTERACTIVE CONTROLS
+## [0x05] INTERACTIVE CONTROLS
 
 All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
 
@@ -343,7 +353,7 @@ Non-TTY (piped) output always does a single-shot print and exits — no TUI, no 
 
 ---
 
-## // ARCHITECTURE
+## [0x06] ARCHITECTURE
 
 ```
 src/
@@ -407,7 +417,7 @@ Supports **macOS/Darwin** (libproc FFI), **Linux** (`/proc` filesystem), and **F
 
 ---
 
-## // PERFORMANCE
+## [0x07] PERFORMANCE
 
 Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~470 processes / ~5000 open files, rayon parallel gathering):
 
@@ -447,12 +457,12 @@ The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI struct
 
 ---
 
-## // LICENSE
+## [0x08] LICENSE
 
 MIT License — Jacob Menke
 
 ---
 
-## // CREDITS
+## [0xFF] CREDITS
 
 Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng) by Jacob Menke, which itself is a modernized fork of the original [lsof](https://github.com/lsof-org/lsof) by Vic Abell.
