@@ -63,11 +63,13 @@ Or install directly:
 cargo install --path .
 ```
 
-Install the man page:
+Install the man pages (short + full reference):
 
 ```bash
-sudo cp lsofrs.1 /usr/local/share/man/man1/
-man lsofrs
+sudo cp man/man1/lsofrs.1    /usr/local/share/man/man1/
+sudo cp man/man1/lsofrsall.1 /usr/local/share/man/man1/
+man lsofrs        # short reference
+man lsofrsall     # full reference (all flags, modes, themes, architecture)
 ```
 
 ---
@@ -384,7 +386,9 @@ src/
 ├── pipe_chain.rs # Pipe/socket IPC topology between processes
 ├── csv_out.rs   # CSV export (RFC 4180)
 └── net_map.rs   # Network connections grouped by remote host
-lsofrs.1         # Man page (roff)
+man/man1/
+├── lsofrs.1     # Man page — short reference (roff)
+└── lsofrsall.1  # Man page — full reference (roff)
 completions/
 └── _lsofrs      # Zsh completion function
 ```

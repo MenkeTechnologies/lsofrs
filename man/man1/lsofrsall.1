@@ -1,0 +1,829 @@
+.\" lsofrsall(1) — comprehensive all-in-one man page for lsofrs
+.\" Modeled after zshall(1): every man page in one document.
+.\" Render with:  man -l man/man1/lsofrsall.1
+.\" Install:      cp man/man1/lsofrsall.1 /usr/local/share/man/man1/
+.TH LSOFRSALL 1 "May 2026" "lsofrs 4.8.0" "User Commands"
+.SH NAME
+lsofrsall \- the lsofrs comprehensive reference (invocation, selection,
+network, display, advanced modes, TUI, themes, architecture, performance)
+.SH OVERVIEW
+This is the all-in-one
+.B lsofrs
+manual, modeled on
+.BR zshall (1).
+It concatenates the major sections of the lsofrs reference into a single
+page so you can grep with `/`:
+.RS 2
+.PP
+.B 1.  INVOCATION
+.RB "\(em " "basic usage, repeat mode, FILE arguments"
+.br
+.B 2.  SELECTION CRITERIA
+.RB "\(em " "every -c/-d/-p/-u/-g flag, AND/OR mode"
+.br
+.B 3.  NETWORK SELECTION
+.RB "\(em " "-i address syntax, -n/-P/-N/-U"
+.br
+.B 4.  DISPLAY FORMATS
+.RB "\(em " "-F fields, -J JSON, -t terse, -0 NUL, --csv"
+.br
+.B 5.  ADVANCED LIVE MODES
+.RB "\(em " "--tui, --top, --watch, --stale, --ports, --pipe-chain, --net-map, --tree, --monitor, --follow, --leak-detect, --summary, --delta"
+.br
+.B 6.  CYBERPUNK THEMES
+.RB "\(em " "31 built-in themes, custom palette editor"
+.br
+.B 7.  INTERACTIVE CONTROLS
+.RB "\(em " "every TUI keybinding"
+.br
+.B 8.  ARCHITECTURE
+.RB "\(em " "FFI to Darwin / Linux / FreeBSD, rayon parallel gather"
+.br
+.B 9.  PERFORMANCE
+.RB "\(em " "5\(en21x faster than lsof / lsofng"
+.br
+.B 10. ENVIRONMENT
+.RB "\(em " "vars that influence lsofrs"
+.br
+.B 11. FILES
+.RB "\(em " "config, completions, man pages"
+.br
+.B 12. EXIT STATUS
+.br
+.B 13. EXAMPLES
+.RE
+.PP
+For a shorter quick-reference page see
+.BR lsofrs (1).
+.SH NAME
+lsofrs, lsf \- list open files (modern Rust implementation of lsof)
+.SH SYNOPSIS
+.B lsofrs
+.RI [ OPTION ]...\&
+.RI [ FILE ]...\&
+.br
+.B lsf
+.RI [ OPTION ]...\&
+.RI [ FILE ]...\&
+.PP
+.B lsf
+is the shorter form of
+.BR lsofrs
+\(em same binary, quicker to type.
+.SH DESCRIPTION
+.B lsofrs
+maps the invisible topology between processes and the files they hold
+open: regular files, directories, sockets, pipes, devices, kqueues \(em
+anything the kernel touches.  If a process has a file descriptor,
+.B lsofrs
+sees it.
+.PP
+A Rust rewrite of
+.BR lsofng (1)
+with
+.B zero-copy
+.IR repr(C)
+FFI to Darwin / Linux / FreeBSD kernel headers,
+.B rayon
+work-stealing per-PID FD enumeration, and a streaming
+.IR "gather \(-> filter \(-> print"
+pass.  When output goes to a TTY a cyberpunk theme is applied
+(headers rewritten, ANSI color enabled); when piped or redirected,
+plain output is used (safe for scripts).
+.SH "1.  INVOCATION"
+With no arguments,
+.B lsofrs
+lists every open file for every process visible to the calling user.
+When one or more
+.I FILE
+arguments are given, only processes holding those files are shown.
+.PP
+The
+.BI \-r " SECONDS"
+flag puts
+.B lsofrs
+into repeat mode: re-scan every
+.I SECONDS
+seconds (default 1).  Combine with
+.B \-\-delta
+for change highlighting.
+.PP
+Combine selection flags with the boolean modifier
+.BR \-a
+to switch from the default OR behavior to AND.  For example,
+.B "lsf \-a \-u root \-i TCP"
+lists only TCP files owned by root, while
+.B "lsf \-u root \-i TCP"
+(no
+.BR \-a )
+lists every file owned by root plus every TCP file system-wide.
+.SH "2.  SELECTION CRITERIA"
+.TP
+.B \-a
+AND selection mode.  All specified filters must match a process for it
+to appear.  Default is OR mode.
+.TP
+.BI \-c " COMMAND"
+Select processes whose command name matches
+.IR COMMAND .
+Supports prefix matching, exclusion with
+.BR ^ ,
+and regular expressions enclosed in
+.BR / .
+Comma-separated for multiple values.
+.RS
+.PP
+Examples:
+.PP
+.B "lsf \-c Chrome"
+\(em prefix match.
+.br
+.B "lsf \-c ^Chrome"
+\(em exclude Chrome.
+.br
+.B "lsf \-c /^firefox/"
+\(em regex.
+.br
+.B "lsf \-c bash,zsh,fish"
+\(em multiple.
+.RE
+.TP
+.BI \-d " FD"
+Select by file descriptor.  Accepts comma-separated values, ranges
+.RI ( N \- M ),
+and exclusions with
+.BR ^ .
+Special tokens like
+.BR cwd ,
+.BR rtd ,
+.BR txt ,
+.BR mem
+are matched textually.
+.TP
+.BI \-g " PGID"
+Select by process group ID.  Comma-separated;
+.B ^
+to exclude.
+.TP
+.BI \-p " PID"
+Select by process ID.  Comma-separated;
+.B ^
+to exclude.
+.TP
+.BI \-u " USER"
+Select by login name or UID.  Comma-separated;
+.B ^
+to exclude.
+.SH "3.  NETWORK SELECTION"
+.TP
+.BI \-i " [ADDR]"
+Select internet connections.  Optional address specification:
+.BR [4|6][proto][@host|addr][:svc|port] .
+Without an argument, selects all internet files.
+.RS
+.PP
+Examples:
+.PP
+.B "lsf \-i TCP"
+\(em all TCP.
+.br
+.B "lsf \-i 6"
+\(em all IPv6.
+.br
+.B "lsf \-i :80"
+\(em port 80 (any protocol).
+.br
+.B "lsf \-i TCP:22"
+\(em SSH only.
+.br
+.B "lsf \-i @192.168.1.1"
+\(em connections to/from one host.
+.br
+.B "lsf \-i 4UDP@dns:53"
+\(em IPv4 UDP to DNS port 53.
+.RE
+.TP
+.B \-n
+Inhibit conversion of host numbers to host names.  Faster (no DNS
+lookups) and avoids hangs on broken resolvers.
+.TP
+.B \-N
+Select NFS files only.
+.TP
+.B \-P
+Inhibit conversion of port numbers to port names.  Faster and avoids
+.IR /etc/services
+parsing.
+.TP
+.B \-U
+Select UNIX domain socket files only.
+.SH "4.  DISPLAY FORMATS"
+.TP
+.BI \-F " [FIELDS]"
+Produce machine-readable field output.  Each output line is prefixed
+with a single character identifying the field.  Field characters:
+.RS
+.PP
+.B p
+\(em PID
+.br
+.B c
+\(em command name
+.br
+.B f
+\(em file descriptor
+.br
+.B n
+\(em file name / path
+.br
+.B t
+\(em file type (REG, DIR, IPv4, IPv6, PIPE, ...)
+.br
+.B u
+\(em UID
+.br
+.B L
+\(em login name
+.br
+.B s
+\(em file size
+.br
+.B i
+\(em inode
+.br
+.B d
+\(em device number
+.br
+.B g
+\(em PGID
+.br
+.B R
+\(em parent PID
+.RE
+.TP
+.BR \-J ", " \-\-json
+Emit each row as a JSON object, one per line (JSONL/NDJSON).
+Compatible with
+.BR jq (1).
+.TP
+.B \-\-csv
+Pure CSV output (RFC 4180 quoting) for spreadsheets and pipelines.
+Header row included unless suppressed.
+.TP
+.B \-R
+Show parent PID column (PPID).
+.TP
+.B \-\-pgid\-show
+Show process group ID column (PGID).
+.TP
+.B \-t
+Terse output: print PIDs only, one per line.  Useful with
+.BR xargs (1)
+for killing matched processes.
+.TP
+.B \-0
+Use NUL byte as the field terminator instead of newline in
+.B \-F
+output.  Safe for filenames containing newlines.
+.TP
+.B \-w
+Suppress warning messages on stderr.
+.TP
+.BR \-V ", " \-\-version
+Display version information and exit.
+.TP
+.BR \-h ", " \-\-help
+Display help and exit.
+.SH "5.  ADVANCED LIVE MODES"
+.SS 5.1 Unified TUI (\-\-tui)
+Full-screen tabbed dashboard with all modes in one interface.  7
+clickable tabs, 31 color themes, mouse support, hover and right-click
+tooltips, theme chooser and editor, config persistence.
+.PP
+.B Tabs:
+TOP | SUMMARY | PORTS | TREE | NET-MAP | PIPES | STALE.  Click tab or
+press Tab / 1\-7 to switch.
+.PP
+.B Bottom bar:
+.RS 2
+.PP
+.B ">>> LSOFRS <<< \(or procs:N \(or files:N \(or tcp:N udp:N unix:N pipe:N \(or rate:Ns \(or theme:NAME \(or paused:no \(or h=help \(or HH:MM:SS"
+.RE
+.PP
+Each
+.B \(or
+segment is a hover zone with verbose tooltip.
+.PP
+.B Examples:
+.PP
+.B "lsf \-\-tui"
+\(em launch TUI, restore last tab and theme.
+.br
+.B "lsf \-\-tui \-\-theme matrix"
+\(em launch with Matrix theme.
+.br
+.B "sudo lsf \-\-tui"
+\(em full visibility (all processes).
+.SS 5.2 Top-N Dashboard (\-\-top)
+Live auto-refreshing dashboard of the top processes sorted by FD count.
+Like
+.BR iotop (1)
+for file descriptors \(em shows FD type distribution bars, delta
+tracking, per-process breakdowns.
+.PP
+.BI \-\-top " [N]"
+defaults to 20.  Top-specific keys:
+.B s
+cycle sort,
+.B r
+reverse,
+.BR + / \-
+show more/fewer,
+.B b
+toggle distribution bar,
+.B d
+toggle delta column.
+.SS 5.3 File Watch (\-\-watch FILE)
+Monitor who opens and closes a specific file over time.  Prints
+timestamped
+.B +OPEN
+/
+.B \-CLOSE
+events as they happen \(em a lightweight
+.BR inotifywait (1)
+/
+.BR fs_usage (1)
+for a single path.  Each event shows timestamp, open/close tag, PID,
+user, FD, command.  When piped, prints a single snapshot and exits.
+.SS 5.4 Stale FDs (\-\-stale)
+Find file descriptors pointing to deleted files \(em a common source of
+disk-space leaks, zombie file handles, and security issues.  Combine
+with
+.B \-u USER
+to scope to one user.  Supports
+.B \-\-json
+output.
+.SS 5.5 Listening Ports (\-\-ports)
+Quick "what's listening where" summary, like
+.B "ss \-tlnp"
+but cross-platform (macOS + Linux).  Use
+.B \-\-json
+for JSON output;
+.B "\-u root"
+to scope to a user.
+.SS 5.6 Pipe Chain (\-\-pipe-chain)
+Trace pipe and UNIX socket pairs between processes \(em visualize the
+IPC topology.  Combine with
+.B \-c
+to scope to one command tree.
+.SS 5.7 Network Map (\-\-net-map)
+Group network connections by remote host \(em see which servers your
+system talks to and how many connections each has.
+.SS 5.8 CSV Export (\-\-csv)
+Pure CSV output for pipelines, spreadsheets, and data analysis.
+RFC 4180-compliant quoting.  Combine with selection flags and redirect
+to file:
+.B "lsf \-\-csv \-p 1234 > out.csv"
+.SS 5.9 Process Tree (\-\-tree)
+Hierarchical process tree view with FD counts, type breakdowns, and
+network connection counts.  Like
+.BR pstree (1)
+meets
+.BR lsof (8).
+Each node shows: PID, user, FD count, command, type breakdown
+.RI ( [REG:12 IPv4:3 PIPE:2] ),
+network connection count.  Notable files (sockets, pipes) listed inline
+under each process.
+.SS 5.10 Live Monitor (\-\-monitor / \-W)
+Full-screen alternate-buffer display like
+.BR top (1).
+Auto-refreshes; interactive controls.  Keys:
+.B s
+sort,
+.B r
+reverse,
+.B f
+filter,
+.B p
+pause,
+.B ?
+help,
+.B q
+quit.
+.SS 5.11 Follow Mode (\-\-follow PID)
+Watch a single process's FDs in real-time.  New opens highlighted
+.B +NEW
+in green, closes
+.B \-DEL
+in red.
+.SS 5.12 FD Leak Detection (\-\-leak-detect)
+Monitors per-process FD counts over time.  Flags processes with
+monotonically increasing FD counts.
+.PP
+.BR \-\-leak-detect [= INTERVAL [, THRESHOLD ]]
+defaults to 5-second interval, 3-iteration threshold (minimum 2).
+.SS 5.13 Summary / Statistics (\-\-summary)
+Aggregate FD breakdown with bar charts, top processes, per-user totals.
+Add
+.B \-r N
+for live auto-refreshing TUI mode.
+Add
+.B \-i
+for network-only summary.
+.SS 5.14 Delta Highlighting (\-\-delta)
+Color-code changes between repeat iterations.  New FDs in green, gone
+in red.  Combine with
+.B "\-r SECONDS"
+for live monitoring.
+.SH "6.  CYBERPUNK THEMES"
+When output goes to a TTY,
+.B lsofrs
+activates cyberpunk-themed column headers and ANSI coloring:
+.PP
+.TS
+tab(|);
+l l.
+T{
+.B Piped
+T}|T{
+.B TTY
+T}
+COMMAND|PROCESS
+PID|PRC
+USER|H4XOR
+TYPE|CL4SS
+DEVICE|DEV/ICE
+SIZE/OFF|BYT3/0FF
+NODE|N0DE
+NAME|T4RGET
+.TE
+.PP
+When piped or redirected, plain headers and no colors are used \(em
+safe for scripts.
+.PP
+.B 31 built-in themes
+are selectable via
+.B \-\-theme NAME
+or interactively via
+.B c
+in TUI modes.  Theme editor
+.RB ( C )
+creates custom 6-color palettes, adjustable 0\-255 per channel, named
+and saved to
+.IR ~/.lsofrs.conf .
+.SH "7.  INTERACTIVE CONTROLS"
+All live TUI modes
+.RB ( \-\-tui ,
+.BR \-\-top ,
+.BR "\-\-summary \-r" )
+share common keybindings.
+.SS Common keys
+.TS
+tab(|);
+l l.
+.B Key|.B Action
+1\-9|Set refresh interval (seconds)
+< / >|Fine-adjust refresh interval (\(+-1s)
+p|Pause/resume data collection
+? / h|Toggle help overlay
+c|Open theme chooser (31 themes with swatches)
+C|Open theme editor (custom 6-color palettes)
+T|Toggle hover tooltips (right-click still works)
+x|Toggle border
+t|Toggle compact/expanded view
+o|Freeze/unfreeze sort order
+/|Filter popup (regex search)
+0|Clear filter
+j/k/Up/Down|Navigate rows
+F|Pin/unpin selected row
+y|Copy selected row to clipboard
+e|Export current tab to file
+q / Esc / Ctrl-C|Quit
+.TE
+.SS \-\-tui additional keys
+.TS
+tab(|);
+l l.
+.B Key|.B Action
+Tab / Right|Next tab
+BackTab / Left|Previous tab
+1\-7|Jump to tab by number
+Click tab|Switch to clicked tab
+Right-click row|Verbose tooltip (PID, FDs, kill hints)
+Hover 1s|Auto-tooltip (disappears on mouse move)
+.TE
+.SS \-\-top additional keys
+.TS
+tab(|);
+l l.
+.B Key|.B Action
+s|Cycle sort column (FDs/PID/USER/REG/SOCK/PIPE/OTHER/DELTA/CMD)
+r|Reverse sort order
++ / \-|Show more/fewer processes (\(+-5)
+b|Toggle distribution bar column
+d|Toggle delta column
+.TE
+.PP
+Non-TTY (piped) output always does a single-shot print and exits \(em no
+TUI, no key handling.
+.SH "8.  ARCHITECTURE"
+.B lsofrs
+is structured as a streaming
+.IR "gather \(-> filter \(-> print"
+pipeline.  Per-platform FFI modules
+.RB ( darwin.rs ,
+.BR linux.rs ,
+.BR freebsd.rs )
+expose a uniform
+.B Process
+/
+.B OpenFile
+data model;
+.B filter.rs
+applies selection criteria;
+.B output.rs
+,
+.BR json.rs ,
+.BR csv_out.rs
+format the result.
+.PP
+.B Per-PID FD enumeration is rayon-parallelized,
+fanning out across every CPU core.  Username lookups
+.RB ( "getpwuid_r" )
+are cached behind
+.B OnceCell
+to avoid repeated NSS hits.  Service-name lookups
+.RB ( "getservbyport" )
+are similarly cached.
+.PP
+.B FFI is zero-copy.
+Kernel structures are described as
+.B repr(C)
+Rust structs and read directly from
+.BR libproc (Darwin),
+.BR /proc (Linux),
+.BR sysctl (FreeBSD)
+with no intermediate string copies.
+.PP
+.B File layout:
+.PP
+.RS 2
+.nf
+src/main.rs       \(em CLI entry, dispatch, repeat / leak loops
+src/cli.rs        \(em clap argument definitions + custom help
+src/types.rs      \(em core data structures
+src/darwin.rs     \(em macOS libproc FFI (rayon parallel)
+src/linux.rs      \(em Linux /proc filesystem (rayon parallel)
+src/freebsd.rs    \(em FreeBSD sysctl + procfs
+src/filter.rs     \(em selection & filtering
+src/strutil.rs    \(em safe UTF-8 truncation for fixed-width display
+src/output.rs     \(em columnar & field output, ANSI theming
+src/json.rs       \(em JSON serialization (serde)
+src/monitor.rs    \(em live full-screen (crossterm alternate screen)
+src/follow.rs     \(em single-process FD tracking
+src/leak.rs       \(em circular-buffer leak detector
+src/delta.rs      \(em iteration-diff engine
+src/summary.rs    \(em aggregate statistics with bar charts
+src/tree.rs       \(em process tree with FD inheritance
+src/tui_app.rs    \(em shared TUI framework (TuiMode trait, ratatui)
+src/tui_tabs.rs   \(em unified tabbed TUI (--tui)
+src/theme.rs      \(em 31 color themes + custom theme support
+src/config.rs     \(em TOML config persistence (~/.lsofrs.conf)
+src/top.rs        \(em live top-N FD dashboard
+src/watch.rs      \(em file watch
+src/stale.rs      \(em stale FD finder
+src/ports.rs      \(em listening ports summary
+src/pipe_chain.rs \(em pipe/socket IPC topology
+src/csv_out.rs    \(em CSV export
+src/net_map.rs    \(em network connection grouping
+.fi
+.RE
+.SH "9.  PERFORMANCE"
+Benchmarks on a ~470-process / ~5,000-FD macOS box,
+.BR hyperfine (1),
+10 runs, 3 warmup:
+.PP
+.TS
+tab(|);
+l l l l.
+.B Workload|.B lsofrs|.B lsof 4.91|.B lsofng
+All open files (default)|14.2 ms|169.8 ms|175.5 ms
+Network connections (-i TCP)|11.5 ms|110.5 ms|140.1 ms
+Terse output (-t, PIDs only)|6.9 ms|101.4 ms|142.9 ms
+Structured (-J JSON / -F)|29.3 ms|156.1 ms|136.7 ms
+.TE
+.PP
+.B Speedup:
+5\(en21x faster than traditional lsof implementations.  Rayon-parallel
+per-PID FD enumeration + zero-copy FFI structs + OnceCell-cached
+username lookups account for the bulk of the win.
+.SH "10. ENVIRONMENT"
+.TP
+.B LSOFRS_CONF
+Override the config file path (default
+.IR ~/.lsofrs.conf ).
+.TP
+.B NO_COLOR
+When set,
+.B lsofrs
+emits plain headers and no ANSI color even on a TTY.  See
+.UR https://no-color.org/
+NO_COLOR specification
+.UE .
+.TP
+.B TERM
+Used to detect terminal capability for color and TUI modes.  Setting
+to
+.B dumb
+disables color and TUI.
+.SH "11. FILES"
+.TP
+.I ~/.lsofrs.conf
+TOML config file: persists last-used TUI tab, theme selection, custom
+6-color palettes, and per-mode preferences.
+.TP
+.I /usr/local/share/man/man1/lsofrs.1
+Short reference man page.
+.TP
+.I /usr/local/share/man/man1/lsofrsall.1
+This man page.
+.TP
+.I /usr/local/share/zsh/site-functions/_lsofrs
+Zsh completion function (installed separately from the
+.IR completions/
+directory in the source tree).
+.SH "12. EXIT STATUS"
+.TP
+.B 0
+Successful completion.
+.TP
+.B 1
+An error occurred, or no matching files were found.
+.SH "13. EXAMPLES"
+.PP
+List all open files (default behavior):
+.RS
+.nf
+lsf
+.fi
+.RE
+.PP
+Files opened by PID 1234:
+.RS
+.nf
+lsf \-p 1234
+.fi
+.RE
+.PP
+Everything Chrome is touching:
+.RS
+.nf
+lsf \-c Chrome
+.fi
+.RE
+.PP
+List processes using a specific file:
+.RS
+.nf
+lsf /var/log/syslog
+.fi
+.RE
+.PP
+All TCP connections:
+.RS
+.nf
+lsf \-i TCP
+.fi
+.RE
+.PP
+What's listening on port 8080:
+.RS
+.nf
+lsf \-i :8080
+.fi
+.RE
+.PP
+Files owned by root:
+.RS
+.nf
+lsf \-u root
+.fi
+.RE
+.PP
+Process tree for root's processes:
+.RS
+.nf
+lsf \-\-tree \-u root
+.fi
+.RE
+.PP
+JSON output of all open files:
+.RS
+.nf
+lsf \-\-json
+.fi
+.RE
+.PP
+JSON for one PID, piped through jq:
+.RS
+.nf
+lsf \-J \-p 1234 | jq '.name'
+.fi
+.RE
+.PP
+Detect FD leaks polling every 10 seconds with threshold 5:
+.RS
+.nf
+lsf \-\-leak\-detect=10,5
+.fi
+.RE
+.PP
+Show listening ports:
+.RS
+.nf
+lsf \-\-ports
+.fi
+.RE
+.PP
+Find deleted files still held open:
+.RS
+.nf
+lsf \-\-stale
+.fi
+.RE
+.PP
+Live monitor mode (full-screen):
+.RS
+.nf
+lsf \-W
+.fi
+.RE
+.PP
+Launch the unified TUI with Matrix theme:
+.RS
+.nf
+lsf \-\-tui \-\-theme matrix
+.fi
+.RE
+.PP
+Repeat every 2 seconds with delta highlighting:
+.RS
+.nf
+lsf \-r 2 \-\-delta
+.fi
+.RE
+.PP
+CSV export filtered by user:
+.RS
+.nf
+lsf \-\-csv \-u www\-data
+.fi
+.RE
+.PP
+Network connection map:
+.RS
+.nf
+lsf \-\-net\-map
+.fi
+.RE
+.PP
+Trace pipe chains between processes:
+.RS
+.nf
+lsf \-\-pipe\-chain
+.fi
+.RE
+.PP
+Kill every process matching a name:
+.RS
+.nf
+lsf \-t \-c badprocess | xargs kill
+.fi
+.RE
+.PP
+AND mode: only TCP connections by root:
+.RS
+.nf
+lsf \-a \-u root \-i TCP
+.fi
+.RE
+.SH SEE ALSO
+.BR lsofrs (1),
+.BR lsof (8),
+.BR fstat (1),
+.BR ss (8),
+.BR netstat (1),
+.BR pstree (1),
+.BR top (1),
+.BR proc (5),
+.BR strykeall (1),
+.BR zshrsall (1)
+.SH AUTHORS
+.B Jacob Menke
+.RI < https://github.com/MenkeTechnologies >
+.PP
+A Rust rewrite of
+.BR lsofng (1)
+by Jacob Menke, which itself is a modernized fork of the original
+.BR lsof (8)
+by Vic Abell.
