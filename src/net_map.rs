@@ -91,7 +91,7 @@ fn collect_net_map_entries(procs: &[Process]) -> Vec<NetMapEntry> {
         })
         .collect();
 
-    entries.sort_by(|a, b| b.connection_count.cmp(&a.connection_count));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.connection_count));
     entries
 }
 

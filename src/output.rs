@@ -336,10 +336,8 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
                     'f' => {
                         let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator);
                     }
-                    'a' => {
-                        if f.access != Access::None {
-                            let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
-                        }
+                    'a' if f.access != Access::None => {
+                        let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
                     }
                     't' => {
                         let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator);

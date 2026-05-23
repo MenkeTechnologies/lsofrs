@@ -186,7 +186,7 @@ impl TopMode {
     /// Top N processes by FD count: returns `(command, pid, fd_count)`.
     pub fn top_n_by_fds(&self, n: usize) -> Vec<(String, i32, usize)> {
         let mut sorted = self.entries.clone();
-        sorted.sort_by(|a, b| b.fd_count.cmp(&a.fd_count));
+        sorted.sort_by_key(|e| std::cmp::Reverse(e.fd_count));
         sorted
             .iter()
             .take(n)
@@ -201,7 +201,7 @@ impl TopMode {
             *map.entry(e.username.clone()).or_default() += 1;
         }
         let mut pairs: Vec<(String, usize)> = map.into_iter().collect();
-        pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        pairs.sort_by_key(|p| std::cmp::Reverse(p.1));
         pairs
     }
 }

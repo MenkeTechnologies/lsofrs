@@ -1264,7 +1264,7 @@ impl TabbedTui {
             }
         }
         let mut ft_pairs: Vec<(String, usize)> = ft_map.into_iter().collect();
-        ft_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+        ft_pairs.sort_by_key(|p| std::cmp::Reverse(p.1));
         self.file_type_counts = ft_pairs;
 
         // All tabs share the same gathered process list — no redundant gathering
@@ -1583,7 +1583,7 @@ impl TabbedTui {
                 }
             })
             .collect();
-        rows.sort_by(|a, b| b.count.cmp(&a.count));
+        rows.sort_by_key(|r| std::cmp::Reverse(r.count));
         self.net_map_rows = rows;
     }
 
@@ -3501,11 +3501,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                     tui.editor_name.clear();
                                     tui.editor_cursor = 0;
                                 }
-                                KeyCode::Backspace => {
-                                    if tui.editor_cursor > 0 {
-                                        tui.editor_cursor -= 1;
-                                        tui.editor_name.remove(tui.editor_cursor);
-                                    }
+                                KeyCode::Backspace if tui.editor_cursor > 0 => {
+                                    tui.editor_cursor -= 1;
+                                    tui.editor_name.remove(tui.editor_cursor);
                                 }
                                 KeyCode::Left => {
                                     tui.editor_cursor = tui.editor_cursor.saturating_sub(1);
@@ -3514,11 +3512,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                     tui.editor_cursor =
                                         (tui.editor_cursor + 1).min(tui.editor_name.len());
                                 }
-                                KeyCode::Char(c) => {
-                                    if tui.editor_name.len() < 20 {
-                                        tui.editor_name.insert(tui.editor_cursor, c);
-                                        tui.editor_cursor += 1;
-                                    }
+                                KeyCode::Char(c) if tui.editor_name.len() < 20 => {
+                                    tui.editor_name.insert(tui.editor_cursor, c);
+                                    tui.editor_cursor += 1;
                                 }
                                 _ => {}
                             }
