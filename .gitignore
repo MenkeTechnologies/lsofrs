@@ -1,2 +1,7 @@
 /target
 out.png
+
+# Override the global `Cargo.lock` ignore — lsofrs is a binary crate,
+# so Cargo.lock should be tracked for reproducible release builds
+# (`cargo build --release --locked` in .github/workflows/release.yml).
+!Cargo.lock
