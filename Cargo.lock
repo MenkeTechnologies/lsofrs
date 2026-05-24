@@ -852,7 +852,7 @@ dependencies = [
 
 [[package]]
 name = "lsofrs"
-version = "4.8.1"
+version = "4.8.2"
 dependencies = [
  "chrono",
  "clap",
