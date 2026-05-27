@@ -286,3 +286,113 @@ fn print_monitor_procs(
         }
     }
 }
+
+#[cfg(test)]
+mod sort_tests {
+    use super::*;
+
+    fn p(pid: i32, uid: u32, cmd: &str, fd_count: usize) -> Process {
+        Process::new(
+            pid,
+            0,
+            0,
+            uid,
+            cmd.to_string(),
+            (0..fd_count).map(|_| OpenFile::default()).collect(),
+        )
+    }
+
+    fn state(mode: usize, reverse: bool) -> MonitorState {
+        MonitorState {
+            sort_mode: mode,
+            sort_reverse: reverse,
+            paused: false,
+            show_help: false,
+            type_filter: String::new(),
+            search_str: String::new(),
+            term_rows: 24,
+            term_cols: 80,
+        }
+    }
+
+    #[test]
+    fn sort_by_pid_ascending() {
+        let mut procs = vec![p(300, 0, "c", 0), p(100, 0, "a", 0), p(200, 0, "b", 0)];
+        sort_procs(&mut procs, &state(SORT_PID, false));
+        assert_eq!(
+            procs.iter().map(|p| p.pid).collect::<Vec<_>>(),
+            vec![100, 200, 300]
+        );
+    }
+
+    #[test]
+    fn sort_by_pid_descending_via_reverse() {
+        let mut procs = vec![p(100, 0, "a", 0), p(200, 0, "b", 0), p(300, 0, "c", 0)];
+        sort_procs(&mut procs, &state(SORT_PID, true));
+        assert_eq!(
+            procs.iter().map(|p| p.pid).collect::<Vec<_>>(),
+            vec![300, 200, 100]
+        );
+    }
+
+    #[test]
+    fn sort_by_command_lexicographic() {
+        let mut procs = vec![p(1, 0, "zsh", 0), p(2, 0, "bash", 0), p(3, 0, "fish", 0)];
+        sort_procs(&mut procs, &state(SORT_CMD, false));
+        let cmds: Vec<&str> = procs.iter().map(|p| p.command.as_str()).collect();
+        assert_eq!(cmds, vec!["bash", "fish", "zsh"]);
+    }
+
+    #[test]
+    fn sort_by_uid() {
+        let mut procs = vec![p(1, 1000, "a", 0), p(2, 0, "b", 0), p(3, 501, "c", 0)];
+        sort_procs(&mut procs, &state(SORT_USER, false));
+        assert_eq!(
+            procs.iter().map(|p| p.uid).collect::<Vec<_>>(),
+            vec![0, 501, 1000]
+        );
+    }
+
+    #[test]
+    fn sort_by_fd_count_smallest_first() {
+        let mut procs = vec![p(1, 0, "a", 50), p(2, 0, "b", 3), p(3, 0, "c", 12)];
+        sort_procs(&mut procs, &state(SORT_FDS, false));
+        let fds: Vec<usize> = procs.iter().map(|p| p.files.len()).collect();
+        assert_eq!(fds, vec![3, 12, 50]);
+    }
+
+    #[test]
+    fn sort_by_fd_count_descending_via_reverse() {
+        let mut procs = vec![p(1, 0, "a", 3), p(2, 0, "b", 12), p(3, 0, "c", 50)];
+        sort_procs(&mut procs, &state(SORT_FDS, true));
+        let fds: Vec<usize> = procs.iter().map(|p| p.files.len()).collect();
+        assert_eq!(fds, vec![50, 12, 3]);
+    }
+
+    #[test]
+    fn unknown_sort_mode_falls_back_to_pid() {
+        // sort_mode is `% 4` in normal flow but the fn must defend
+        // against out-of-range values — the wildcard arm uses pid.
+        let mut procs = vec![p(300, 0, "c", 0), p(100, 0, "a", 0), p(200, 0, "b", 0)];
+        sort_procs(&mut procs, &state(99, false));
+        assert_eq!(
+            procs.iter().map(|p| p.pid).collect::<Vec<_>>(),
+            vec![100, 200, 300]
+        );
+    }
+
+    #[test]
+    fn empty_input_handled() {
+        let mut procs: Vec<Process> = Vec::new();
+        sort_procs(&mut procs, &state(SORT_PID, false));
+        assert!(procs.is_empty());
+    }
+
+    #[test]
+    fn single_element_already_sorted() {
+        let mut procs = vec![p(42, 0, "x", 0)];
+        sort_procs(&mut procs, &state(SORT_PID, false));
+        assert_eq!(procs.len(), 1);
+        assert_eq!(procs[0].pid, 42);
+    }
+}
