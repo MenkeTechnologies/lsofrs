@@ -6,39 +6,62 @@ use crate::cli::Args;
 use crate::types::*;
 
 use std::net::IpAddr;
+/// `Filter` — see fields for layout.
 
 #[derive(Default)]
 pub struct Filter {
+    /// `pids` field.
     pub pids: Vec<i32>,
+    /// `exclude_pids` field.
     pub exclude_pids: Vec<i32>,
+    /// `uids` field.
     pub uids: Vec<u32>,
+    /// `exclude_uids` field.
     pub exclude_uids: Vec<u32>,
+    /// `usernames` field.
     pub usernames: Vec<String>,
+    /// `exclude_usernames` field.
     pub exclude_usernames: Vec<String>,
+    /// `pgids` field.
     pub pgids: Vec<i32>,
+    /// `commands` field.
     pub commands: Vec<String>,
+    /// `command_regexes` field.
     pub command_regexes: Vec<Regex>,
+    /// `fd_filters` field.
     pub fd_filters: Vec<FdFilter>,
+    /// `fd_exclude` field.
     pub fd_exclude: bool,
+    /// `network` field.
     pub network: bool,
+    /// `network_type` field.
     pub network_type: Option<u8>, // 4 or 6
+    /// `network_filters` field.
     pub network_filters: Vec<NetworkFilter>,
+    /// `nfs_only` field.
     pub nfs_only: bool,
+    /// `unix_socket` field.
     pub unix_socket: bool,
+    /// `files` field.
     pub files: Vec<String>,
     /// Precomputed: each file path with a trailing `/` for prefix matching.
     files_with_slash: Vec<String>,
+    /// `dir` field.
     pub dir: Option<String>, // +d: one level
     /// Precomputed dir prefix with trailing `/`.
     dir_prefix: Option<String>,
+    /// `dir_recurse` field.
     pub dir_recurse: Option<String>, // +D: recursive
     /// Precomputed dir_recurse prefix with trailing `/`.
     dir_recurse_prefix: Option<String>,
+    /// `and_mode` field.
     pub and_mode: bool,
+    /// `terse` field.
     pub terse: bool,
 }
 
 impl Filter {
+    /// `from_args` — see implementation.
     pub fn from_args(args: &Args) -> Self {
         let mut f = Self {
             nfs_only: args.nfs,
@@ -136,6 +159,7 @@ impl Filter {
 
         f
     }
+    /// `matches_process` — see implementation.
 
     pub fn matches_process(&self, proc: &Process) -> bool {
         // Check exclusions first
@@ -221,6 +245,7 @@ impl Filter {
         self.dir_recurse_prefix = dir.as_ref().map(|d| Self::ensure_slash(d));
         self.dir_recurse = dir;
     }
+    /// `matches_file` — see implementation.
 
     pub fn matches_file(&self, file: &OpenFile) -> bool {
         // FD filter
@@ -390,6 +415,7 @@ fn parse_fd_filter(s: &str, filters: &mut Vec<FdFilter>) {
         filters.push(FdFilter::Name(s.to_string()));
     }
 }
+/// `parse_inet_filter` — see implementation.
 
 pub fn parse_inet_filter(spec: &str, filter: &mut Filter) {
     let mut remaining = spec.trim();

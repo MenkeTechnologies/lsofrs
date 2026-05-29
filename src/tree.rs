@@ -89,6 +89,7 @@ struct TreeNode {
     files: Vec<OpenFile>,
     children: Vec<i32>,
 }
+/// `print_tree` — see implementation.
 
 pub fn print_tree(procs: &[Process], theme: &Theme, json: bool) {
     if json {

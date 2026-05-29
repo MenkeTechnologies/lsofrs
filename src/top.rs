@@ -102,6 +102,7 @@ impl Clone for TopEntry {
         }
     }
 }
+/// `TopMode` — see fields for layout.
 
 pub struct TopMode {
     sort_col: SortCol,
@@ -116,6 +117,7 @@ pub struct TopMode {
 }
 
 impl TopMode {
+    /// `new` — see implementation.
     pub fn new(top_n: usize) -> Self {
         Self {
             sort_col: SortCol::Fds,
@@ -340,6 +342,7 @@ impl TuiMode for TopMode {
         ]
     }
 }
+/// `run_top` — see implementation.
 
 pub fn run_top(filter: &Filter, interval: u64, theme: &LsofTheme, top_n: usize) {
     let mut mode = TopMode::new(top_n);

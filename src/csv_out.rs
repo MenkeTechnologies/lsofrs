@@ -14,6 +14,7 @@ fn csv_quote(field: &str) -> String {
         field.to_string()
     }
 }
+/// `print_csv` — see implementation.
 
 pub fn print_csv(procs: &[Process]) {
     let out = io::stdout();

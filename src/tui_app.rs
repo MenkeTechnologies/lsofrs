@@ -22,13 +22,21 @@ use crate::theme::{LsofTheme, ThemeName};
 
 /// Shared state managed by the TUI framework
 pub struct TuiState {
+    /// `interval` field.
     pub interval: u64,
+    /// `paused` field.
     pub paused: bool,
+    /// `iteration` field.
     pub iteration: u64,
+    /// `show_help` field.
     pub show_help: bool,
+    /// `show_border` field.
     pub show_border: bool,
+    /// `hover_tooltips` field.
     pub hover_tooltips: bool,
+    /// `theme` field.
     pub theme: LsofTheme,
+    /// `theme_idx` field.
     pub theme_idx: usize,
 }
 
@@ -54,6 +62,7 @@ impl TuiState {
     pub fn new_pub(interval: u64, theme: LsofTheme) -> Self {
         Self::new(interval, theme)
     }
+    /// `cycle_theme` — see implementation.
 
     pub fn cycle_theme(&mut self) {
         self.theme_idx = (self.theme_idx + 1) % ThemeName::ALL.len();

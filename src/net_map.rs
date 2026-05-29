@@ -94,6 +94,7 @@ fn collect_net_map_entries(procs: &[Process]) -> Vec<NetMapEntry> {
     entries.sort_by_key(|b| std::cmp::Reverse(b.connection_count));
     entries
 }
+/// `print_net_map` — see implementation.
 
 pub fn print_net_map(procs: &[Process], theme: &Theme, json: bool) {
     let entries = collect_net_map_entries(procs);

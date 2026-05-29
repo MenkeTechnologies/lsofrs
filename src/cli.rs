@@ -12,6 +12,7 @@ use clap::Parser;
                   Supports regular files, directories, sockets, pipes, devices, and streams.",
     disable_help_flag = true
 )]
+/// `Args` — see fields for layout.
 pub struct Args {
     /// Display help
     #[arg(short = 'h', long = "help", action = clap::ArgAction::SetTrue)]
@@ -169,6 +170,7 @@ pub struct Args {
 }
 
 impl Args {
+    /// `print_help` — see implementation.
     pub fn print_help() {
         let cyan = "\x1b[1;36m";
         let green = "\x1b[1;32m";
@@ -261,6 +263,7 @@ Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );
     }
+    /// `parse_from` — see implementation.
 
     pub fn parse_from<I, T>(args: I) -> Self
     where
@@ -269,6 +272,7 @@ Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
     {
         <Self as Parser>::parse_from(args)
     }
+    /// `leak_detect_params` — see implementation.
 
     pub fn leak_detect_params(&self) -> Option<(u64, usize)> {
         match &self.leak_detect {

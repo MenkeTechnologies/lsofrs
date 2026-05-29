@@ -10,79 +10,103 @@ pub type DeltaFn<'a> = Option<&'a dyn Fn(i32, &str, &str) -> DeltaStatus>;
 
 /// ANSI color codes for cyberpunk theme
 pub struct Theme {
+    /// `is_tty` field.
     pub is_tty: bool,
 }
 
 impl Theme {
+    /// `new` — see implementation.
     pub fn new(is_tty: bool) -> Self {
         Self { is_tty }
     }
+    /// `reset` — see implementation.
 
     pub fn reset(&self) -> &str {
         if self.is_tty { "\x1b[0m" } else { "" }
     }
+    /// `cyan` — see implementation.
     pub fn cyan(&self) -> &str {
         if self.is_tty { "\x1b[1;96m" } else { "" }
     }
+    /// `magenta` — see implementation.
     pub fn magenta(&self) -> &str {
         if self.is_tty { "\x1b[1;95m" } else { "" }
     }
+    /// `green` — see implementation.
     pub fn green(&self) -> &str {
         if self.is_tty { "\x1b[1;92m" } else { "" }
     }
+    /// `yellow` — see implementation.
     pub fn yellow(&self) -> &str {
         if self.is_tty { "\x1b[1;93m" } else { "" }
     }
+    /// `red` — see implementation.
     pub fn red(&self) -> &str {
         if self.is_tty { "\x1b[1;91m" } else { "" }
     }
+    /// `blue` — see implementation.
     pub fn blue(&self) -> &str {
         if self.is_tty { "\x1b[1;94m" } else { "" }
     }
+    /// `dim` — see implementation.
     pub fn dim(&self) -> &str {
         if self.is_tty { "\x1b[2m" } else { "" }
     }
+    /// `bold` — see implementation.
     pub fn bold(&self) -> &str {
         if self.is_tty { "\x1b[1m" } else { "" }
     }
+    /// `hdr_bg` — see implementation.
     pub fn hdr_bg(&self) -> &str {
         if self.is_tty { "\x1b[48;5;234m" } else { "" }
     }
+    /// `row_alt` — see implementation.
     pub fn row_alt(&self) -> &str {
         if self.is_tty { "\x1b[48;5;233m" } else { "" }
     }
 
     // Column titles — cyberpunk when TTY, plain when piped
+    /// `cmd_title` — see implementation.
     pub fn cmd_title(&self) -> &str {
         if self.is_tty { "PROCESS" } else { "COMMAND" }
     }
+    /// `dev_title` — see implementation.
     pub fn dev_title(&self) -> &str {
         if self.is_tty { "DEV/ICE" } else { "DEVICE" }
     }
+    /// `fd_title` — see implementation.
     pub fn fd_title(&self) -> &str {
         "FD"
     }
+    /// `name_title` — see implementation.
     pub fn name_title(&self) -> &str {
         if self.is_tty { "T4RGET" } else { "NAME" }
     }
+    /// `node_title` — see implementation.
     pub fn node_title(&self) -> &str {
         if self.is_tty { "N0DE" } else { "NODE" }
     }
+    /// `pid_title` — see implementation.
     pub fn pid_title(&self) -> &str {
         if self.is_tty { "PRC" } else { "PID" }
     }
+    /// `size_off_title` — see implementation.
     pub fn size_off_title(&self) -> &str {
         if self.is_tty { "BYT3/0FF" } else { "SIZE/OFF" }
     }
+    /// `type_title` — see implementation.
     pub fn type_title(&self) -> &str {
         if self.is_tty { "CL4SS" } else { "TYPE" }
     }
+    /// `user_title` — see implementation.
     pub fn user_title(&self) -> &str {
         if self.is_tty { "H4XOR" } else { "USER" }
     }
+    /// `pgid_title` — see implementation.
     pub fn pgid_title(&self) -> &str {
         "PGID"
     }
+    /// `ppid_title` — see implementation.
     pub fn ppid_title(&self) -> &str {
         if self.is_tty { "PPRC" } else { "PPID" }
     }
@@ -141,6 +165,7 @@ impl ColWidths {
         w
     }
 }
+/// `print_processes` — see implementation.
 
 pub fn print_processes(
     procs: &[Process],

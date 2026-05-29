@@ -17,11 +17,14 @@ struct DeltaEntry {
     command: String,
     uid: u32,
 }
+/// `DeltaTracker` — see fields for layout.
 
 pub struct DeltaTracker {
     prev: HashMap<DeltaKey, DeltaEntry>,
     curr: HashMap<DeltaKey, DeltaEntry>,
+    /// `new_count` field.
     pub new_count: usize,
+    /// `gone_count` field.
     pub gone_count: usize,
 }
 
@@ -32,6 +35,7 @@ impl Default for DeltaTracker {
 }
 
 impl DeltaTracker {
+    /// `new` — see implementation.
     pub fn new() -> Self {
         Self {
             prev: HashMap::new(),
@@ -40,12 +44,14 @@ impl DeltaTracker {
             gone_count: 0,
         }
     }
+    /// `begin_iteration` — see implementation.
 
     pub fn begin_iteration(&mut self) {
         self.prev = std::mem::take(&mut self.curr);
         self.new_count = 0;
         self.gone_count = 0;
     }
+    /// `record` — see implementation.
 
     pub fn record(&mut self, proc: &Process) {
         for f in &proc.files {
@@ -64,6 +70,7 @@ impl DeltaTracker {
             );
         }
     }
+    /// `classify` — see implementation.
 
     pub fn classify(&self, pid: i32, fd: &str, name: &str) -> DeltaStatus {
         let key = (pid, fd.to_string(), name.to_string());
@@ -73,6 +80,7 @@ impl DeltaTracker {
             DeltaStatus::New
         }
     }
+    /// `count_gone` — see implementation.
 
     pub fn count_gone(&mut self) {
         for key in self.prev.keys() {
@@ -86,6 +94,7 @@ impl DeltaTracker {
             .filter(|k| !self.prev.contains_key(k))
             .count();
     }
+    /// `print_gone` — see implementation.
 
     pub fn print_gone(&self, theme: &Theme) {
         let out = io::stdout();
@@ -112,6 +121,7 @@ impl DeltaTracker {
             }
         }
     }
+    /// `print_summary` — see implementation.
 
     pub fn print_summary(&self, theme: &Theme) {
         let out = io::stdout();

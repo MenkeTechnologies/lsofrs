@@ -23,6 +23,7 @@ struct FollowEntry {
     seen: bool,
     status: u8,
 }
+/// `run_follow` — see implementation.
 
 pub fn run_follow(target_pid: i32, interval: u64, theme: &Theme) {
     let mut table: HashMap<String, FollowEntry> = HashMap::new();

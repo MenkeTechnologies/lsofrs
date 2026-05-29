@@ -38,6 +38,7 @@ struct UserStats {
     proc_count: usize,
     file_count: usize,
 }
+/// `print_summary` — see implementation.
 
 pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
     let (type_stats, proc_stats, user_stats, total_files) = compute_stats(procs);
@@ -293,6 +294,7 @@ pub struct SummaryLiveMode {
 }
 
 impl SummaryLiveMode {
+    /// `new` — see implementation.
     pub fn new() -> Self {
         Self {
             type_stats: Vec::new(),

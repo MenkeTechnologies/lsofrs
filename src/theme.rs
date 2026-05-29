@@ -8,37 +8,68 @@ use ratatui::style::Color;
 /// All named color themes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemeName {
+    /// `NeonSprawl` variant.
     #[default]
     NeonSprawl,
+    /// `Classic` variant.
     Classic,
+    /// `SolarFlare` variant.
     SolarFlare,
+    /// `IceBreaker` variant.
     IceBreaker,
+    /// `Matrix` variant.
     Matrix,
+    /// `BladeRunner` variant.
     BladeRunner,
+    /// `Synthwave` variant.
     Synthwave,
+    /// `AcidRain` variant.
     AcidRain,
+    /// `GhostWire` variant.
     GhostWire,
+    /// `RedSector` variant.
     RedSector,
+    /// `DeepNet` variant.
     DeepNet,
+    /// `Overlock` variant.
     Overlock,
+    /// `SakuraDen` variant.
     SakuraDen,
+    /// `DataStream` variant.
     DataStream,
+    /// `NeonNoir` variant.
     NeonNoir,
+    /// `ChromeHeart` variant.
     ChromeHeart,
+    /// `VoidWalker` variant.
     VoidWalker,
+    /// `ToxicWaste` variant.
     ToxicWaste,
+    /// `CyberFrost` variant.
     CyberFrost,
+    /// `PlasmaCore` variant.
     PlasmaCore,
+    /// `SteelNerve` variant.
     SteelNerve,
+    /// `DarkSignal` variant.
     DarkSignal,
+    /// `GlitchPop` variant.
     GlitchPop,
+    /// `HoloShift` variant.
     HoloShift,
+    /// `NightCity` variant.
     NightCity,
+    /// `LaserGrid` variant.
     LaserGrid,
+    /// `QuantumFlux` variant.
     QuantumFlux,
+    /// `BioHazard` variant.
     BioHazard,
+    /// `Darkwave` variant.
     Darkwave,
+    /// `Megacorp` variant.
     Megacorp,
+    /// `Zaibatsu` variant.
     Zaibatsu,
 }
 
@@ -76,6 +107,7 @@ impl ThemeName {
         ThemeName::Megacorp,
         ThemeName::Zaibatsu,
     ];
+    /// `display_name` — see implementation.
 
     pub fn display_name(self) -> &'static str {
         match self {
@@ -172,48 +204,75 @@ impl ThemeName {
 /// Complete color theme for lsofrs TUI rendering.
 #[derive(Debug, Clone)]
 pub struct LsofTheme {
+    /// `name` field.
     pub name: ThemeName,
     /// Display name for custom themes (None for built-in themes).
     pub custom_name: Option<String>,
     // Header/title bar
+    /// `header_bg` field.
     pub header_bg: Color,
+    /// `header_fg` field.
     pub header_fg: Color,
     // Column colors
+    /// `pid_fg` field.
     pub pid_fg: Color,
+    /// `user_fg` field.
     pub user_fg: Color,
+    /// `cmd_fg` field.
     pub cmd_fg: Color,
+    /// `fd_fg` field.
     pub fd_fg: Color,
+    /// `type_fg` field.
     pub type_fg: Color,
     // Distribution bar colors
+    /// `bar_reg` field.
     pub bar_reg: Color,
+    /// `bar_sock` field.
     pub bar_sock: Color,
+    /// `bar_pipe` field.
     pub bar_pipe: Color,
+    /// `bar_other` field.
     pub bar_other: Color,
     // Help overlay
+    /// `help_bg` field.
     pub help_bg: Color,
+    /// `help_border` field.
     pub help_border: Color,
+    /// `help_title` field.
     pub help_title: Color,
+    /// `help_key` field.
     pub help_key: Color,
+    /// `help_val` field.
     pub help_val: Color,
     // Delta indicators
+    /// `delta_plus` field.
     pub delta_plus: Color,
+    /// `delta_minus` field.
     pub delta_minus: Color,
+    /// `delta_stable` field.
     pub delta_stable: Color,
     // Selection highlight
+    /// `select_bg` field.
     pub select_bg: Color,
     // Dim/secondary text
+    /// `dim_fg` field.
     pub dim_fg: Color,
     // Row alternate background
+    /// `row_alt_bg` field.
     pub row_alt_bg: Color,
     // Bold text (for counts/numbers)
+    /// `bold_fg` field.
     pub bold_fg: Color,
     // Section headers
+    /// `section_fg` field.
     pub section_fg: Color,
     // Legend text
+    /// `legend_fg` field.
     pub legend_fg: Color,
 }
 
 impl LsofTheme {
+    /// `from_name` — see implementation.
     pub fn from_name(name: ThemeName) -> Self {
         match name {
             ThemeName::NeonSprawl => Self::neon_sprawl(),

@@ -7,46 +7,79 @@ use serde::Serialize;
 
 /// Selection flags matching the C implementation
 pub const SEL_CMD: u16 = 0x0001;
+/// `SEL_FD` constant.
 pub const SEL_FD: u16 = 0x0004;
+/// `SEL_NA` constant.
 pub const SEL_NA: u16 = 0x0008;
+/// `SEL_NET` constant.
 pub const SEL_NET: u16 = 0x0010;
+/// `SEL_NFS` constant.
 pub const SEL_NFS: u16 = 0x0020;
+/// `SEL_NLINK` constant.
 pub const SEL_NLINK: u16 = 0x0040;
+/// `SEL_NM` constant.
 pub const SEL_NM: u16 = 0x0080;
+/// `SEL_PGID` constant.
 pub const SEL_PGID: u16 = 0x0100;
+/// `SEL_PID` constant.
 pub const SEL_PID: u16 = 0x0200;
+/// `SEL_UID` constant.
 pub const SEL_UID: u16 = 0x0400;
+/// `SEL_UNX` constant.
 pub const SEL_UNX: u16 = 0x0800;
+/// `SEL_EXCL_F` constant.
 pub const SEL_EXCL_F: u16 = 0x2000;
+/// `SEL_PROC` constant.
 
 pub const SEL_PROC: u16 = SEL_CMD | SEL_PGID | SEL_PID | SEL_UID;
+/// `SEL_FILE` constant.
 pub const SEL_FILE: u16 = SEL_FD | SEL_NFS | SEL_NLINK | SEL_NM;
+/// `SEL_NW` constant.
 pub const SEL_NW: u16 = SEL_NA | SEL_NET | SEL_UNX;
 
 /// File type enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub enum FileType {
+    /// `Reg` variant.
     Reg,
+    /// `Dir` variant.
     Dir,
+    /// `Chr` variant.
     Chr,
+    /// `Blk` variant.
     Blk,
+    /// `Fifo` variant.
     Fifo,
+    /// `Sock` variant.
     Sock,
+    /// `Link` variant.
     Link,
+    /// `Pipe` variant.
     Pipe,
+    /// `Kqueue` variant.
     Kqueue,
+    /// `Unix` variant.
     Unix,
+    /// `IPv4` variant.
     IPv4,
+    /// `IPv6` variant.
     IPv6,
+    /// `Systm` variant.
     Systm,
+    /// `Psem` variant.
     Psem,
+    /// `Pshm` variant.
     Pshm,
+    /// `Atalk` variant.
     Atalk,
+    /// `Fsevents` variant.
     Fsevents,
+    /// `Unknown` variant.
     Unknown(String),
 }
 
 impl FileType {
+    /// `as_str` — see implementation.
     pub fn as_str(&self) -> &str {
         match self {
             Self::Reg => "REG",
@@ -80,13 +113,18 @@ impl fmt::Display for FileType {
 /// Access mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Access {
+    /// `Read` variant.
     Read,
+    /// `Write` variant.
     Write,
+    /// `ReadWrite` variant.
     ReadWrite,
+    /// `None` variant.
     None,
 }
 
 impl Access {
+    /// `as_char` — see implementation.
     pub fn as_char(&self) -> char {
         match self {
             Self::Read => 'r',
@@ -100,28 +138,43 @@ impl Access {
 /// Internet address info for a socket endpoint
 #[derive(Debug, Clone, Default)]
 pub struct InetAddr {
+    /// `addr` field.
     pub addr: Option<IpAddr>,
+    /// `port` field.
     pub port: u16,
 }
 
 /// TCP state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TcpState {
+    /// `Closed` variant.
     Closed,
+    /// `Listen` variant.
     Listen,
+    /// `SynSent` variant.
     SynSent,
+    /// `SynRecv` variant.
     SynRecv,
+    /// `Established` variant.
     Established,
+    /// `CloseWait` variant.
     CloseWait,
+    /// `FinWait1` variant.
     FinWait1,
+    /// `Closing` variant.
     Closing,
+    /// `LastAck` variant.
     LastAck,
+    /// `FinWait2` variant.
     FinWait2,
+    /// `TimeWait` variant.
     TimeWait,
+    /// `Unknown` variant.
     Unknown(i32),
 }
 
 impl TcpState {
+    /// `from_raw` — see implementation.
     pub fn from_raw(state: i32) -> Self {
         match state {
             0 => Self::Closed,
@@ -138,6 +191,7 @@ impl TcpState {
             n => Self::Unknown(n),
         }
     }
+    /// `as_str` — see implementation.
 
     pub fn as_str(&self) -> &str {
         match self {
@@ -166,31 +220,49 @@ impl fmt::Display for TcpState {
 /// Socket-specific info
 #[derive(Debug, Clone, Default)]
 pub struct SocketInfo {
+    /// `local` field.
     pub local: InetAddr,
+    /// `foreign` field.
     pub foreign: InetAddr,
+    /// `protocol` field.
     pub protocol: String,
+    /// `tcp_state` field.
     pub tcp_state: Option<TcpState>,
+    /// `recv_queue` field.
     pub recv_queue: Option<u64>,
+    /// `send_queue` field.
     pub send_queue: Option<u64>,
+    /// `recv_buf_size` field.
     pub recv_buf_size: Option<u64>,
+    /// `send_buf_size` field.
     pub send_buf_size: Option<u64>,
+    /// `socket_options` field.
     pub socket_options: Option<u32>,
+    /// `socket_state` field.
     pub socket_state: Option<u32>,
 }
 
 /// FD descriptor name
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FdName {
+    /// `Cwd` variant.
     Cwd,
+    /// `Rtd` variant.
     Rtd,
+    /// `Txt` variant.
     Txt,
+    /// `Mem` variant.
     Mem,
+    /// `Err` variant.
     Err,
+    /// `Number` variant.
     Number(i32),
+    /// `Other` variant.
     Other(String),
 }
 
 impl FdName {
+    /// `as_display` — see implementation.
     pub fn as_display(&self) -> Cow<'_, str> {
         match self {
             Self::Cwd => Cow::Borrowed("cwd"),
@@ -202,6 +274,7 @@ impl FdName {
             Self::Other(s) => Cow::Borrowed(s),
         }
     }
+    /// `with_access` — see implementation.
 
     pub fn with_access(&self, access: Access) -> String {
         match self {
@@ -222,22 +295,39 @@ impl FdName {
 /// A single open file entry
 #[derive(Debug, Clone)]
 pub struct OpenFile {
+    /// `fd` field.
     pub fd: FdName,
+    /// `access` field.
     pub access: Access,
+    /// `lock` field.
     pub lock: char,
+    /// `file_type` field.
     pub file_type: FileType,
+    /// `device` field.
     pub device: Option<(u32, u32)>,
+    /// `size` field.
     pub size: Option<u64>,
+    /// `offset` field.
     pub offset: Option<u64>,
+    /// `inode` field.
     pub inode: Option<u64>,
+    /// `nlink` field.
     pub nlink: Option<u64>,
+    /// `name` field.
     pub name: String,
+    /// `name_append` field.
     pub name_append: Option<String>,
+    /// `socket_info` field.
     pub socket_info: Option<SocketInfo>,
+    /// `sel_flags` field.
     pub sel_flags: u16,
+    /// `is_nfs` field.
     pub is_nfs: bool,
+    /// `rdev` field.
     pub rdev: Option<(u32, u32)>,
+    /// `file_flags` field.
     pub file_flags: Option<i64>,
+    /// `file_struct_addr` field.
     pub file_struct_addr: Option<u64>,
 }
 
@@ -266,12 +356,14 @@ impl Default for OpenFile {
 }
 
 impl OpenFile {
+    /// `full_name` — see implementation.
     pub fn full_name(&self) -> String {
         match &self.name_append {
             Some(extra) => format!("{} {extra}", self.name),
             None => self.name.clone(),
         }
     }
+    /// `size_or_offset_str` — see implementation.
 
     pub fn size_or_offset_str(&self) -> String {
         if let Some(sz) = self.size {
@@ -282,6 +374,7 @@ impl OpenFile {
             String::new()
         }
     }
+    /// `device_str` — see implementation.
 
     pub fn device_str(&self) -> String {
         match self.device {
@@ -289,6 +382,7 @@ impl OpenFile {
             None => String::new(),
         }
     }
+    /// `node_str` — see implementation.
 
     pub fn node_str(&self) -> String {
         match self.inode {
@@ -304,13 +398,21 @@ impl OpenFile {
 /// A process entry
 #[derive(Debug)]
 pub struct Process {
+    /// `pid` field.
     pub pid: i32,
+    /// `ppid` field.
     pub ppid: i32,
+    /// `pgid` field.
     pub pgid: i32,
+    /// `uid` field.
     pub uid: u32,
+    /// `command` field.
     pub command: String,
+    /// `files` field.
     pub files: Vec<OpenFile>,
+    /// `sel_flags` field.
     pub sel_flags: u16,
+    /// `sel_state` field.
     pub sel_state: u8,
     username_cache: OnceCell<String>,
 }
@@ -374,28 +476,39 @@ impl Process {
 /// Network address filter for -i option
 #[derive(Debug, Clone)]
 pub struct NetworkFilter {
+    /// `protocol` field.
     pub protocol: Option<String>,
+    /// `addr_family` field.
     pub addr_family: Option<u8>,
+    /// `addr` field.
     pub addr: Option<IpAddr>,
+    /// `host` field.
     pub host: Option<String>,
     /// Precomputed: `host` parsed as IpAddr for O(1) comparison (None if hostname).
     pub parsed_host: Option<IpAddr>,
+    /// `port_start` field.
     pub port_start: Option<u16>,
+    /// `port_end` field.
     pub port_end: Option<u16>,
 }
 
 /// FD range filter
 #[derive(Debug, Clone)]
 pub enum FdFilter {
+    /// `Name` variant.
     Name(String),
+    /// `Range` variant.
     Range(i32, i32),
 }
 
 /// Delta status for change highlighting
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeltaStatus {
+    /// `Unchanged` variant.
     Unchanged,
+    /// `New` variant.
     New,
+    /// `Gone` variant.
     Gone,
 }
 

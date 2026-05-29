@@ -7,35 +7,51 @@ use serde::{Deserialize, Serialize};
 /// Custom theme colors stored in config (6-color palette).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomThemeColors {
+    /// `c1` field.
     pub c1: u8,
+    /// `c2` field.
     pub c2: u8,
+    /// `c3` field.
     pub c3: u8,
+    /// `c4` field.
     pub c4: u8,
+    /// `c5` field.
     pub c5: u8,
+    /// `c6` field.
     pub c6: u8,
 }
 
 /// User preferences persisted to disk.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prefs {
+    /// `theme` field.
     #[serde(default)]
     pub theme: Option<String>,
+    /// `refresh_rate` field.
     #[serde(default = "default_refresh")]
     pub refresh_rate: Option<u64>,
+    /// `show_border` field.
     #[serde(default = "default_true")]
     pub show_border: bool,
+    /// `active_tab` field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_tab: Option<u8>,
+    /// `custom_themes` field.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub custom_themes: HashMap<String, CustomThemeColors>,
+    /// `active_custom_theme` field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_custom_theme: Option<String>,
+    /// `pinned_pids` field.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pinned_pids: Vec<i32>,
+    /// `sort_frozen` field.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub sort_frozen: bool,
+    /// `compact_view` field.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compact_view: bool,
+    /// `hover_tooltips` field.
     #[serde(default = "default_true")]
     pub hover_tooltips: bool,
 }

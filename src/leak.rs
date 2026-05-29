@@ -23,6 +23,7 @@ struct LeakEntry {
     flagged: bool,
     seen: bool,
 }
+/// `LeakDetector` — see fields for layout.
 
 pub struct LeakDetector {
     table: HashMap<i32, LeakEntry>,
@@ -31,6 +32,7 @@ pub struct LeakDetector {
 }
 
 impl LeakDetector {
+    /// `new` — see implementation.
     pub fn new(threshold: usize) -> Self {
         Self {
             table: HashMap::new(),
@@ -38,6 +40,7 @@ impl LeakDetector {
             threshold,
         }
     }
+    /// `update` — see implementation.
 
     pub fn update(&mut self, procs: &[Process]) {
         self.iteration += 1;
@@ -106,6 +109,7 @@ impl LeakDetector {
         // Remove long-gone processes
         self.table.retain(|_, e| e.seen || e.flagged);
     }
+    /// `report` — see implementation.
 
     pub fn report(&self, theme: &Theme) {
         let out = io::stdout();
