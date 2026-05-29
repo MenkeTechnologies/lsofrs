@@ -2742,4 +2742,74 @@ mod tests {
         parse_inet_filter("6", &mut f);
         assert_eq!(f.network_type, Some(6));
     }
+
+    // ─── parse_inet_filter protocol + host + port matrix ─────────────
+    //
+    // `-i` syntax: `[46][protocol][@host][:port]`. The grammar is
+    // permissive and order-dependent; pin the corner cases that
+    // matter most to user-visible filtering:
+
+    #[test]
+    fn parse_inet_filter_tcp_protocol_alone() {
+        let mut f = Filter::default();
+        parse_inet_filter("TCP", &mut f);
+        assert_eq!(f.network_filters.len(), 1);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert!(f.network_filters[0].port_start.is_none());
+        assert!(f.network_filters[0].host.is_none());
+    }
+
+    #[test]
+    fn parse_inet_filter_tcp_port_combination() {
+        let mut f = Filter::default();
+        parse_inet_filter("TCP:443", &mut f);
+        assert_eq!(f.network_filters.len(), 1);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(443));
+        assert_eq!(f.network_filters[0].port_end, Some(443));
+    }
+
+    #[test]
+    fn parse_inet_filter_bare_port_no_protocol() {
+        // `:8080` — no protocol, just a port. Must still populate.
+        let mut f = Filter::default();
+        parse_inet_filter(":8080", &mut f);
+        assert_eq!(f.network_filters.len(), 1);
+        assert!(f.network_filters[0].protocol.is_none());
+        assert_eq!(f.network_filters[0].port_start, Some(8080));
+    }
+
+    #[test]
+    fn parse_inet_filter_at_host_form_no_port() {
+        // `@example.com` — host filter without a port.
+        let mut f = Filter::default();
+        parse_inet_filter("@example.com", &mut f);
+        assert_eq!(f.network_filters.len(), 1);
+        assert_eq!(
+            f.network_filters[0].host.as_deref(),
+            Some("example.com")
+        );
+        assert!(f.network_filters[0].port_start.is_none());
+    }
+
+    #[test]
+    fn parse_inet_filter_lowercase_tcp_is_accepted_via_case_insensitive_match() {
+        // The parser uppercases internally — pin that lowercase
+        // input works (covers `lsof -iTCP` muscle-memory users).
+        let mut f = Filter::default();
+        parse_inet_filter("tcp:80", &mut f);
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(80));
+    }
+
+    #[test]
+    fn parse_inet_filter_v6_protocol_port_combo() {
+        // Full combo: `6TCP:443`. Must set both network_type AND
+        // a protocol/port filter (not just one or the other).
+        let mut f = Filter::default();
+        parse_inet_filter("6TCP:443", &mut f);
+        assert_eq!(f.network_type, Some(6));
+        assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
+        assert_eq!(f.network_filters[0].port_start, Some(443));
+    }
 }
