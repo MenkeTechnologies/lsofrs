@@ -2678,4 +2678,68 @@ mod tests {
         assert_eq!(f.command_regexes.len(), 1);
         assert_eq!(f.command_regexes[0].as_str(), "^sshd");
     }
+
+    // ─── parse_fd_filter behavioral pins ─────────────────────────────
+    //
+    // `-d` accepts single numbers, ranges (`3-9`), and named FD types
+    // (`cwd`, `txt`). Drift between the integer-or-name fallback
+    // silently routes filters to the wrong branch.
+
+    #[test]
+    fn parse_fd_filter_single_number_becomes_singleton_range() {
+        let mut v = Vec::new();
+        parse_fd_filter("7", &mut v);
+        assert!(matches!(v[..], [FdFilter::Range(7, 7)]));
+    }
+
+    #[test]
+    fn parse_fd_filter_dash_range_parses_both_endpoints() {
+        let mut v = Vec::new();
+        parse_fd_filter("3-9", &mut v);
+        assert!(matches!(v[..], [FdFilter::Range(3, 9)]));
+    }
+
+    #[test]
+    fn parse_fd_filter_named_fd_falls_through_to_name_variant() {
+        // `cwd`, `txt`, `mem` etc. are lsof's named FDs — they aren't
+        // numbers and have no dash; must land in `Name(...)`.
+        let mut v = Vec::new();
+        parse_fd_filter("cwd", &mut v);
+        assert!(
+            matches!(&v[..], [FdFilter::Name(n)] if n == "cwd"),
+            "expected Name(\"cwd\"), got {v:?}"
+        );
+    }
+
+    #[test]
+    fn parse_fd_filter_negative_dash_form_routes_to_name_branch() {
+        // `-1` could be tempting to parse as range(0, 1) or
+        // singleton -1; in practice `i32::from_str("")` rejects the
+        // empty `lo` half so the function falls through to the bare
+        // integer parse which accepts `-1`. Pin that behavior so a
+        // refactor doesn't silently start treating dashed-numbers as
+        // ranges.
+        let mut v = Vec::new();
+        parse_fd_filter("-1", &mut v);
+        assert!(
+            matches!(v[..], [FdFilter::Range(-1, -1)]),
+            "expected Range(-1, -1), got {v:?}"
+        );
+    }
+
+    // ─── parse_inet_filter version-prefix pins ───────────────────────
+
+    #[test]
+    fn parse_inet_filter_v4_prefix_alone_sets_network_type_only() {
+        let mut f = Filter::default();
+        parse_inet_filter("4", &mut f);
+        assert_eq!(f.network_type, Some(4));
+    }
+
+    #[test]
+    fn parse_inet_filter_v6_prefix_alone_sets_network_type_only() {
+        let mut f = Filter::default();
+        parse_inet_filter("6", &mut f);
+        assert_eq!(f.network_type, Some(6));
+    }
 }
