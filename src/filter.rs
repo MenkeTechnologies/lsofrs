@@ -2785,10 +2785,7 @@ mod tests {
         let mut f = Filter::default();
         parse_inet_filter("@example.com", &mut f);
         assert_eq!(f.network_filters.len(), 1);
-        assert_eq!(
-            f.network_filters[0].host.as_deref(),
-            Some("example.com")
-        );
+        assert_eq!(f.network_filters[0].host.as_deref(), Some("example.com"));
         assert!(f.network_filters[0].port_start.is_none());
     }
 
