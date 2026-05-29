@@ -53,7 +53,6 @@ fn is_listening(file: &OpenFile) -> Option<(String, String, u16)> {
     Some((proto, addr_str, port))
 }
 /// `print_ports` — see implementation.
-
 pub fn print_ports(procs: &[Process], theme: &Theme, json: bool) {
     // Group by port for dedup/grouping
     let mut by_port: BTreeMap<u16, Vec<PortEntry>> = BTreeMap::new();

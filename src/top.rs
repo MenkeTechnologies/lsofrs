@@ -103,7 +103,6 @@ impl Clone for TopEntry {
     }
 }
 /// `TopMode` — see fields for layout.
-
 pub struct TopMode {
     sort_col: SortCol,
     reverse: bool,
@@ -343,7 +342,6 @@ impl TuiMode for TopMode {
     }
 }
 /// `run_top` — see implementation.
-
 pub fn run_top(filter: &Filter, interval: u64, theme: &LsofTheme, top_n: usize) {
     let mut mode = TopMode::new(top_n);
     crate::tui_app::run_tui(&mut mode, filter, interval, theme);

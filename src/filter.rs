@@ -7,7 +7,6 @@ use crate::types::*;
 
 use std::net::IpAddr;
 /// `Filter` — see fields for layout.
-
 #[derive(Default)]
 pub struct Filter {
     /// `pids` field.
@@ -160,7 +159,6 @@ impl Filter {
         f
     }
     /// `matches_process` — see implementation.
-
     pub fn matches_process(&self, proc: &Process) -> bool {
         // Check exclusions first
         if self.exclude_pids.contains(&proc.pid) {
@@ -246,7 +244,6 @@ impl Filter {
         self.dir_recurse = dir;
     }
     /// `matches_file` — see implementation.
-
     pub fn matches_file(&self, file: &OpenFile) -> bool {
         // FD filter
         if !self.fd_filters.is_empty() {
@@ -416,7 +413,6 @@ fn parse_fd_filter(s: &str, filters: &mut Vec<FdFilter>) {
     }
 }
 /// `parse_inet_filter` — see implementation.
-
 pub fn parse_inet_filter(spec: &str, filter: &mut Filter) {
     let mut remaining = spec.trim();
 

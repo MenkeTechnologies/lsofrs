@@ -30,7 +30,6 @@ pub const SEL_UNX: u16 = 0x0800;
 /// `SEL_EXCL_F` constant.
 pub const SEL_EXCL_F: u16 = 0x2000;
 /// `SEL_PROC` constant.
-
 pub const SEL_PROC: u16 = SEL_CMD | SEL_PGID | SEL_PID | SEL_UID;
 /// `SEL_FILE` constant.
 pub const SEL_FILE: u16 = SEL_FD | SEL_NFS | SEL_NLINK | SEL_NM;
@@ -119,7 +118,6 @@ pub enum Access {
     Write,
     /// `ReadWrite` variant.
     ReadWrite,
-    /// `None` variant.
     None,
 }
 
@@ -192,7 +190,6 @@ impl TcpState {
         }
     }
     /// `as_str` — see implementation.
-
     pub fn as_str(&self) -> &str {
         match self {
             Self::Closed => "CLOSED",
@@ -253,7 +250,6 @@ pub enum FdName {
     Txt,
     /// `Mem` variant.
     Mem,
-    /// `Err` variant.
     Err,
     /// `Number` variant.
     Number(i32),
@@ -275,7 +271,6 @@ impl FdName {
         }
     }
     /// `with_access` — see implementation.
-
     pub fn with_access(&self, access: Access) -> String {
         match self {
             Self::Number(n) => {
@@ -364,7 +359,6 @@ impl OpenFile {
         }
     }
     /// `size_or_offset_str` — see implementation.
-
     pub fn size_or_offset_str(&self) -> String {
         if let Some(sz) = self.size {
             format!("{sz}")
@@ -375,7 +369,6 @@ impl OpenFile {
         }
     }
     /// `device_str` — see implementation.
-
     pub fn device_str(&self) -> String {
         match self.device {
             Some((maj, min)) => format!("{maj},{min}"),
@@ -383,7 +376,6 @@ impl OpenFile {
         }
     }
     /// `node_str` — see implementation.
-
     pub fn node_str(&self) -> String {
         match self.inode {
             Some(ino) => format!("{ino}"),

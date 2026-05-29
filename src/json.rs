@@ -95,7 +95,6 @@ pub(crate) fn processes_json_value(procs: &[Process]) -> serde_json::Result<Valu
     serde_json::to_value(build_json_processes(procs))
 }
 /// `print_json` — see implementation.
-
 pub fn print_json(procs: &[Process]) {
     let json_procs = build_json_processes(procs);
     let out = io::stdout();

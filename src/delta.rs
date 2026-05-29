@@ -18,7 +18,6 @@ struct DeltaEntry {
     uid: u32,
 }
 /// `DeltaTracker` — see fields for layout.
-
 pub struct DeltaTracker {
     prev: HashMap<DeltaKey, DeltaEntry>,
     curr: HashMap<DeltaKey, DeltaEntry>,
@@ -45,14 +44,12 @@ impl DeltaTracker {
         }
     }
     /// `begin_iteration` — see implementation.
-
     pub fn begin_iteration(&mut self) {
         self.prev = std::mem::take(&mut self.curr);
         self.new_count = 0;
         self.gone_count = 0;
     }
     /// `record` — see implementation.
-
     pub fn record(&mut self, proc: &Process) {
         for f in &proc.files {
             let fd_str = f.fd.with_access(f.access);
@@ -71,7 +68,6 @@ impl DeltaTracker {
         }
     }
     /// `classify` — see implementation.
-
     pub fn classify(&self, pid: i32, fd: &str, name: &str) -> DeltaStatus {
         let key = (pid, fd.to_string(), name.to_string());
         if self.prev.contains_key(&key) {
@@ -81,7 +77,6 @@ impl DeltaTracker {
         }
     }
     /// `count_gone` — see implementation.
-
     pub fn count_gone(&mut self) {
         for key in self.prev.keys() {
             if !self.curr.contains_key(key) {
@@ -95,7 +90,6 @@ impl DeltaTracker {
             .count();
     }
     /// `print_gone` — see implementation.
-
     pub fn print_gone(&self, theme: &Theme) {
         let out = io::stdout();
         let mut out = out.lock();
@@ -122,7 +116,6 @@ impl DeltaTracker {
         }
     }
     /// `print_summary` — see implementation.
-
     pub fn print_summary(&self, theme: &Theme) {
         let out = io::stdout();
         let mut out = out.lock();

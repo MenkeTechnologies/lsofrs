@@ -39,7 +39,6 @@ struct UserStats {
     file_count: usize,
 }
 /// `print_summary` — see implementation.
-
 pub fn print_summary(procs: &[Process], theme: &Theme, json_output: bool) {
     let (type_stats, proc_stats, user_stats, total_files) = compute_stats(procs);
 

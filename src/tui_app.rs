@@ -63,7 +63,6 @@ impl TuiState {
         Self::new(interval, theme)
     }
     /// `cycle_theme` — see implementation.
-
     pub fn cycle_theme(&mut self) {
         self.theme_idx = (self.theme_idx + 1) % ThemeName::ALL.len();
         self.theme = LsofTheme::from_name(ThemeName::ALL[self.theme_idx]);

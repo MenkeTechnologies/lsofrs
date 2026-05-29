@@ -175,7 +175,6 @@ fn main() {
     output::print_processes(&procs, &theme, args.show_pgid, args.show_ppid, None);
 }
 /// `gather_processes` — see implementation.
-
 pub fn gather_processes() -> Vec<types::Process> {
     #[cfg(target_os = "macos")]
     {

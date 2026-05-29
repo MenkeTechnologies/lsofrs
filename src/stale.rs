@@ -27,7 +27,6 @@ fn is_deleted(file: &OpenFile) -> bool {
             .is_some_and(|a| a.contains("(deleted)"))
 }
 /// `print_stale` — see implementation.
-
 pub fn print_stale(procs: &[Process], theme: &Theme, json: bool) {
     let entries: Vec<StaleEntry> = procs
         .iter()

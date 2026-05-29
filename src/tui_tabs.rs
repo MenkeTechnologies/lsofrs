@@ -3048,7 +3048,6 @@ fn save_prefs(state: &TuiState) {
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 /// `run_tui_tabs` — see implementation.
-
 pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
     if !io::stdout().is_terminal() {
         eprintln!("lsofrs: --tui requires a terminal (not a pipe or redirect)");

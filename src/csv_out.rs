@@ -15,7 +15,6 @@ fn csv_quote(field: &str) -> String {
     }
 }
 /// `print_csv` — see implementation.
-
 pub fn print_csv(procs: &[Process]) {
     let out = io::stdout();
     let mut out = out.lock();

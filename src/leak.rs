@@ -24,7 +24,6 @@ struct LeakEntry {
     seen: bool,
 }
 /// `LeakDetector` — see fields for layout.
-
 pub struct LeakDetector {
     table: HashMap<i32, LeakEntry>,
     iteration: u64,
@@ -41,7 +40,6 @@ impl LeakDetector {
         }
     }
     /// `update` — see implementation.
-
     pub fn update(&mut self, procs: &[Process]) {
         self.iteration += 1;
         let now = chrono::Utc::now().timestamp();
@@ -110,7 +108,6 @@ impl LeakDetector {
         self.table.retain(|_, e| e.seen || e.flagged);
     }
     /// `report` — see implementation.
-
     pub fn report(&self, theme: &Theme) {
         let out = io::stdout();
         let mut out = out.lock();

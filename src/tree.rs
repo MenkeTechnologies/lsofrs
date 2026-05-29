@@ -90,7 +90,6 @@ struct TreeNode {
     children: Vec<i32>,
 }
 /// `print_tree` — see implementation.
-
 pub fn print_tree(procs: &[Process], theme: &Theme, json: bool) {
     if json {
         print_tree_json(procs);

@@ -72,7 +72,6 @@ fn pipe_identifier(file: &OpenFile) -> Option<(String, String)> {
     None
 }
 /// `print_pipe_chain` — see implementation.
-
 pub fn print_pipe_chain(procs: &[Process], theme: &Theme, json: bool) {
     // Group endpoints by identifier
     let mut groups: HashMap<(String, String), Vec<PipeEndpoint>> = HashMap::new();

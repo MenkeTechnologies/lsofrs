@@ -264,7 +264,6 @@ Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
         );
     }
     /// `parse_from` — see implementation.
-
     pub fn parse_from<I, T>(args: I) -> Self
     where
         I: IntoIterator<Item = T>,
@@ -273,7 +272,6 @@ Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
         <Self as Parser>::parse_from(args)
     }
     /// `leak_detect_params` — see implementation.
-
     pub fn leak_detect_params(&self) -> Option<(u64, usize)> {
         match &self.leak_detect {
             None => None,

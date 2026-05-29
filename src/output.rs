@@ -20,7 +20,6 @@ impl Theme {
         Self { is_tty }
     }
     /// `reset` — see implementation.
-
     pub fn reset(&self) -> &str {
         if self.is_tty { "\x1b[0m" } else { "" }
     }
@@ -166,7 +165,6 @@ impl ColWidths {
     }
 }
 /// `print_processes` — see implementation.
-
 pub fn print_processes(
     procs: &[Process],
     theme: &Theme,

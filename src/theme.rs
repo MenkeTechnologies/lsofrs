@@ -108,7 +108,6 @@ impl ThemeName {
         ThemeName::Zaibatsu,
     ];
     /// `display_name` — see implementation.
-
     pub fn display_name(self) -> &'static str {
         match self {
             Self::NeonSprawl => "Neon Sprawl",

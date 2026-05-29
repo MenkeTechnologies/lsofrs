@@ -19,7 +19,6 @@ struct WatchEntry {
     gone: bool,
 }
 /// `run_watch` — see implementation.
-
 pub fn run_watch(path: &str, interval: u64, theme: &Theme) {
     let mut table: HashMap<(i32, String), WatchEntry> = HashMap::new();
     let mut iteration = 0u64;

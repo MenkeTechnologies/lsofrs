@@ -48,7 +48,6 @@ impl Default for MonitorState {
     }
 }
 /// `run_monitor` — see implementation.
-
 pub fn run_monitor(
     filter: &Filter,
     interval: u64,
