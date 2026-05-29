@@ -169,7 +169,7 @@
       <div class="feature-grid" style="margin-top:1.2rem;">
         <div class="feature-card">
           <h4>Where the speedup comes from</h4>
-          <p>Per-PID FD enumeration runs on rayon's work-stealing pool &mdash; CPU count = parallel degree. Darwin uses raw <code>#[repr(C)]</code> structs sized to libproc's kernel headers, so the gather pass never allocates per-FD. v4.8.0 added a <code>OnceCell</code>-cached <code>getpwuid</code> path, precomputed canonical filter paths, and removed every per-record allocation from the hot loop (see <a href="https://github.com/MenkeTechnologies/lsofrs/commit/1464becf31">commit 1464becf31</a>).</p>
+          <p>Per-PID FD enumeration runs on rayon's work-stealing pool &mdash; CPU count = parallel degree. Darwin uses raw <code>#[repr(C)]</code> structs sized to libproc's kernel headers, so the gather pass never allocates per-FD. v4.8.3 added a <code>OnceCell</code>-cached <code>getpwuid</code> path, precomputed canonical filter paths, and removed every per-record allocation from the hot loop (see <a href="https://github.com/MenkeTechnologies/lsofrs/commit/1464becf31">commit 1464becf31</a>).</p>
         </div>
         <div class="feature-card">
           <h4>Why feature set still beats both incumbents</h4>
@@ -221,7 +221,7 @@
         <thead><tr><th>File</th><th class="num">Lines</th><th>Role</th></tr></thead>
         <tbody>
           <tr><td>src/tui_tabs.rs</td><td class="num">5,308</td><td>Unified 7-tab TUI dashboard (TOP / SUMMARY / PORTS / TREE / NET-MAP / PIPES / STALE), mouse handling, hover &amp; right-click tooltips, theme chooser + 6-color editor, bottom-bar segments with verbose tooltips, atomic frame rendering</td></tr>
-          <tr><td>src/filter.rs</td><td class="num">2,659</td><td>Selection &amp; filter composition: PID / PGID / user / command / FD / network-spec / path selectors with comma-lists, ranges, exclusion, regex; OR (default) and AND (<code>-a</code>) modes; precomputed canonical filter paths (v4.8.0 perf path)</td></tr>
+          <tr><td>src/filter.rs</td><td class="num">2,659</td><td>Selection &amp; filter composition: PID / PGID / user / command / FD / network-spec / path selectors with comma-lists, ranges, exclusion, regex; OR (default) and AND (<code>-a</code>) modes; precomputed canonical filter paths (v4.8.3 perf path)</td></tr>
           <tr><td>tests/json_and_csv_contracts.rs</td><td class="num">2,581</td><td>233 <code>#[test]</code> functions pinning every JSON field, every CSV escape rule, every per-flag output shape &mdash; refactors can&rsquo;t silently break downstream consumers</td></tr>
           <tr><td>tests/integration.rs</td><td class="num">2,090</td><td>177 end-to-end tests: full binary invocation, every flag, every output mode</td></tr>
           <tr><td>src/cli.rs</td><td class="num">1,341</td><td>clap derive args (38 <code>#[arg]</code> attributes, 20 short flags), custom help display, mode-flag groupings, version printing</td></tr>
@@ -373,7 +373,7 @@
           <tr><td><code>crossterm</code></td><td>0.29</td><td>Terminal control (alternate screen, raw mode, key/mouse events) under every live mode</td></tr>
           <tr><td><code>libc</code></td><td>0.2</td><td>Raw FFI types for Darwin libproc structs and POSIX <code>getpwuid</code></td></tr>
           <tr><td><code>nix</code></td><td>0.31</td><td>Safe POSIX bindings &mdash; signal, term, ioctl, user, fs, net, hostname feature set</td></tr>
-          <tr><td><code>users</code></td><td>0.11</td><td>Username lookup wrapped in a <code>OnceCell</code> cache (v4.8.0 hot-path optimization)</td></tr>
+          <tr><td><code>users</code></td><td>0.11</td><td>Username lookup wrapped in a <code>OnceCell</code> cache (v4.8.3 hot-path optimization)</td></tr>
           <tr><td><code>regex</code></td><td>1.x</td><td>Regex matcher for command-name selectors via <code>/&hellip;/</code> grammar</td></tr>
           <tr><td><code>chrono</code></td><td>0.4</td><td>Timestamps for <code>--watch</code> open/close events and live-mode footers</td></tr>
           <tr><td><code>rayon</code></td><td>1.x</td><td>Work-stealing thread pool for per-PID FD enumeration &mdash; CPU count = parallel degree</td></tr>
@@ -482,7 +482,7 @@
         </div>
         <div class="feature-card">
           <h4>Zero-allocation hot loop</h4>
-          <p>v4.8.0 removed every per-record allocation from the gather loop: <code>OnceCell</code>-cached <code>getpwuid</code>, precomputed filter paths, no per-FD intermediate <code>Vec</code>. This is what bought the 12&times; default-mode speedup over <code>lsof 4.91</code> &mdash; future PRs touching <code>darwin.rs</code> / <code>linux.rs</code> / <code>filter.rs</code> hot paths should re-bench with <code>hyperfine</code>.</p>
+          <p>v4.8.3 removed every per-record allocation from the gather loop: <code>OnceCell</code>-cached <code>getpwuid</code>, precomputed filter paths, no per-FD intermediate <code>Vec</code>. This is what bought the 12&times; default-mode speedup over <code>lsof 4.91</code> &mdash; future PRs touching <code>darwin.rs</code> / <code>linux.rs</code> / <code>filter.rs</code> hot paths should re-bench with <code>hyperfine</code>.</p>
         </div>
         <div class="feature-card">
           <h4>Both binaries always ship together</h4>
@@ -507,7 +507,7 @@
     </main>
 
     <footer style="border-top:1px dashed var(--border);padding:1rem 1.5rem;text-align:center;font-family:'Share Tech Mono',ui-monospace,monospace;font-size:11px;color:var(--text-muted);">
-      lsofrs v4.8.0 engineering report &middot; built by <a href="https://github.com/MenkeTechnologies">MenkeTechnologies</a> &middot;
+      lsofrs v4.8.3 engineering report &middot; built by <a href="https://github.com/MenkeTechnologies">MenkeTechnologies</a> &middot;
       <a href="index.html">Docs</a> &middot;
       <a href="https://github.com/MenkeTechnologies/lsofrs">GitHub</a> &middot;
       <a href="https://crates.io/crates/lsofrs">crates.io</a> &middot;
