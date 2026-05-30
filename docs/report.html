@@ -95,7 +95,7 @@
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-val">23,441</div><div class="stat-label">Production Rust Lines</div></div>
         <div class="stat-card"><div class="stat-val">8,152</div><div class="stat-label">Test Rust Lines</div></div>
-        <div class="stat-card"><div class="stat-val accent">31,593</div><div class="stat-label">Total Rust Lines</div></div>
+        <div class="stat-card"><div class="stat-val accent">31,834</div><div class="stat-label">Total Rust Lines</div></div>
         <div class="stat-card"><div class="stat-val green">1,656</div><div class="stat-label">#[test] Functions</div></div>
         <div class="stat-card"><div class="stat-val">28</div><div class="stat-label">Production Modules</div></div>
         <div class="stat-card"><div class="stat-val">10</div><div class="stat-label">Test Modules</div></div>
@@ -108,7 +108,7 @@
       </div>
 
       <div style="margin:1.2rem 0;">
-        <p style="font-size:11px;color:var(--text-muted);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;font-family:'Orbitron',sans-serif;font-weight:700;">Source Distribution &mdash; 31,056 lines</p>
+        <p style="font-size:11px;color:var(--text-muted);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;font-family:'Orbitron',sans-serif;font-weight:700;">Source Distribution &mdash; 31,834 lines</p>
         <div class="bar-wrap" style="height:26px;">
           <div class="bar-fill cyan" style="width:74.2%;"></div>
           <span class="bar-pct" style="font-size:12px;">23,057 production / 8,152 tests &middot; 74.2% production</span>
@@ -206,7 +206,7 @@
           <tr><td style="color:var(--accent);">Type System</td><td><code>types</code></td><td class="num">867</td><td class="num">3.8%</td><td><div class="bar-wrap"><div class="bar-fill cyan" style="width:3.8%"></div></div></td><td>Shared cross-platform data shapes: <code>Process</code>, <code>OpenFile</code>, <code>SocketInfo</code>, <code>NetSpec</code>, <code>FdType</code>, theme enums &mdash; 11 public <code>struct</code> / <code>enum</code> definitions, all <code>#[derive(Serialize, Deserialize)]</code> for the JSON contract</td></tr>
           <tr><td style="color:var(--green);">Tests</td><td><code>tests/*.rs + #[cfg(test)] inline</code></td><td class="num">8,152</td><td class="num">25.8%</td><td><div class="bar-wrap"><div class="bar-fill green" style="width:25.8%"></div></div></td><td>1,656 <code>#[test]</code> functions across 10 integration modules (<code>tests/</code>) + 20 inline <code>#[cfg(test)]</code> blocks. Covers JSON / CSV contracts (233 tests in <code>json_and_csv_contracts.rs</code>), CLI dispatch (177 in <code>integration.rs</code>, 86 in <code>cli_combinations.rs</code>, 63 in <code>dispatch_contracts.rs</code>), library smoke / filter semantics / color output / binary aliasing</td></tr>
         </tbody>
-        <tfoot><tr class="total-row"><td colspan="2" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOTAL (incl. tests)</td><td class="num">31,593</td><td class="num">100%</td><td></td><td></td></tr></tfoot>
+        <tfoot><tr class="total-row"><td colspan="2" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOTAL (incl. tests)</td><td class="num">31,834</td><td class="num">100%</td><td></td><td></td></tr></tfoot>
       </table>
 
       <hr class="section-rule">
@@ -241,7 +241,7 @@
           <tr><td>src/tree.rs</td><td class="num">556</td><td>Hierarchical process tree with FD inheritance, per-PID type breakdown (<code>[REG:12 IPv4:3 PIPE:2]</code>), notable-file listing inline; JSON tree with nested children</td></tr>
           <tr><td>src/ports.rs</td><td class="num">450</td><td>Listening-ports summary like <code>ss -tlnp</code> but cross-platform (macOS + Linux + FreeBSD); supports JSON output and per-user filtering</td></tr>
         </tbody>
-        <tfoot><tr class="total-row"><td style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOP 20 SUBTOTAL</td><td class="num">26,069</td><td>84.0% of 31,056-line Rust slice</td></tr></tfoot>
+        <tfoot><tr class="total-row"><td style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOP 20 SUBTOTAL</td><td class="num">26,069</td><td>81.9% of 31,834-line Rust slice</td></tr></tfoot>
       </table>
 
       <hr class="section-rule">
