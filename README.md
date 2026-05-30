@@ -48,7 +48,16 @@
 
 ---
 
-## [0x01] JACK IN — BUILD FROM SOURCE
+## [0x01] JACK IN — INSTALL
+
+Fastest path — Homebrew tap (auto-bumped by each release):
+
+```bash
+brew tap MenkeTechnologies/menketech    # one-time
+brew install lsofrs
+```
+
+Or build from source:
 
 ```bash
 cargo build --release
