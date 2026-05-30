@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="description" content="lsofrs — engineering report. Rust rewrite of lsof: 23,057 lines of production Rust + 8,152 lines of tests, 1,656 #[test] functions, 31 themes, 7-tab TUI, macOS + Linux + FreeBSD. 5–21× faster than lsof / lsofng on hyperfine.">
+  <meta name="description" content="lsofrs — engineering report. Rust rewrite of lsof: 23,057 lines of production Rust + 8,560 lines of tests, 1,662 #[test] functions, 31 themes, 7-tab TUI, macOS + Linux + FreeBSD. 5–21× faster than lsof / lsofng on hyperfine.">
   <title>lsofrs &mdash; Engineering Report</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -90,13 +90,13 @@
       <!-- SECTION 1: EXECUTIVE SUMMARY           -->
       <!-- ═══════════════════════════════════════ -->
       <h2 class="tutorial-title"><span class="step-hash">&gt;_</span>EXECUTIVE SUMMARY</h2>
-      <p class="tutorial-subtitle"><strong>lsofrs</strong> is a single-binary Rust implementation of <code>lsof</code>. Three platform backends (<code>src/darwin.rs</code> via libproc FFI, <code>src/linux.rs</code> via <code>/proc</code>, <code>src/freebsd.rs</code> via sysctl + procfs) feed a shared <code>Vec&lt;Process&gt;</code> through a composable filter pipeline (<code>src/filter.rs</code>) into one of fourteen output / live-monitor modes. Per-PID FD enumeration runs on rayon's work-stealing pool; every TTY mode shares a <code>TuiMode</code> trait (<code>src/tui_app.rs</code>) for common keybindings, alternate-screen entry/exit, and atomic frame rendering. <strong>23,441 production Rust lines + 8,152 test lines + 1,656 <code>#[test]</code> functions</strong>. <code>hyperfine</code> wall-clock: <strong>14.2 ms</strong> for the default invocation vs <strong>169.8 ms</strong> for <code>lsof 4.91</code> (~12&times; speedup), <strong>21&times;</strong> on terse PID output.</p>
+      <p class="tutorial-subtitle"><strong>lsofrs</strong> is a single-binary Rust implementation of <code>lsof</code>. Three platform backends (<code>src/darwin.rs</code> via libproc FFI, <code>src/linux.rs</code> via <code>/proc</code>, <code>src/freebsd.rs</code> via sysctl + procfs) feed a shared <code>Vec&lt;Process&gt;</code> through a composable filter pipeline (<code>src/filter.rs</code>) into one of fourteen output / live-monitor modes. Per-PID FD enumeration runs on rayon's work-stealing pool; every TTY mode shares a <code>TuiMode</code> trait (<code>src/tui_app.rs</code>) for common keybindings, alternate-screen entry/exit, and atomic frame rendering. <strong>23,441 production Rust lines + 8,560 test lines + 1,662 <code>#[test]</code> functions</strong>. <code>hyperfine</code> wall-clock: <strong>14.2 ms</strong> for the default invocation vs <strong>169.8 ms</strong> for <code>lsof 4.91</code> (~12&times; speedup), <strong>21&times;</strong> on terse PID output.</p>
 
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-val">23,441</div><div class="stat-label">Production Rust Lines</div></div>
-        <div class="stat-card"><div class="stat-val">8,152</div><div class="stat-label">Test Rust Lines</div></div>
-        <div class="stat-card"><div class="stat-val accent">31,834</div><div class="stat-label">Total Rust Lines</div></div>
-        <div class="stat-card"><div class="stat-val green">1,656</div><div class="stat-label">#[test] Functions</div></div>
+        <div class="stat-card"><div class="stat-val">8,560</div><div class="stat-label">Test Rust Lines</div></div>
+        <div class="stat-card"><div class="stat-val accent">32,001</div><div class="stat-label">Total Rust Lines</div></div>
+        <div class="stat-card"><div class="stat-val green">1,662</div><div class="stat-label">#[test] Functions</div></div>
         <div class="stat-card"><div class="stat-val">28</div><div class="stat-label">Production Modules</div></div>
         <div class="stat-card"><div class="stat-val">10</div><div class="stat-label">Test Modules</div></div>
         <div class="stat-card"><div class="stat-val">38</div><div class="stat-label">CLI Args (#[arg])</div></div>
@@ -108,10 +108,10 @@
       </div>
 
       <div style="margin:1.2rem 0;">
-        <p style="font-size:11px;color:var(--text-muted);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;font-family:'Orbitron',sans-serif;font-weight:700;">Source Distribution &mdash; 31,834 lines</p>
+        <p style="font-size:11px;color:var(--text-muted);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;font-family:'Orbitron',sans-serif;font-weight:700;">Source Distribution &mdash; 32,001 lines</p>
         <div class="bar-wrap" style="height:26px;">
           <div class="bar-fill cyan" style="width:74.2%;"></div>
-          <span class="bar-pct" style="font-size:12px;">23,057 production / 8,152 tests &middot; 74.2% production</span>
+          <span class="bar-pct" style="font-size:12px;">23,057 production / 8,560 tests &middot; 74.2% production</span>
         </div>
         <p style="font-size:10px;color:var(--text-muted);margin-top:4px;">Production: 28 files in <code>src/</code>. Tests: 10 integration modules in <code>tests/</code> + inline <code>#[cfg(test)]</code> blocks in 20 of the production files. Total <code>#[test]</code> count is taken from <code>grep -rh '#[test]' tests/*.rs src/*.rs | wc -l</code>.</p>
       </div>
@@ -204,9 +204,9 @@
           <tr><td style="color:var(--accent);">CLI &amp; Dispatch</td><td><code>cli, main, lib, strutil</code></td><td class="num">1,722</td><td class="num">7.5%</td><td><div class="bar-wrap"><div class="bar-fill cyan" style="width:7.5%"></div></div></td><td>clap derive parser with 38 <code>#[arg]</code> attributes and custom help display (<code>cli.rs</code>, 1,341); mode-dispatch entry point including repeat / leak-detect loops (<code>main.rs</code>, 282); library facade gated by <code>#[cfg(target_os)]</code> (<code>lib.rs</code>); safe UTF-8 truncation for fixed-width column display, no mid-codepoint slices (<code>strutil.rs</code>)</td></tr>
           <tr><td style="color:var(--accent);">Output / Serialization</td><td><code>output, json, csv_out</code></td><td class="num">1,608</td><td class="num">7.0%</td><td><div class="bar-wrap"><div class="bar-fill cyan" style="width:7.0%"></div></div></td><td>Columnar + field (<code>-F</code>) formatting with TTY-detected ANSI theming (<code>output.rs</code>, 770); serde-backed JSON array (<code>json.rs</code>, 441); RFC 4180-compliant CSV with proper quoting (<code>csv_out.rs</code>, 397)</td></tr>
           <tr><td style="color:var(--accent);">Type System</td><td><code>types</code></td><td class="num">867</td><td class="num">3.8%</td><td><div class="bar-wrap"><div class="bar-fill cyan" style="width:3.8%"></div></div></td><td>Shared cross-platform data shapes: <code>Process</code>, <code>OpenFile</code>, <code>SocketInfo</code>, <code>NetSpec</code>, <code>FdType</code>, theme enums &mdash; 11 public <code>struct</code> / <code>enum</code> definitions, all <code>#[derive(Serialize, Deserialize)]</code> for the JSON contract</td></tr>
-          <tr><td style="color:var(--green);">Tests</td><td><code>tests/*.rs + #[cfg(test)] inline</code></td><td class="num">8,152</td><td class="num">25.8%</td><td><div class="bar-wrap"><div class="bar-fill green" style="width:25.8%"></div></div></td><td>1,656 <code>#[test]</code> functions across 10 integration modules (<code>tests/</code>) + 20 inline <code>#[cfg(test)]</code> blocks. Covers JSON / CSV contracts (233 tests in <code>json_and_csv_contracts.rs</code>), CLI dispatch (177 in <code>integration.rs</code>, 86 in <code>cli_combinations.rs</code>, 63 in <code>dispatch_contracts.rs</code>), library smoke / filter semantics / color output / binary aliasing</td></tr>
+          <tr><td style="color:var(--green);">Tests</td><td><code>tests/*.rs + #[cfg(test)] inline</code></td><td class="num">8,560</td><td class="num">25.8%</td><td><div class="bar-wrap"><div class="bar-fill green" style="width:25.8%"></div></div></td><td>1,662 <code>#[test]</code> functions across 10 integration modules (<code>tests/</code>) + 20 inline <code>#[cfg(test)]</code> blocks. Covers JSON / CSV contracts (233 tests in <code>json_and_csv_contracts.rs</code>), CLI dispatch (177 in <code>integration.rs</code>, 86 in <code>cli_combinations.rs</code>, 63 in <code>dispatch_contracts.rs</code>), library smoke / filter semantics / color output / binary aliasing</td></tr>
         </tbody>
-        <tfoot><tr class="total-row"><td colspan="2" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOTAL (incl. tests)</td><td class="num">31,834</td><td class="num">100%</td><td></td><td></td></tr></tfoot>
+        <tfoot><tr class="total-row"><td colspan="2" style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOTAL (incl. tests)</td><td class="num">32,001</td><td class="num">100%</td><td></td><td></td></tr></tfoot>
       </table>
 
       <hr class="section-rule">
@@ -241,7 +241,7 @@
           <tr><td>src/tree.rs</td><td class="num">556</td><td>Hierarchical process tree with FD inheritance, per-PID type breakdown (<code>[REG:12 IPv4:3 PIPE:2]</code>), notable-file listing inline; JSON tree with nested children</td></tr>
           <tr><td>src/ports.rs</td><td class="num">450</td><td>Listening-ports summary like <code>ss -tlnp</code> but cross-platform (macOS + Linux + FreeBSD); supports JSON output and per-user filtering</td></tr>
         </tbody>
-        <tfoot><tr class="total-row"><td style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOP 20 SUBTOTAL</td><td class="num">26,069</td><td>81.9% of 31,834-line Rust slice</td></tr></tfoot>
+        <tfoot><tr class="total-row"><td style="font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:1px;">TOP 20 SUBTOTAL</td><td class="num">26,069</td><td>81.9% of 32,001-line Rust slice</td></tr></tfoot>
       </table>
 
       <hr class="section-rule">
@@ -390,7 +390,7 @@
       <!-- SECTION 8: TEST SURFACE                 -->
       <!-- ═══════════════════════════════════════ -->
       <h2 class="tutorial-title"><span class="step-hash">?</span>TEST SURFACE</h2>
-      <p class="tutorial-subtitle">1,656 <code>#[test]</code> functions across 10 integration modules and 20 inline <code>#[cfg(test)]</code> blocks. The integration suite is contract-heavy: every JSON field, every CSV escape, every CLI flag combination is pinned so refactors can't silently shift output shape.</p>
+      <p class="tutorial-subtitle">1,662 <code>#[test]</code> functions across 10 integration modules and 20 inline <code>#[cfg(test)]</code> blocks. The integration suite is contract-heavy: every JSON field, every CSV escape, every CLI flag combination is pinned so refactors can't silently shift output shape.</p>
 
       <table class="file-table">
         <thead><tr><th>Test Module</th><th class="num">Lines</th><th class="num">#[test]</th><th>Focus</th></tr></thead>
@@ -407,9 +407,9 @@
           <tr><td>tests/lsf_binary.rs</td><td class="num">52</td><td class="num">5</td><td><code>lsf</code> short-form alias contract &mdash; same binary, same behavior, both bin targets in Cargo.toml</td></tr>
         </tbody>
         <tfoot>
-          <tr class="total-row"><td>tests/ subtotal</td><td class="num">8,152</td><td class="num">680</td><td>10 integration modules</td></tr>
+          <tr class="total-row"><td>tests/ subtotal</td><td class="num">8,560</td><td class="num">680</td><td>10 integration modules</td></tr>
           <tr class="total-row"><td>+ inline #[cfg(test)] in src/</td><td class="num">&mdash;</td><td class="num">947</td><td>20 modules with inline test blocks (filter.rs alone has 208 inline tests)</td></tr>
-          <tr class="total-row" style="border-top:2px solid var(--accent);"><td><strong>TOTAL</strong></td><td class="num"><strong>8,152+</strong></td><td class="num"><strong>1,656</strong></td><td><strong>Pinned contracts across CLI, JSON, CSV, filters, dispatch, color, library facade</strong></td></tr>
+          <tr class="total-row" style="border-top:2px solid var(--accent);"><td><strong>TOTAL</strong></td><td class="num"><strong>8,560+</strong></td><td class="num"><strong>1,662</strong></td><td><strong>Pinned contracts across CLI, JSON, CSV, filters, dispatch, color, library facade</strong></td></tr>
         </tfoot>
       </table>
 
