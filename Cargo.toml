@@ -7,6 +7,7 @@ description = "Modern, high-performance lsof implementation in Rust"
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/lsofrs"
 homepage = "https://menketechnologies.github.io/lsofrs/"
+documentation = "https://docs.rs/lsofrs"
 keywords = ["lsof", "process", "files", "sockets", "diagnostics"]
 categories = ["command-line-utilities", "os"]
 readme = "README.md"
