@@ -30,7 +30,7 @@
 ## Table of Contents
 
 - [\[0x00\] What Is This](#0x00-what-is-this)
-- [\[0x01\] Jack In — Build From Source](#0x01-jack-in--build-from-source)
+- [\[0x01\] Jack In — Install](#0x01-jack-in--install)
 - [\[0x02\] Usage](#0x02-usage)
 - [\[0x03\] Advanced Modes](#0x03-advanced-modes)
 - [\[0x04\] Cyberpunk Theme](#0x04-cyberpunk-theme)
@@ -164,7 +164,7 @@ lsf --top -r 5                # refresh every 5 seconds
 lsf --top -u root             # top FD consumers for root
 ```
 
-**Top-specific keys**: `s` cycle sort, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#-interactive-controls) for common keys.
+**Top-specific keys**: `s` cycle sort, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#0x05-interactive-controls) for common keys.
 
 ### File Watch (`--watch FILE`)
 
