@@ -258,11 +258,11 @@ lsf -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)</pre>
       <section class="tutorial-section">
         <h2>Overview</h2>
         <ul>
-          <li><strong>CLI front-end</strong> — clap derive parser in <code>src/cli.rs</code> (1,341 lines, 38 <code>#[arg(...)]</code> attributes). <code>main.rs</code> dispatches to the active mode based on which flag is set.</li>
+          <li><strong>CLI front-end</strong> — clap derive parser in <code>src/cli.rs</code> (1,343 lines, 38 <code>#[arg(...)]</code> attributes). <code>main.rs</code> dispatches to the active mode based on which flag is set.</li>
           <li><strong>Platform gather</strong> — <code>src/darwin.rs</code> (1,253 lines, libproc FFI), <code>src/linux.rs</code> (820 lines, <code>/proc</code> reader), <code>src/freebsd.rs</code> (835 lines, sysctl + procfs). All three return the same <code>Vec&lt;Process&gt;</code> from <code>types.rs</code>; each per-PID FD scan is parallelized with rayon's work-stealing pool.</li>
           <li><strong>Selection</strong> — <code>src/filter.rs</code> (2,812 lines) implements OR-mode (default) and AND-mode (<code>-a</code>) filter composition over PID / PGID / user / command / FD / network-spec / path. Supports comma-lists, ranges (<code>0-10</code>), exclusion (<code>^root</code>), and regex (<code>/nginx|apache/</code>).</li>
           <li><strong>Output</strong> — <code>src/output.rs</code> (columnar + field), <code>src/json.rs</code> (serde), <code>src/csv_out.rs</code> (RFC 4180). TTY detection auto-switches between cyberpunk headers (<code>H4XOR</code> / <code>CL4SS</code> / <code>T4RGET</code>) and plain headers for pipelines.</li>
-          <li><strong>Live modes</strong> — <code>--tui</code> (7-tab dashboard, 5,312 lines), <code>--top</code> (1,008 lines), <code>--summary -r</code> (904 lines), <code>--monitor</code> (288 lines), <code>--watch FILE</code>, <code>--follow PID</code>, <code>--leak-detect</code>. All share <code>src/tui_app.rs</code>'s <code>TuiMode</code> trait for common keybindings, alternate-screen entry/exit, and atomic frame rendering.</li>
+          <li><strong>Live modes</strong> — <code>--tui</code> (7-tab dashboard, 5,308 lines), <code>--top</code> (1,009 lines), <code>--summary -r</code> (905 lines), <code>--monitor</code> (398 lines), <code>--watch FILE</code>, <code>--follow PID</code>, <code>--leak-detect</code>. All share <code>src/tui_app.rs</code>'s <code>TuiMode</code> trait for common keybindings, alternate-screen entry/exit, and atomic frame rendering.</li>
           <li><strong>Themes</strong> — <code>src/theme.rs</code> (1,005 lines) defines 31 named palettes via the <code>ThemeName</code> enum. Custom 6-color themes persist to <code>~/.lsofrs.conf</code> through <code>src/config.rs</code> (TOML).</li>
         </ul>
       </section>
@@ -355,28 +355,28 @@ lsf -i TCP:443                 # TCP on port 443</pre>
       <section class="tutorial-section">
         <h2>Architecture in one screen</h2>
 <pre>src/
-├── main.rs        # 282  CLI entry, mode dispatch, repeat/leak loops
-├── cli.rs         # 1,341 clap derive args (38 #[arg], 20 short flags)
-├── types.rs       # 867  Process, OpenFile, SocketInfo, NetSpec, &hellip;
+├── main.rs        # 283  CLI entry, mode dispatch, repeat/leak loops
+├── cli.rs         # 1,343 clap derive args (38 #[arg], 20 short flags)
+├── types.rs       # 972  Process, OpenFile, SocketInfo, NetSpec, &hellip;
 ├── darwin.rs      # 1,253 macOS libproc FFI (zero-copy repr(C))
 ├── linux.rs       # 820  /proc reader (parallel per-PID via rayon)
 ├── freebsd.rs     # 835  sysctl + procfs reader
 ├── filter.rs      # 2,812 selection &amp; filter composition (AND/OR, regex)
 ├── strutil.rs     # 76   safe UTF-8 truncation for fixed-width display
-├── output.rs      # 772  columnar &amp; field formatting, ANSI theming
+├── output.rs      # 793  columnar &amp; field formatting, ANSI theming
 ├── json.rs        # serde JSON
 ├── csv_out.rs     # RFC 4180 CSV
-├── monitor.rs     # 288  classic full-screen alternate-buffer monitor
-├── follow.rs      # 369  single-PID FD tracker (status transitions)
-├── leak.rs        # 339  circular-buffer FD-count leak detector
+├── monitor.rs     # 398  classic full-screen alternate-buffer monitor
+├── follow.rs      # 192  single-PID FD tracker (status transitions)
+├── leak.rs        # 340  circular-buffer FD-count leak detector
 ├── delta.rs       # iteration-diff engine for change highlighting
-├── summary.rs     # 904  aggregate stats + bars (+ live TUI mode)
+├── summary.rs     # 905  aggregate stats + bars (+ live TUI mode)
 ├── tree.rs        # 556  process tree w/ FD inheritance
-├── tui_app.rs     # 564  shared TuiMode trait (ratatui)
-├── tui_tabs.rs    # 5,312 unified 7-tab TUI (mouse, tooltips)
+├── tui_app.rs     # 572  shared TuiMode trait (ratatui)
+├── tui_tabs.rs    # 5,308 unified 7-tab TUI (mouse, tooltips)
 ├── theme.rs       # 1,005 31 themes + custom palette support
 ├── config.rs      # TOML config persistence (~/.lsofrs.conf)
-├── top.rs         # 1,008 live top-N FD dashboard
+├── top.rs         # 1,009 live top-N FD dashboard
 ├── watch.rs       # 369  file-open/close watch
 ├── stale.rs       # 313  deleted-file FD finder
 ├── ports.rs       # 450  listening-ports summary
@@ -396,7 +396,7 @@ completions/_lsofrs # 101-line zsh completion (#compdef lsofrs)</pre>
             <tr><td>FreeBSD</td><td><code>src/freebsd.rs</code> (835 lines)</td><td><code>sysctl(KERN_PROC_FILEDESC)</code> + <code>/proc</code> when mounted; FreeBSD-specific socket / kqueue decoding.</td><td>Supported</td></tr>
           </tbody>
         </table>
-        <p>Each platform module is gated by <code>#[cfg(target_os = "&hellip;")]</code> in <code>src/lib.rs</code>. The shared <code>Process</code> / <code>OpenFile</code> / <code>SocketInfo</code> shapes live in <code>src/types.rs</code> (867 lines, 11 public structs / enums) — every gather backend returns the same data, so the entire stack above <code>filter.rs</code> is platform-agnostic.</p>
+        <p>Each platform module is gated by <code>#[cfg(target_os = "&hellip;")]</code> in <code>src/lib.rs</code>. The shared <code>Process</code> / <code>OpenFile</code> / <code>SocketInfo</code> shapes live in <code>src/types.rs</code> (972 lines, 11 public structs / enums) — every gather backend returns the same data, so the entire stack above <code>filter.rs</code> is platform-agnostic.</p>
       </section>
 
       <section class="tutorial-section">
