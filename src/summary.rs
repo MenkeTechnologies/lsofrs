@@ -902,4 +902,125 @@ mod tests {
     fn fmt_num_single_digit_nonzero() {
         assert_eq!(fmt_num(7), "7");
     }
+
+    // ---- get_tooltip_lines / data_row_count row-dispatch boundary tests ----
+    //
+    // get_tooltip_lines maps a flat display-row index onto three stacked
+    // sections (types, procs, users) using hand-computed offsets:
+    //   type rows : [4 .. 4+min(types,15))
+    //   proc rows : [type_end+4 .. +min(procs,TOP_N))   (blank,hdr,blank between)
+    //   user rows : [proc_end+4 .. +min(users,20))
+    // Any off-by-one in those offsets, or any drift between the caps used here
+    // and those in data_row_count, silently shows the wrong tooltip for a row.
+    // These tests pin the exact section starts and the empty-row gaps.
+
+    fn make_unknown_file(tag: &str) -> OpenFile {
+        OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Read,
+            file_type: FileType::Unknown(tag.to_string()),
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tooltip_row_dispatch_single_entry_each_section() {
+        // One distinct type, one proc, one user -> exactly one data row per
+        // section. Verifies the first data row of each section and that every
+        // structural/gap row in between yields an empty tooltip.
+        let mut mode = SummaryLiveMode::new();
+        mode.ingest(&[make_proc(
+            777,
+            "watcher",
+            501,
+            vec![make_file(FileType::Reg), make_file(FileType::Reg)],
+        )]);
+
+        // type section: start row 4 (type_end = 5)
+        let t = mode.get_tooltip_lines(4);
+        assert_eq!(t[0], ("Type".to_string(), "REG".to_string()));
+        assert_eq!(t[1], ("Count".to_string(), "2".to_string()));
+        // 2 of 2 files -> 100.0%
+        assert_eq!(t[2], ("Percentage".to_string(), "100.0%".to_string()));
+
+        // proc section: proc_data_start = type_end(5) + 1 + 3 = 9
+        let p = mode.get_tooltip_lines(9);
+        assert_eq!(p[0], ("PID".to_string(), "777".to_string()));
+        assert_eq!(p[1].0, "Command");
+        assert_eq!(p[1].1, "watcher");
+        assert_eq!(p[3], ("FD Count".to_string(), "2".to_string()));
+
+        // user section: user_data_start = proc_end(10) + 1 + 3 = 14
+        let u = mode.get_tooltip_lines(14);
+        assert_eq!(u[0].0, "User");
+        assert_eq!(u[1], ("UID".to_string(), "501".to_string()));
+        assert_eq!(u[2], ("Processes".to_string(), "1".to_string()));
+        assert_eq!(u[3], ("Files".to_string(), "2".to_string()));
+
+        // Every non-data row must be empty: header/gap rows and out-of-range.
+        for r in [0usize, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 99] {
+            assert!(
+                mode.get_tooltip_lines(r).is_empty(),
+                "row {r} should have no tooltip"
+            );
+        }
+    }
+
+    #[test]
+    fn tooltip_type_cap_shifts_proc_and_user_sections() {
+        // 16 distinct types but the cap is 15: the proc section must begin
+        // after only 15 type rows, never 16. A drift between the .min(15) here
+        // and the start offset would surface a type tooltip where a proc row is.
+        let mut files: Vec<OpenFile> = (0..16)
+            .map(|i| make_unknown_file(&format!("T{i:02}")))
+            .collect();
+        files.push(make_file(FileType::Reg)); // give one proc a real fd too
+        let mut mode = SummaryLiveMode::new();
+        mode.ingest(&[make_proc(11, "many", 0, files)]);
+
+        // type_count capped at 15 -> type_end = 4 + 15 = 19.
+        // Row 19 is the first capped-out type's slot: it is a gap (blank line),
+        // not a type tooltip, because get_tooltip_lines only serves rows < 19.
+        assert!(mode.get_tooltip_lines(19).is_empty());
+
+        // proc_data_start = type_end(19) + 1 + 3 = 23
+        let p = mode.get_tooltip_lines(23);
+        assert_eq!(p[0], ("PID".to_string(), "11".to_string()));
+
+        // data_row_count = min(types,15) + min(procs,TOP_N) + min(users,20)
+        //               = 15 + 1 + 1 = 17
+        assert_eq!(mode.data_row_count(), 17);
+    }
+
+    #[test]
+    fn tooltip_proc_cap_at_top_n_and_empty_mode() {
+        // More than TOP_N procs: data_row_count caps the proc contribution at
+        // TOP_N, and get_tooltip_lines must not serve a row past proc_end.
+        let procs: Vec<Process> = (0..TOP_N as i32 + 5)
+            .map(|i| make_proc(1000 + i, "p", 0, vec![make_file(FileType::Reg)]))
+            .collect();
+        let n_procs = procs.len();
+        let mut mode = SummaryLiveMode::new();
+        mode.ingest(&procs);
+
+        // One type (REG), TOP_N procs counted, one user (uid 0).
+        assert_eq!(mode.data_row_count(), 1 + TOP_N + 1);
+
+        // type_end = 5; proc_data_start = 5 + 1 + 3 = 9; proc_end = 9 + TOP_N.
+        // Row at proc_end-1 is the last served proc; proc_end is a gap.
+        let last_proc_row = 9 + TOP_N - 1;
+        assert_eq!(mode.get_tooltip_lines(last_proc_row)[0].0, "PID");
+        let gap_after_procs = 9 + TOP_N;
+        assert!(mode.get_tooltip_lines(gap_after_procs).is_empty());
+
+        // Sanity: not all procs are addressable as tooltip rows (cap < total).
+        assert!(n_procs > TOP_N);
+
+        // Empty mode: no data rows, every query empty, count zero.
+        let empty = SummaryLiveMode::new();
+        assert_eq!(empty.data_row_count(), 0);
+        assert!(empty.get_tooltip_lines(0).is_empty());
+        assert!(empty.get_tooltip_lines(4).is_empty());
+    }
 }
