@@ -311,6 +311,75 @@ lsf -i TCP:443                 # TCP on port 443</pre>
       </section>
 
       <section class="tutorial-section">
+        <h2>Full flag reference</h2>
+        <p>Every flag below is a real <code>#[arg(&hellip;)]</code> in <code>src/cli.rs</code> (38 attributes total). Short flags follow the original <code>lsof</code> letters; long flags name the lsofrs-specific modes. <code>+</code>/<code>-</code> toggles (<code>+r</code>/<code>-r</code>, <code>+w</code>/<code>-w</code>, <code>+d</code>/<code>+D</code>) mirror lsof's prefix grammar.</p>
+        <h3 style="margin-top:0.8rem;">Selection</h3>
+        <table class="reflection-table">
+          <thead><tr><th>Flag</th><th>Argument</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>-p</code></td><td><code>PID</code></td><td>Select by PID (comma-list, <code>^</code> excludes)</td></tr>
+            <tr><td><code>-u</code></td><td><code>USER</code></td><td>Select by login name or UID (comma-list, <code>^</code> excludes)</td></tr>
+            <tr><td><code>-g</code></td><td><code>[PGID]</code></td><td>Select (or <code>^</code>-exclude) process-group IDs</td></tr>
+            <tr><td><code>-c</code></td><td><code>COMMAND</code></td><td>Select by command name (prefix, <code>^</code>exclude, <code>/regex/</code>)</td></tr>
+            <tr><td><code>-d</code></td><td><code>FD</code></td><td>Select by file-descriptor set (names or ranges like <code>0-10</code>)</td></tr>
+            <tr><td><code>-a</code></td><td>&mdash;</td><td>AND the selections together (default is OR)</td></tr>
+            <tr><td><code>FILE...</code></td><td>path(s)</td><td>List processes holding these files open</td></tr>
+            <tr><td><code>--dir</code></td><td><code>DIR</code></td><td>List open files in <code>DIR</code>, one level (lsof <code>+d</code>)</td></tr>
+            <tr><td><code>--dir-recurse</code></td><td><code>DIR</code></td><td>Recursively list open files under <code>DIR</code> (lsof <code>+D</code>)</td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:0.8rem;">Network</h3>
+        <table class="reflection-table">
+          <thead><tr><th>Flag</th><th>Argument</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>-i</code></td><td><code>[ADDR]</code></td><td>Select internet connections: <code>[4|6][proto][@host|addr][:svc|port]</code></td></tr>
+            <tr><td><code>-N</code></td><td>&mdash;</td><td>Select NFS files</td></tr>
+            <tr><td><code>-U</code></td><td>&mdash;</td><td>Select UNIX-domain socket files</td></tr>
+            <tr><td><code>-n</code></td><td>&mdash;</td><td>Inhibit hostname resolution</td></tr>
+            <tr><td><code>-P</code></td><td>&mdash;</td><td>Inhibit port-number-to-name conversion</td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:0.8rem;">Display &amp; output</h3>
+        <table class="reflection-table">
+          <thead><tr><th>Flag</th><th>Argument</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>-F</code></td><td><code>[FIELDS]</code></td><td>Field output; <code>-F ?</code> lists field letters</td></tr>
+            <tr><td><code>-J</code> / <code>--json</code></td><td>&mdash;</td><td>JSON output</td></tr>
+            <tr><td><code>--csv</code></td><td>&mdash;</td><td>RFC 4180 CSV output</td></tr>
+            <tr><td><code>-t</code></td><td>&mdash;</td><td>Terse output (PID only)</td></tr>
+            <tr><td><code>-R</code></td><td>&mdash;</td><td>List parent PID</td></tr>
+            <tr><td><code>--pgid-show</code></td><td>&mdash;</td><td>Show process-group IDs</td></tr>
+            <tr><td><code>-0</code></td><td>&mdash;</td><td>NUL field terminator instead of newline</td></tr>
+            <tr><td><code>+w</code> / <code>-w</code></td><td>&mdash;</td><td>Enable (<code>+</code>) or suppress (<code>-</code>) warnings (default <code>+</code>)</td></tr>
+            <tr><td><code>--color</code></td><td><code>MODE</code></td><td>Color output: <code>auto</code> (default), <code>always</code>, <code>never</code></td></tr>
+            <tr><td><code>--theme</code></td><td><code>NAME</code></td><td>Color theme (default <code>neon-sprawl</code>); one of 31 palettes</td></tr>
+          </tbody>
+        </table>
+        <h3 style="margin-top:0.8rem;">Modes &amp; live system</h3>
+        <table class="reflection-table">
+          <thead><tr><th>Flag</th><th>Argument</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>+r</code> / <code>-r</code></td><td><code>[SECONDS]</code></td><td>Repeat mode (default interval <code>1</code>)</td></tr>
+            <tr><td><code>--delta</code></td><td>&mdash;</td><td>Highlight new / gone FDs in repeat mode</td></tr>
+            <tr><td><code>-W</code> / <code>--monitor</code></td><td>&mdash;</td><td>Live full-screen refresh mode (<code>top(1)</code>-style)</td></tr>
+            <tr><td><code>--tui</code></td><td>&mdash;</td><td>Unified tabbed TUI for all modes</td></tr>
+            <tr><td><code>--top</code></td><td><code>[N]</code></td><td>Live top-N processes by FD count (default 20)</td></tr>
+            <tr><td><code>--summary</code> / <code>--stats</code></td><td>&mdash;</td><td>Aggregate FD summary: type breakdown, top processes, per-user</td></tr>
+            <tr><td><code>--tree</code></td><td>&mdash;</td><td>Process tree with FD counts (pstree + lsof)</td></tr>
+            <tr><td><code>--ports</code></td><td>&mdash;</td><td>Listening-ports summary (like <code>ss -tlnp</code>)</td></tr>
+            <tr><td><code>--net-map</code></td><td>&mdash;</td><td>Network connections grouped by remote host</td></tr>
+            <tr><td><code>--pipe-chain</code></td><td>&mdash;</td><td>Trace pipe / socket IPC between processes</td></tr>
+            <tr><td><code>--stale</code></td><td>&mdash;</td><td>Find FDs pointing to deleted files</td></tr>
+            <tr><td><code>--watch</code></td><td><code>FILE</code></td><td>Watch who opens / closes a file over time</td></tr>
+            <tr><td><code>--follow</code></td><td><code>PID</code></td><td>Watch one process's FDs, highlight opens / closes</td></tr>
+            <tr><td><code>--leak-detect</code></td><td><code>[=I[,N]]</code></td><td>Detect FD leaks: poll every <code>I</code> s, flag after <code>N</code> rises (default <code>5,3</code>)</td></tr>
+            <tr><td><code>-h</code> / <code>-?</code></td><td>&mdash;</td><td>Display help</td></tr>
+            <tr><td><code>-V</code> / <code>--version</code></td><td>&mdash;</td><td>Display version</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="tutorial-section">
         <h2>Cyberpunk theming</h2>
         <p>When stdout is a TTY, column headers swap from utilitarian (<code>COMMAND</code> / <code>PID</code> / <code>USER</code>) to cyberpunk (<code>PROCESS</code> / <code>PRC</code> / <code>H4XOR</code>) and ANSI coloring activates. Piped output is always plain — safe for scripts. 31 named palettes ship in <code>src/theme.rs</code>:</p>
         <table class="reflection-table">
@@ -325,6 +394,26 @@ lsf -i TCP:443                 # TCP on port 443</pre>
           </tbody>
         </table>
         <p>Inside any TUI mode press <code>c</code> for the theme chooser (live preview), <code>C</code> for the 6-color editor. Selections persist to <code>~/.lsofrs.conf</code> via <code>src/config.rs</code>.</p>
+      </section>
+
+      <section class="tutorial-section">
+        <h2>Configuration</h2>
+        <p>Settings persist to <code>~/.lsofrs.conf</code>, a TOML file read and written by <code>src/config.rs</code> (<code>Prefs</code> struct). The TUI auto-saves every change made via keybinds; you can also edit the file by hand. A documented template ships as <code>lsofrs.default.conf</code> &mdash; copy it to <code>~/.lsofrs.conf</code> or let lsofrs create one on first run.</p>
+<pre># ~/.lsofrs.conf
+theme = "NeonSprawl"      # one of the 31 named palettes
+refresh_rate = 1          # seconds between refreshes in live modes
+hover_tooltips = true     # auto-tooltips after 1s hover (T toggles; right-click always works)</pre>
+        <table class="reflection-table">
+          <thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>theme</code></td><td>string</td><td>Active <code>ThemeName</code> (e.g. <code>NeonSprawl</code>, <code>Matrix</code>, <code>BladeRunner</code>). Set live via <code>c</code>.</td></tr>
+            <tr><td><code>refresh_rate</code></td><td>integer</td><td>Refresh interval (seconds) for <code>--top</code> / <code>--summary -r</code> / <code>--tui</code>. Set via <code>1</code>&ndash;<code>9</code> or <code>&lt;</code>/<code>&gt;</code>.</td></tr>
+            <tr><td><code>hover_tooltips</code></td><td>boolean</td><td>Enable auto-tooltips on hover. Toggled with <code>T</code> in the TUI.</td></tr>
+            <tr><td><code>active_tab</code></td><td>integer</td><td>Last-used <code>--tui</code> tab (0&ndash;6); restored on next launch.</td></tr>
+            <tr><td><code>custom_themes</code></td><td>table</td><td>Named custom 6-color palettes built in the in-app editor (<code>C</code>).</td></tr>
+            <tr><td><code>active_custom_theme</code></td><td>string</td><td>The currently selected custom palette, if one is active instead of a built-in.</td></tr>
+          </tbody>
+        </table>
       </section>
 
       <section class="tutorial-section">
@@ -357,7 +446,7 @@ lsf -i TCP:443                 # TCP on port 443</pre>
 <pre>src/
 ├── main.rs        # 283  CLI entry, mode dispatch, repeat/leak loops
 ├── cli.rs         # 1,343 clap derive args (38 #[arg], 20 short flags)
-├── types.rs       # 972  Process, OpenFile, SocketInfo, NetSpec, &hellip;
+├── types.rs       # 972  Process, OpenFile, SocketInfo, NetworkFilter, FileType, &hellip;
 ├── darwin.rs      # 1,253 macOS libproc FFI (zero-copy repr(C))
 ├── linux.rs       # 820  /proc reader (parallel per-PID via rayon)
 ├── freebsd.rs     # 835  sysctl + procfs reader
@@ -393,7 +482,7 @@ completions/_lsofrs # 101-line zsh completion (#compdef lsofrs)</pre>
           <tbody>
             <tr><td>macOS / Darwin</td><td><code>src/darwin.rs</code> (1,253 lines)</td><td><code>libproc</code> FFI via zero-copy <code>#[repr(C)]</code> structs matching kernel headers; <code>proc_listpids</code> + <code>proc_pidinfo</code> + <code>proc_pidfdinfo</code>.</td><td>Primary platform</td></tr>
             <tr><td>Linux</td><td><code>src/linux.rs</code> (820 lines)</td><td><code>/proc/&lt;pid&gt;/{stat,status,fd,fdinfo}</code> reader; parallelized per-PID with rayon.</td><td>Supported</td></tr>
-            <tr><td>FreeBSD</td><td><code>src/freebsd.rs</code> (835 lines)</td><td><code>sysctl(KERN_PROC_FILEDESC)</code> + <code>/proc</code> when mounted; FreeBSD-specific socket / kqueue decoding.</td><td>Supported</td></tr>
+            <tr><td>FreeBSD</td><td><code>src/freebsd.rs</code> (835 lines)</td><td><code>sysctl(KERN_PROC_FILEDESC)</code> + <code>/proc</code> when mounted; FreeBSD-specific TCP / UDP / unix-socket decoding from <code>/proc/net</code>.</td><td>Supported</td></tr>
           </tbody>
         </table>
         <p>Each platform module is gated by <code>#[cfg(target_os = "&hellip;")]</code> in <code>src/lib.rs</code>. The shared <code>Process</code> / <code>OpenFile</code> / <code>SocketInfo</code> shapes live in <code>src/types.rs</code> (972 lines, 11 public structs / enums) — every gather backend returns the same data, so the entire stack above <code>filter.rs</code> is platform-agnostic.</p>
@@ -414,32 +503,28 @@ completions/_lsofrs # 101-line zsh completion (#compdef lsofrs)</pre>
 
       <section class="tutorial-section">
         <h2>JSON shape</h2>
-        <p><code>--json</code> emits an array of records. Each record is the public <code>OpenFile</code> serialization from <code>src/types.rs</code>:</p>
+        <p><code>--json</code> / <code>-J</code> emits an array of <strong>process</strong> records; each process carries a nested <code>files</code> array. The shape is produced by <code>JsonProcess</code> / <code>JsonFile</code> in <code>src/json.rs</code> (verbatim sample from <code>lsf -i TCP --json</code>). Optional fields are omitted when empty (<code>#[serde(skip_serializing_if = "Option::is_none")]</code>):</p>
 <pre>[
   {
-    "pid": 1234,
+    "command": "rapportd",
+    "pid": 667,
+    "uid": 501,
+    "pgid": 667,
     "ppid": 1,
-    "pgid": 1234,
-    "uid": 0,
-    "user": "root",
-    "command": "nginx",
-    "fd": "10u",
-    "type": "IPv4",
-    "device": "0x0",
-    "size_off": null,
-    "node": "TCP",
-    "name": "*:8080 (LISTEN)",
-    "socket": {
-      "protocol": "TCP",
-      "local_addr": "0.0.0.0",
-      "local_port": 8080,
-      "remote_addr": null,
-      "remote_port": null,
-      "state": "LISTEN"
-    }
+    "files": [
+      {
+        "fd": "10u",
+        "type": "IPv4",
+        "size_off": 0,
+        "access": "u",
+        "name": "*:60865 (LISTEN)",
+        "protocol": "TCP",
+        "tcp_state": "LISTEN"
+      }
+    ]
   }
 ]</pre>
-        <p>Hard-coded JSON contract tests live in <code>tests/json_shape.rs</code>, <code>tests/json_wrappers.rs</code>, and <code>tests/json_and_csv_contracts.rs</code> (233 <code>#[test]</code> functions in the latter alone) — refactors can't silently break downstream consumers.</p>
+        <p>Per-file keys: <code>fd</code>, <code>type</code> (from the <code>FileType</code> enum), <code>device</code> (<code>"maj,min"</code>), <code>size_off</code>, <code>node</code> (inode), <code>access</code> (<code>r</code>/<code>w</code>/<code>u</code>), <code>lock</code>, <code>name</code>, and — for sockets — <code>protocol</code> + <code>tcp_state</code>. Hard-coded JSON contract tests live in <code>tests/json_shape.rs</code>, <code>tests/json_wrappers.rs</code>, and <code>tests/json_and_csv_contracts.rs</code> (233 <code>#[test]</code> functions in the latter alone) — refactors can't silently break downstream consumers.</p>
       </section>
 
       <section class="tutorial-section">
