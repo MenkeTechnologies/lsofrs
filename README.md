@@ -369,6 +369,7 @@ Non-TTY (piped) output always does a single-shot print and exits — no TUI, no 
 ```
 src/
 ├── main.rs      # CLI entry point, dispatch, repeat/leak-detect loops
+├── lib.rs       # Library crate root — module declarations
 ├── cli.rs       # clap argument definitions + custom help display
 ├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
 ├── darwin.rs    # macOS libproc FFI — process/FD enumeration (rayon parallel)
