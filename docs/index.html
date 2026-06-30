@@ -196,7 +196,7 @@ lsf -t -c nginx               # just PIDs (for scripting)
 lsf --json | jq '.[] | select(.fd == "cwd")'
 lsf --csv  > snapshot.csv
 lsf -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)</pre>
-        <p>Full install + usage live in the <a href="https://github.com/MenkeTechnologies/lsofrs#readme">README</a>. Man page: <code>man lsofrs</code> (310-line roff under <code>lsofrs.1</code>). Zsh completion ships under <code>completions/_lsofrs</code>.</p>
+        <p>Full install + usage live in the <a href="https://github.com/MenkeTechnologies/lsofrs#readme">README</a>. Man page: <code>man lsofrs</code> (310-line roff under <code>man/man1/lsofrs.1</code>). Zsh completion ships under <code>completions/_lsofrs</code>.</p>
       </section>
 
       <section class="tutorial-section">
@@ -373,7 +373,7 @@ lsf -i TCP:443                 # TCP on port 443</pre>
             <tr><td><code>--watch</code></td><td><code>FILE</code></td><td>Watch who opens / closes a file over time</td></tr>
             <tr><td><code>--follow</code></td><td><code>PID</code></td><td>Watch one process's FDs, highlight opens / closes</td></tr>
             <tr><td><code>--leak-detect</code></td><td><code>[=I[,N]]</code></td><td>Detect FD leaks: poll every <code>I</code> s, flag after <code>N</code> rises (default <code>5,3</code>)</td></tr>
-            <tr><td><code>-h</code> / <code>-?</code></td><td>&mdash;</td><td>Display help</td></tr>
+            <tr><td><code>-h</code> / <code>--help</code></td><td>&mdash;</td><td>Display help</td></tr>
             <tr><td><code>-V</code> / <code>--version</code></td><td>&mdash;</td><td>Display version</td></tr>
           </tbody>
         </table>
@@ -471,7 +471,7 @@ hover_tooltips = true     # auto-tooltips after 1s hover (T toggles; right-click
 ├── ports.rs       # 450  listening-ports summary
 ├── pipe_chain.rs  # 358  pipe / unix-socket IPC topology
 └── net_map.rs     # 608  connections grouped by remote host
-lsofrs.1           # 310-line roff man page
+man/man1/lsofrs.1  # 310-line roff man page
 completions/_lsofrs # 101-line zsh completion (#compdef lsofrs)</pre>
       </section>
 
@@ -533,7 +533,7 @@ completions/_lsofrs # 101-line zsh completion (#compdef lsofrs)</pre>
           <li><a href="report.html">Engineering report</a> &mdash; per-subsystem LOC, top-20 files, dependency table, test surface.</li>
           <li><a href="https://github.com/MenkeTechnologies/lsofrs#readme">README</a> &mdash; full install, every flag, full benchmark table.</li>
           <li><a href="https://docs.rs/lsofrs">docs.rs/lsofrs</a> &mdash; rustdoc for the library crate (<code>pub mod cli; pub mod types; pub mod filter; &hellip;</code>).</li>
-          <li><a href="https://github.com/MenkeTechnologies/lsofrs/blob/main/lsofrs.1">lsofrs.1</a> &mdash; 310-line roff man page (also <code>man lsofrs</code> after install).</li>
+          <li><a href="https://github.com/MenkeTechnologies/lsofrs/blob/main/man/man1/lsofrs.1">man/man1/lsofrs.1</a> &mdash; 310-line roff man page (also <code>man lsofrs</code> after install).</li>
         </ul>
       </section>
     </main>
