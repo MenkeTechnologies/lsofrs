@@ -157,13 +157,17 @@ impl DisplayOpts {
 
     /// Render the SIZE/OFF cell for a file, honoring `-o`/`-s`.
     fn size_off_cell(&self, f: &OpenFile) -> String {
-        if self.offset_always && let Some(off) = f.offset {
+        if self.offset_always
+            && let Some(off) = f.offset
+        {
             return match self.offset_digits {
                 Some(d) => format!("0t{off:0width$}", width = d),
                 None => format!("0t{off}"),
             };
         }
-        if self.size_always && let Some(sz) = f.size {
+        if self.size_always
+            && let Some(sz) = f.size
+        {
             return format!("{sz}");
         }
         f.size_or_offset_str()
@@ -619,8 +623,18 @@ mod tests {
     #[test]
     fn col_widths_pgid_only_with_flag() {
         let p = make_proc(1, "test", vec![]);
-        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
-        let w_yes = ColWidths::compute(std::slice::from_ref(&p), true, false, &DisplayOpts::default());
+        let w_no = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
+        let w_yes = ColWidths::compute(
+            std::slice::from_ref(&p),
+            true,
+            false,
+            &DisplayOpts::default(),
+        );
         // pgid width should only grow when show_pgid is true
         assert_eq!(w_no.pgid, 4); // default
         assert!(w_yes.pgid >= 1);
@@ -629,8 +643,18 @@ mod tests {
     #[test]
     fn col_widths_ppid_only_with_flag() {
         let p = Process::new(1, 123456, 1, 0, "x".to_string(), vec![]);
-        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
-        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, true, &DisplayOpts::default());
+        let w_no = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
+        let w_yes = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            true,
+            &DisplayOpts::default(),
+        );
         assert_eq!(w_no.ppid, 4);
         assert!(w_yes.ppid >= 6);
     }
@@ -645,7 +669,12 @@ mod tests {
             ..Default::default()
         };
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
         assert!(w.fd >= "cwd".len());
     }
 
@@ -659,7 +688,12 @@ mod tests {
             ..Default::default()
         };
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
         assert!(w.type_ >= "VERYLONGTYPE".len());
     }
 
@@ -668,7 +702,12 @@ mod tests {
         let mut f = make_file(1, FileType::Reg, "/x");
         f.offset = Some(4096);
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
         assert!(w.size_off >= "0t4096".len());
     }
 
@@ -680,7 +719,12 @@ mod tests {
             ..Default::default()
         });
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
         assert!(w.node >= "TCP".len());
     }
 
@@ -697,8 +741,21 @@ mod tests {
         let mut f = make_file(3, FileType::Reg, "/x");
         f.nlink = Some(123456);
         let p = make_proc(1, "x", vec![f]);
-        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
-        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts { show_nlink: true, ..Default::default() });
+        let w_no = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts::default(),
+        );
+        let w_yes = ColWidths::compute(
+            std::slice::from_ref(&p),
+            false,
+            false,
+            &DisplayOpts {
+                show_nlink: true,
+                ..Default::default()
+            },
+        );
         assert_eq!(w_no.nlink, 5); // default "NLINK" width, not grown
         assert!(w_yes.nlink >= "123456".len());
     }
@@ -776,9 +833,7 @@ mod tests {
 
     #[test]
     fn display_opts_from_args_maps_all_flags() {
-        let args = crate::cli::Args::parse_from([
-            "lsofrs", "+L", "-l", "-o", "-s", "-T", "+c0",
-        ]);
+        let args = crate::cli::Args::parse_from(["lsofrs", "+L", "-l", "-o", "-s", "-T", "+c0"]);
         let disp = DisplayOpts::from_args(&args);
         assert!(disp.show_nlink);
         assert!(disp.numeric_uid);
@@ -809,7 +864,17 @@ mod tests {
         let mut f = make_file(3, FileType::Reg, "/tmp/x");
         f.nlink = Some(0);
         let procs = vec![make_proc(42, "test", vec![f])];
-        print_processes(&procs, &theme, false, false, &DisplayOpts { show_nlink: true, ..Default::default() }, None);
+        print_processes(
+            &procs,
+            &theme,
+            false,
+            false,
+            &DisplayOpts {
+                show_nlink: true,
+                ..Default::default()
+            },
+            None,
+        );
     }
 
     #[test]
@@ -854,7 +919,14 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::New;
-        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
+        print_processes(
+            &procs,
+            &theme,
+            false,
+            false,
+            &DisplayOpts::default(),
+            Some(&delta),
+        );
     }
 
     #[test]
@@ -866,7 +938,14 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::Gone;
-        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
+        print_processes(
+            &procs,
+            &theme,
+            false,
+            false,
+            &DisplayOpts::default(),
+            Some(&delta),
+        );
     }
 
     #[test]
@@ -878,7 +957,14 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::Unchanged;
-        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
+        print_processes(
+            &procs,
+            &theme,
+            false,
+            false,
+            &DisplayOpts::default(),
+            Some(&delta),
+        );
     }
 
     #[test]

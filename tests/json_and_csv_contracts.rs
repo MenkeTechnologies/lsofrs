@@ -308,7 +308,7 @@ fn field_output_self_pid_has_p_token() {
 
 #[test]
 fn version_stdout_only_version_line() {
-    let out = lsofrs().arg("-V").output().unwrap();
+    let out = lsofrs().arg("-v").output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();

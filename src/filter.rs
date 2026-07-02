@@ -2871,8 +2871,10 @@ mod tests {
     #[test]
     fn link_count_max_selects_unlinked_file() {
         // `+L1` → link_count_max = 1: a file with nlink 0 (unlinked but open) passes.
-        let mut f = Filter::default();
-        f.link_count_max = Some(1);
+        let f = Filter {
+            link_count_max: Some(1),
+            ..Default::default()
+        };
         let mut file = make_file(3, FileType::Reg, "/tmp/deleted");
         file.nlink = Some(0);
         assert!(f.matches_file(&file));
@@ -2881,8 +2883,10 @@ mod tests {
     #[test]
     fn link_count_max_rejects_linked_file() {
         // A normal file (nlink >= 1) is excluded under `+L1`.
-        let mut f = Filter::default();
-        f.link_count_max = Some(1);
+        let f = Filter {
+            link_count_max: Some(1),
+            ..Default::default()
+        };
         let mut file = make_file(3, FileType::Reg, "/tmp/live");
         file.nlink = Some(1);
         assert!(!f.matches_file(&file));
@@ -2891,8 +2895,10 @@ mod tests {
     #[test]
     fn link_count_max_rejects_file_without_nlink() {
         // Sockets/pipes have no link count; `+Ln` never selects them.
-        let mut f = Filter::default();
-        f.link_count_max = Some(1);
+        let f = Filter {
+            link_count_max: Some(1),
+            ..Default::default()
+        };
         let mut file = make_file(4, FileType::Reg, "/tmp/x");
         file.nlink = None;
         assert!(!f.matches_file(&file));
@@ -2901,8 +2907,10 @@ mod tests {
     #[test]
     fn link_count_max_higher_threshold_admits_single_link() {
         // `+L2` selects files with link count < 2, i.e. nlink 0 or 1.
-        let mut f = Filter::default();
-        f.link_count_max = Some(2);
+        let f = Filter {
+            link_count_max: Some(2),
+            ..Default::default()
+        };
         let mut file = make_file(5, FileType::Reg, "/tmp/x");
         file.nlink = Some(1);
         assert!(f.matches_file(&file));

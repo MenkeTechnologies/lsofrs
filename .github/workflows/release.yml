@@ -114,14 +114,21 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "${{ github.ref_name }}" \
-            --generate-notes \
-            artifacts/*.tar.gz
+          TAG="${{ github.ref_name }}"
+          # Idempotent: re-running on an existing tag uploads/clobbers the
+          # assets instead of failing with "release already exists".
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/*.tar.gz --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              artifacts/*.tar.gz
+          fi
 
   homebrew:
     name: Update Homebrew tap

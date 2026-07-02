@@ -30,7 +30,7 @@ fn help_flag_long() {
 
 #[test]
 fn version_flag() {
-    let out = lsofrs().arg("-V").output().unwrap();
+    let out = lsofrs().arg("-v").output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(env!("CARGO_PKG_VERSION")));
@@ -1775,7 +1775,7 @@ fn invalid_flag_exits_nonzero() {
 
 #[test]
 fn invalid_short_flag_exits_nonzero() {
-    let out = lsofrs().arg("-Z").output().unwrap();
+    let out = lsofrs().arg("-Q").output().unwrap();
     assert!(!out.status.success());
 }
 

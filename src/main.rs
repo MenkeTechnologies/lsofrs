@@ -402,7 +402,10 @@ mod tests {
         let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
         // "ba" is a prefix of "bash" -> found; "ghost" -> unfound.
         let args = Args::parse_from(["lsofrs", "-V", "-c", "ba,ghost"]);
-        assert_eq!(unfound_specs(&args, &procs), vec!["no command found: ghost"]);
+        assert_eq!(
+            unfound_specs(&args, &procs),
+            vec!["no command found: ghost"]
+        );
     }
 
     #[test]
@@ -424,7 +427,10 @@ mod tests {
         let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
         // "/tmp" matches "/tmp/x" as a directory prefix -> found; "/no/such" -> unfound.
         let args = Args::parse_from(["lsofrs", "-V", "/tmp", "/no/such"]);
-        assert_eq!(unfound_specs(&args, &procs), vec!["no file found: /no/such"]);
+        assert_eq!(
+            unfound_specs(&args, &procs),
+            vec!["no file found: /no/such"]
+        );
     }
 
     #[test]

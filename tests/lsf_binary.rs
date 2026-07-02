@@ -17,7 +17,7 @@ fn lsf_help_matches_banner() {
 
 #[test]
 fn lsf_version_reports_package_version() {
-    let out = lsf().arg("-V").output().unwrap();
+    let out = lsf().arg("-v").output().unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(env!("CARGO_PKG_VERSION")));

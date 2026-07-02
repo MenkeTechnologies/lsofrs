@@ -1691,7 +1691,10 @@ mod tests {
     #[test]
     fn normalize_cluster_ends_at_arg_taking_flag() {
         // `-nPi4TCP` → -n -P -i with attached value 4TCP.
-        assert_eq!(norm(&["lsofrs", "-nPi4TCP"]), vec!["lsofrs", "-n", "-P", "-i4TCP"]);
+        assert_eq!(
+            norm(&["lsofrs", "-nPi4TCP"]),
+            vec!["lsofrs", "-n", "-P", "-i4TCP"]
+        );
     }
 
     #[test]
@@ -1721,14 +1724,23 @@ mod tests {
     #[test]
     fn normalize_accept_ignore_no_arg_flags_dropped() {
         // -b -O -C -M -X -E carry no behavior; they must not reach clap or leak.
-        assert_eq!(norm(&["lsofrs", "-bOC", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
+        assert_eq!(
+            norm(&["lsofrs", "-bOC", "-p", "1"]),
+            vec!["lsofrs", "-p", "1"]
+        );
     }
 
     #[test]
     fn normalize_accept_ignore_arg_option_consumes_value() {
         // -A takes a device-cache path; both the flag and its value are dropped.
-        assert_eq!(norm(&["lsofrs", "-A", "/dev/cache", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
-        assert_eq!(norm(&["lsofrs", "-k/vmunix", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
+        assert_eq!(
+            norm(&["lsofrs", "-A", "/dev/cache", "-p", "1"]),
+            vec!["lsofrs", "-p", "1"]
+        );
+        assert_eq!(
+            norm(&["lsofrs", "-k/vmunix", "-p", "1"]),
+            vec!["lsofrs", "-p", "1"]
+        );
     }
 
     #[test]
@@ -1739,14 +1751,26 @@ mod tests {
 
     #[test]
     fn normalize_plus_c_command_width() {
-        assert_eq!(norm(&["lsofrs", "+c0"]), vec!["lsofrs", "--command-width", "0"]);
-        assert_eq!(norm(&["lsofrs", "+c", "20"]), vec!["lsofrs", "--command-width", "20"]);
+        assert_eq!(
+            norm(&["lsofrs", "+c0"]),
+            vec!["lsofrs", "--command-width", "0"]
+        );
+        assert_eq!(
+            norm(&["lsofrs", "+c", "20"]),
+            vec!["lsofrs", "--command-width", "20"]
+        );
     }
 
     #[test]
     fn normalize_plus_d_dir_forms() {
-        assert_eq!(norm(&["lsofrs", "+d", "/tmp"]), vec!["lsofrs", "--dir", "/tmp"]);
-        assert_eq!(norm(&["lsofrs", "+D/var"]), vec!["lsofrs", "--dir-recurse", "/var"]);
+        assert_eq!(
+            norm(&["lsofrs", "+d", "/tmp"]),
+            vec!["lsofrs", "--dir", "/tmp"]
+        );
+        assert_eq!(
+            norm(&["lsofrs", "+D/var"]),
+            vec!["lsofrs", "--dir-recurse", "/var"]
+        );
     }
 
     #[test]
@@ -1857,7 +1881,10 @@ mod tests {
     #[test]
     fn normalize_plus_e_consumes_separate_arg() {
         // +e takes a filesystem path; both are dropped, positional survives.
-        assert_eq!(norm(&["lsofrs", "+e", "/mnt", "/tmp/x"]), vec!["lsofrs", "/tmp/x"]);
+        assert_eq!(
+            norm(&["lsofrs", "+e", "/mnt", "/tmp/x"]),
+            vec!["lsofrs", "/tmp/x"]
+        );
     }
 
     #[test]
