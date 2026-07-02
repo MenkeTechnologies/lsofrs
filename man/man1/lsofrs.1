@@ -94,6 +94,46 @@ etc.
 .BR \-J ", " \-\-json
 Output in JSON format.
 .TP
+.BI +L " [n]"
+List file link counts in an
+.B NLINK
+column.
+.B +L
+alone lists all link counts;
+.BI +L n
+selects only files whose link count is less than
+.IR n .
+A specification of
+.B +L1
+selects open files that have been unlinked (link count 0).
+.TP
+.B \-l
+Display the numeric user ID instead of converting it to a login name.
+.TP
+.BI \-o " [n]"
+Always display the file offset (rather than size) in the SIZE/OFF column.
+An optional
+.I n
+sets the number of decimal digits.
+.TP
+.B \-s
+Without a value, always display the file size in the SIZE/OFF column.
+With a
+.IR proto : state
+value (e.g.
+.BR TCP:LISTEN ),
+select only sockets in the given protocol state.
+.TP
+.BI +c " [w]"
+Set the command column width to
+.I w
+initial characters;
+.B +c0
+disables truncation. Default is 15.
+.TP
+.B \-T
+Request TCP/TPI information; the connection state is already shown by default.
+.TP
 .B \-R
 Show parent PID column.
 .TP
@@ -111,7 +151,11 @@ output.
 .B \-w
 Suppress warning messages.
 .TP
-.B \-V ", " \-\-version
+.B \-V
+Report search specifications (\fB\-p\fR, \fB\-c\fR, \fB\-u\fR, named files)
+that matched nothing, one per line on standard error.
+.TP
+.BR \-v ", " \-\-version
 Display version information and exit.
 .SS System / Live Modes
 .TP

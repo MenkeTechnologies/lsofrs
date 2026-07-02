@@ -57,6 +57,18 @@ pub struct Filter {
     pub and_mode: bool,
     /// `terse` field.
     pub terse: bool,
+    /// `+Ln`: keep only files whose link count is less than this value.
+    pub link_count_max: Option<u64>,
+    /// `-s p:s`: select sockets by protocol + state, e.g. `[(TCP, [LISTEN])]`.
+    pub state_filters: Vec<StateFilter>,
+}
+
+/// A single `-s protocol:state[,state...]` selection.
+pub struct StateFilter {
+    /// Uppercased protocol name (`TCP`, `UDP`).
+    pub protocol: String,
+    /// Uppercased state names; empty means "any state for this protocol".
+    pub states: Vec<String>,
 }
 
 impl Filter {
@@ -67,12 +79,27 @@ impl Filter {
             unix_socket: args.unix_socket,
             and_mode: args.and_mode,
             terse: args.terse,
+            link_count_max: args.link_count_max,
             ..Default::default()
         };
 
         f.set_files(args.files.clone());
         f.set_dir(args.dir.clone());
         f.set_dir_recurse(args.dir_recurse.clone());
+
+        // Parse -s protocol:state selections
+        for spec in &args.state_filter {
+            if let Some((proto, states)) = spec.split_once(':') {
+                f.state_filters.push(StateFilter {
+                    protocol: proto.trim().to_uppercase(),
+                    states: states
+                        .split(',')
+                        .map(|s| s.trim().to_uppercase())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                });
+            }
+        }
 
         // Parse PIDs
         if let Some(ref pids) = args.pid {
@@ -388,6 +415,37 @@ impl Filter {
         if let Some(ref dir) = self.dir_recurse {
             let prefix = self.dir_recurse_prefix.as_ref().unwrap();
             if !file.name.starts_with(prefix) && file.name != *dir {
+                return false;
+            }
+        }
+
+        // +Ln: keep only files whose link count is available and less than n.
+        // `+L1` selects unlinked (deleted-but-open) files whose link count is 0.
+        if let Some(max) = self.link_count_max {
+            match file.nlink {
+                Some(nl) if nl < max => {}
+                _ => return false,
+            }
+        }
+
+        // -s protocol:state — select sockets by protocol and TCP state.
+        if !self.state_filters.is_empty() {
+            let matched = match &file.socket_info {
+                Some(si) => self.state_filters.iter().any(|sf| {
+                    if !si.protocol.eq_ignore_ascii_case(&sf.protocol) {
+                        return false;
+                    }
+                    if sf.states.is_empty() {
+                        return true;
+                    }
+                    match &si.tcp_state {
+                        Some(st) => sf.states.iter().any(|s| s == st.as_str()),
+                        None => false,
+                    }
+                }),
+                None => false,
+            };
+            if !matched {
                 return false;
             }
         }
@@ -2808,5 +2866,111 @@ mod tests {
         assert_eq!(f.network_type, Some(6));
         assert_eq!(f.network_filters[0].protocol.as_deref(), Some("TCP"));
         assert_eq!(f.network_filters[0].port_start, Some(443));
+    }
+
+    #[test]
+    fn link_count_max_selects_unlinked_file() {
+        // `+L1` → link_count_max = 1: a file with nlink 0 (unlinked but open) passes.
+        let mut f = Filter::default();
+        f.link_count_max = Some(1);
+        let mut file = make_file(3, FileType::Reg, "/tmp/deleted");
+        file.nlink = Some(0);
+        assert!(f.matches_file(&file));
+    }
+
+    #[test]
+    fn link_count_max_rejects_linked_file() {
+        // A normal file (nlink >= 1) is excluded under `+L1`.
+        let mut f = Filter::default();
+        f.link_count_max = Some(1);
+        let mut file = make_file(3, FileType::Reg, "/tmp/live");
+        file.nlink = Some(1);
+        assert!(!f.matches_file(&file));
+    }
+
+    #[test]
+    fn link_count_max_rejects_file_without_nlink() {
+        // Sockets/pipes have no link count; `+Ln` never selects them.
+        let mut f = Filter::default();
+        f.link_count_max = Some(1);
+        let mut file = make_file(4, FileType::Reg, "/tmp/x");
+        file.nlink = None;
+        assert!(!f.matches_file(&file));
+    }
+
+    #[test]
+    fn link_count_max_higher_threshold_admits_single_link() {
+        // `+L2` selects files with link count < 2, i.e. nlink 0 or 1.
+        let mut f = Filter::default();
+        f.link_count_max = Some(2);
+        let mut file = make_file(5, FileType::Reg, "/tmp/x");
+        file.nlink = Some(1);
+        assert!(f.matches_file(&file));
+        file.nlink = Some(2);
+        assert!(!f.matches_file(&file));
+    }
+
+    #[test]
+    fn no_link_count_filter_admits_any_nlink() {
+        // Without `+Ln`, link count never filters (default output).
+        let f = Filter::default();
+        let mut file = make_file(6, FileType::Reg, "/tmp/x");
+        file.nlink = Some(9);
+        assert!(f.matches_file(&file));
+        file.nlink = None;
+        assert!(f.matches_file(&file));
+    }
+
+    #[test]
+    fn from_args_plus_l1_sets_link_count_max() {
+        let args = Args::parse_from(["lsofrs", "+L1"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.link_count_max, Some(1));
+    }
+
+    #[test]
+    fn state_filter_selects_matching_tcp_state() {
+        // -s TCP:LISTEN keeps LISTEN sockets, drops others.
+        let args = Args::parse_from(["lsofrs", "-sTCP:LISTEN"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.state_filters.len(), 1);
+        assert_eq!(f.state_filters[0].protocol, "TCP");
+        assert_eq!(f.state_filters[0].states, vec!["LISTEN"]);
+
+        let listen = make_tcp_file(3, "TCP", 8080, 0); // helper sets state = Listen
+        assert!(f.matches_file(&listen));
+    }
+
+    #[test]
+    fn state_filter_rejects_wrong_state_and_nonsocket() {
+        let mut f = Filter::default();
+        f.state_filters.push(StateFilter {
+            protocol: "TCP".to_string(),
+            states: vec!["ESTABLISHED".to_string()],
+        });
+        // A LISTEN socket does not match an ESTABLISHED filter.
+        let listen = make_tcp_file(3, "TCP", 8080, 0);
+        assert!(!f.matches_file(&listen));
+        // A plain file is never selected by a state filter.
+        let reg = make_file(4, FileType::Reg, "/tmp/x");
+        assert!(!f.matches_file(&reg));
+    }
+
+    #[test]
+    fn state_filter_protocol_only_matches_any_state() {
+        let mut f = Filter::default();
+        f.state_filters.push(StateFilter {
+            protocol: "TCP".to_string(),
+            states: vec![],
+        });
+        let listen = make_tcp_file(3, "TCP", 8080, 0);
+        assert!(f.matches_file(&listen));
+    }
+
+    #[test]
+    fn from_args_plus_l_bare_has_no_link_filter() {
+        let args = Args::parse_from(["lsofrs", "+L"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.link_count_max, None);
     }
 }

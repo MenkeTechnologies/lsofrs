@@ -375,6 +375,13 @@ impl OpenFile {
             None => String::new(),
         }
     }
+    /// `nlink_str` — link count as a string, empty when unavailable.
+    pub fn nlink_str(&self) -> String {
+        match self.nlink {
+            Some(n) => n.to_string(),
+            None => String::new(),
+        }
+    }
     /// `node_str` — see implementation.
     pub fn node_str(&self) -> String {
         match self.inode {
@@ -903,6 +910,26 @@ mod tests {
     fn open_file_node_str_empty() {
         let f = OpenFile::default();
         assert_eq!(f.node_str(), "");
+    }
+
+    #[test]
+    fn open_file_nlink_str_present() {
+        let f = OpenFile {
+            nlink: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(f.nlink_str(), "0");
+        let f = OpenFile {
+            nlink: Some(7),
+            ..Default::default()
+        };
+        assert_eq!(f.nlink_str(), "7");
+    }
+
+    #[test]
+    fn open_file_nlink_str_absent_is_empty() {
+        let f = OpenFile::default();
+        assert_eq!(f.nlink_str(), "");
     }
 
     // ── Process ─────────────────────────────────────────────────────

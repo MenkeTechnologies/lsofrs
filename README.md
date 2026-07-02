@@ -115,6 +115,8 @@ lsf --json                    # JSON array output
 lsf -J                        # JSON (short form)
 lsf -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)
 lsf -t                        # terse (PIDs only)
+lsf +L                        # add NLINK (link count) column
+lsf +L1                       # select unlinked open files (link count < 1)
 ```
 
 ### Selection Combinators
@@ -127,7 +129,26 @@ lsf -u ^root                  # exclude root
 lsf -a -p 1234 -i             # AND: PID 1234 AND network
 lsf -d 0-10                   # FD range 0-10
 lsf -c '/nginx|apache/'       # regex command match
+lsf -s TCP:LISTEN             # sockets in LISTEN state
+lsf -V -p 999                 # report search items that matched nothing
 ```
+
+### lsof Option Compatibility
+
+lsofrs parses the full `lsof(8)` option grammar (getopt clusters plus the `+`/`-`
+prefix family and attached arguments like `-o9`, `-sTCP:LISTEN`, `+L1`).
+
+```bash
+lsf -l                        # numeric UID instead of login name
+lsf -o                        # always show file offset (-o9 = 9 digits)
+lsf -s                        # always show file size
+lsf +c 0                      # unlimited command column width (0 = no truncation)
+lsf -T                        # TCP/TPI info (state shown by default)
+lsf -v                        # version (lsof -v); -V reports unfound search items
+```
+
+Legacy/platform-only options are accepted and silently ignored for drop-in
+script compatibility: `-A -b -C -D +|-E +|-e +|-f -K -k +|-m +|-M -O -S -x +|-X -z -Z`.
 
 ---
 
@@ -186,6 +207,7 @@ Find file descriptors pointing to deleted files — a common source of disk spac
 lsf --stale                   # find all deleted-file FDs
 lsf --stale -u www-data       # deleted files held by www-data
 lsf --stale --json            # JSON output
+lsf +L1                       # lsof-native equivalent: files with link count < 1
 ```
 
 ### Listening Ports (`--ports`)

@@ -25,7 +25,7 @@ page so you can grep with `/`:
 .RB "\(em " "-i address syntax, -n/-P/-N/-U"
 .br
 .B 4.  DISPLAY FORMATS
-.RB "\(em " "-F fields, -J JSON, -t terse, -0 NUL, --csv"
+.RB "\(em " "-F fields, -J JSON, -t terse, -0 NUL, --csv, +L link counts, -l/-o/-s/+c/-T"
 .br
 .B 5.  ADVANCED LIVE MODES
 .RB "\(em " "--tui, --top, --watch, --stale, --ports, --pipe-chain, --net-map, --tree, --monitor, --follow, --leak-detect, --summary, --delta"
@@ -266,6 +266,23 @@ Emit each row as a JSON object, one per line (JSONL/NDJSON).
 Compatible with
 .BR jq (1).
 .TP
+.BI +L " [n]"
+List file link counts in an
+.B NLINK
+column.
+.B +L
+alone lists every link count;
+.BI +L n
+restricts output to files whose link count is less than
+.IR n .
+.B +L1
+selects open files that have been unlinked (link count 0) \(em the
+lsof-native equivalent of
+.BR \-\-stale .
+Link counts are unavailable for sockets and most pipes/FIFOs, so those
+are never selected by
+.BI +L n .
+.TP
 .B \-\-csv
 Pure CSV output (RFC 4180 quoting) for spreadsheets and pipelines.
 Header row included unless suppressed.
@@ -289,11 +306,49 @@ output.  Safe for filenames containing newlines.
 .B \-w
 Suppress warning messages on stderr.
 .TP
-.BR \-V ", " \-\-version
+.B \-l
+Show the numeric user ID instead of resolving it to a login name.
+.TP
+.BI \-o " [n]"
+Always display the file offset instead of size in the SIZE/OFF column;
+optional
+.I n
+sets the number of decimal digits.
+.TP
+.B \-s
+Bare: always display file size.  With
+.IR proto : state
+(e.g.
+.BR TCP:LISTEN ", " UDP:Idle ):
+select only sockets in those states (comma-separate multiple states).
+.TP
+.BI +c " [w]"
+Command column width in initial characters;
+.B +c0
+means unlimited.  Default 15.
+.TP
+.B \-T
+Request TCP/TPI info.  lsofrs shows the connection state by default, so this
+is accepted for compatibility.
+.TP
+.B \-V
+Report each search specification (\fB\-p\fR, \fB\-c\fR, \fB\-u\fR, and named
+files) that matched nothing, one per line on standard error.
+.TP
+.BR \-v ", " \-\-version
 Display version information and exit.
 .TP
 .BR \-h ", " \-\-help
 Display help and exit.
+.SS Compatibility options (accepted, no effect on this platform)
+.PP
+For drop-in compatibility with scripts written against
+.BR lsof (8),
+the following options are parsed and silently ignored (their arguments, where
+present, are consumed):
+.BR \-A ", " \-b ", " \-C ", " \-D ", " +|\-E ", " +|\-e ", " +|\-f ", "
+.BR \-K ", " \-k ", " +|\-m ", " +|\-M ", " \-O ", " \-S ", " \-x ", "
+.BR +|\-X ", " \-z ", " \-Z .
 .SH "5.  ADVANCED LIVE MODES"
 .SS 5.1 Unified TUI (\-\-tui)
 Full-screen tabbed dashboard with all modes in one interface.  7

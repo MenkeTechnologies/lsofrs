@@ -10,7 +10,8 @@ use clap::Parser;
     author = "Jacob Menke",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
                   Supports regular files, directories, sockets, pipes, devices, and streams.",
-    disable_help_flag = true
+    disable_help_flag = true,
+    disable_version_flag = true
 )]
 /// `Args` — see fields for layout.
 pub struct Args {
@@ -165,6 +166,62 @@ pub struct Args {
     #[arg(long = "dir-recurse", alias = "+D")]
     pub dir_recurse: Option<String>,
 
+    /// List file link counts (NLINK column). Set by `+L` / `+Ln`.
+    #[arg(long = "list-nlink")]
+    pub list_nlink: bool,
+
+    /// Select only files whose link count is less than N (set by `+Ln`, e.g. `+L1` = unlinked files)
+    #[arg(long = "link-count-max")]
+    pub link_count_max: Option<u64>,
+
+    /// Display version and exit (lsof `-v`)
+    #[arg(short = 'v', long = "version")]
+    pub version: bool,
+
+    /// Report search items that were requested but not found (lsof `-V`)
+    #[arg(short = 'V')]
+    pub report_unfound: bool,
+
+    /// Show numeric UID instead of login name (lsof `-l`)
+    #[arg(short = 'l')]
+    pub numeric_uid: bool,
+
+    /// Always display file offset instead of size (lsof `-o`)
+    #[arg(long = "offset-always")]
+    pub offset_always: bool,
+
+    /// Decimal digits to show in offset (lsof `-on`)
+    #[arg(long = "offset-digits")]
+    pub offset_digits: Option<usize>,
+
+    /// Always display file size, never offset (lsof `-s` without a spec)
+    #[arg(long = "size-always")]
+    pub size_always: bool,
+
+    /// Select sockets by protocol state, e.g. `TCP:LISTEN` (lsof `-s p:s`)
+    #[arg(long = "state-filter")]
+    pub state_filter: Vec<String>,
+
+    /// Show TCP/TPI state and queue info (lsof `-T`)
+    #[arg(long = "tcp-info")]
+    pub tcp_info: bool,
+
+    /// Follow symlinks/mount points while walking `+d`/`+D` (lsof `-x`)
+    #[arg(long = "cross-over")]
+    pub cross_over: bool,
+
+    /// Command column width; 0 means unlimited (lsof `+c w`)
+    #[arg(long = "command-width")]
+    pub command_width: Option<usize>,
+
+    /// List tasks/threads of matching processes (lsof `-K`)
+    #[arg(long = "list-tasks")]
+    pub list_tasks: bool,
+
+    /// Repeat until no output is produced (lsof `+r`)
+    #[arg(long = "repeat-until")]
+    pub repeat_until: bool,
+
     /// Files/directories to search
     pub files: Vec<String>,
 }
@@ -181,6 +238,7 @@ impl Args {
         let dcyan = "\x1b[36m";
         let dmagenta = "\x1b[35m";
         let reset = "\x1b[0m";
+        let version = env!("CARGO_PKG_VERSION");
 
         println!(
             r#"
@@ -194,7 +252,7 @@ impl Args {
 {dyellow}    ░ ░  ░ ░  ░    ░ ░ ░ ▒   ░ ░ ░ ░  ░   ░ ░  ░ {reset}
 {dyellow}      ░        ░        ░ ░           ░           ░{reset}
 
-{cyan}  >> FILE DESCRIPTOR SCANNER v4.7.1 << {reset}
+{cyan}  >> FILE DESCRIPTOR SCANNER v{version} << {reset}
 {magenta}  [ mapping the topology of open files ]{reset}
 
 {yellow}  USAGE:{reset} lsofrs [OPTION]... [FILE]...
@@ -207,6 +265,8 @@ impl Args {
 {green}   -g [PGID]         {reset}exclude(^) or select process group IDs
 {green}   -p PID            {reset}select by PID {magenta}(comma-separated, ^excludes){reset}
 {green}   -u USER           {reset}select by login name or UID {magenta}(comma-separated, ^excludes){reset}
+{green}   -s PROTO:STATE    {reset}select sockets by state {magenta}(e.g. TCP:LISTEN){reset}
+{green}   -V                {reset}report search items that matched nothing
 
 {cyan}  ── NETWORK ───────────────────────────────────────{reset}
 {green}   -i [ADDR]         {reset}select internet connections
@@ -223,6 +283,12 @@ impl Args {
 
 {cyan}  ── DISPLAY ───────────────────────────────────────{reset}
 {green}   -F [FIELDS]       {reset}select output fields; -F ? for help
+{green}   +L [n]            {reset}list link counts (NLINK); {magenta}+Ln selects link count < n (+L1 = unlinked){reset}
+{green}   -l                {reset}show numeric UID instead of login name
+{green}   -o [n]            {reset}always show file offset {magenta}(n = decimal digits){reset}
+{green}   -s                {reset}always show file size {magenta}(bare; see -s PROTO:STATE to select){reset}
+{green}   +c [w]            {reset}command column width {magenta}(0 = unlimited, default 15){reset}
+{green}   -T                {reset}TCP/TPI info {magenta}(state shown by default){reset}
 {green}   -J, --json        {reset}output in JSON format
 {green}   -R                {reset}list parent PID
 {green}   --pgid-show       {reset}show process group IDs
@@ -232,7 +298,7 @@ impl Args {
 {green}   --color MODE      {reset}color output: auto, always, never {magenta}(default: auto){reset}
 
 {cyan}  ── SYSTEM ────────────────────────────────────────{reset}
-{green}   +|-r [SECONDS]    {reset}repeat mode {magenta}(default: 1){reset}
+{green}   +|-r [SECONDS]    {reset}repeat mode {magenta}(default: 1; +r repeats until no output){reset}
 {green}   --leak-detect[=I[,N]] {reset}detect FD leaks: poll every I secs {magenta}(default: 5,3){reset}
 {green}   --delta           {reset}highlight new/gone FDs in repeat mode
 {green}   -W, --monitor     {reset}live full-screen refresh mode {magenta}(like top){reset}
@@ -247,7 +313,7 @@ impl Args {
 {green}   --csv              {reset}CSV output format {magenta}(for spreadsheets/pipelines){reset}
 {green}   --net-map          {reset}network connections grouped by remote host
 {green}   --tui              {reset}unified TUI with tabs for all modes
-{green}   -V, --version     {reset}display version information
+{green}   -v, --version     {reset}display version information
 
 {cyan}  ── EXAMPLES ──────────────────────────────────────{reset}
 {green}   lsofrs -i :8080       {reset}list files using port 8080
@@ -258,18 +324,18 @@ impl Args {
 {green}   lsofrs -i TCP         {reset}list all TCP connections
 
 {cyan}  ── INFO ──────────────────────────────────────────{reset}
-{magenta}  v4.7.1 {reset}// {yellow}(c) lsof contributors{reset}
+{magenta}  v{version} {reset}// {yellow}(c) lsof contributors{reset}
 Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
 {magenta}  Every open file tells a story.{reset}"#,
         );
     }
-    /// `parse_from` — see implementation.
+    /// `parse_from` — normalizes lsof `+|-` option grammar, then delegates to clap.
     pub fn parse_from<I, T>(args: I) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,
     {
-        <Self as Parser>::parse_from(args)
+        <Self as Parser>::parse_from(normalize_lsof_args(args))
     }
     /// `leak_detect_params` — see implementation.
     pub fn leak_detect_params(&self) -> Option<(u64, usize)> {
@@ -284,6 +350,221 @@ Anyone can list all files; /dev warnings disabled; kernel ID check enabled.
             }
         }
     }
+}
+
+/// Translate the full lsof `+|-` option grammar into clap-parseable tokens.
+///
+/// clap uses getopt-with-`--`-longs; lsof adds a `+` prefix family and options
+/// with optional attached arguments (`-o9`, `-sTCP:LISTEN`, `+L1`). This is the
+/// single place that bridges the two: it splits `-`-clusters getopt-style, maps
+/// each lsof option to its clap equivalent (a short flag, a `--long`, or nothing
+/// for accept-and-ignore compatibility options), and passes anything after `--`
+/// through untouched.
+fn normalize_lsof_args<I, T>(args: I) -> Vec<std::ffi::OsString>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let toks: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
+    let mut out: Vec<std::ffi::OsString> = Vec::new();
+    let mut idx = 0;
+    let mut after_dashdash = false;
+
+    // Program name passes through verbatim.
+    if let Some(first) = toks.first() {
+        out.push(first.clone());
+        idx = 1;
+    }
+
+    while idx < toks.len() {
+        let tok = &toks[idx];
+        let next = toks.get(idx + 1).and_then(|t| t.to_str());
+
+        if after_dashdash {
+            out.push(tok.clone());
+            idx += 1;
+            continue;
+        }
+
+        match tok.to_str() {
+            Some("--") => {
+                out.push(tok.clone());
+                after_dashdash = true;
+                idx += 1;
+            }
+            Some(s) if s.starts_with('+') && s.len() >= 2 => {
+                let (mut emitted, consumed_next) = expand_plus_token(s, next);
+                out.append(&mut emitted);
+                idx += if consumed_next { 2 } else { 1 };
+            }
+            Some(s) if s.starts_with('-') && !s.starts_with("--") && s.len() >= 2 => {
+                let (mut emitted, consumed_next) = expand_dash_cluster(&s[1..], next);
+                out.append(&mut emitted);
+                idx += if consumed_next { 2 } else { 1 };
+            }
+            // Non-UTF8, "--", "-", or a bare positional: pass through.
+            _ => {
+                out.push(tok.clone());
+                idx += 1;
+            }
+        }
+    }
+    out
+}
+
+/// Expand a single `-`-prefixed cluster (getopt-style) into clap tokens.
+/// Returns the emitted tokens and whether the following argv token was consumed
+/// (only accept-and-ignore options that take a separate arg consume it).
+fn expand_dash_cluster(body: &str, next: Option<&str>) -> (Vec<std::ffi::OsString>, bool) {
+    let chars: Vec<char> = body.chars().collect();
+    let mut out: Vec<std::ffi::OsString> = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        let rest: String = chars[i + 1..].iter().collect();
+        match c {
+            // No-arg flags clap already knows — keep and continue the cluster.
+            'a' | 'l' | 'n' | 'N' | 'P' | 'R' | 't' | 'U' | 'v' | 'V' | 'w' => {
+                out.push(format!("-{c}").into());
+                i += 1;
+            }
+            'h' | '?' => {
+                out.push("-h".into());
+                i += 1;
+            }
+            // Arg-taking flags clap knows: rest (if any) is the value, else clap
+            // pairs the next argv token. Either way the cluster ends.
+            'c' | 'd' | 'g' | 'i' | 'p' | 'u' | 'F' | 'r' => {
+                if rest.is_empty() {
+                    out.push(format!("-{c}").into());
+                } else {
+                    out.push(format!("-{c}{rest}").into());
+                }
+                break;
+            }
+            // Accept-and-ignore, no argument — continue the cluster.
+            // `-L` disables link-count listing, which is already the default.
+            'b' | 'O' | 'C' | 'M' | 'X' | 'E' | 'L' => {
+                i += 1;
+            }
+            // Accept-and-ignore, optional attached arg — drop rest, end cluster.
+            'z' | 'Z' | 'S' | 'f' => {
+                break;
+            }
+            // Accept-and-ignore, required arg — drop rest, or the next token.
+            'A' | 'k' | 'm' | 'D' | 'e' => {
+                let consumed = rest.is_empty() && next.is_some();
+                return (out, consumed);
+            }
+            // -o [n]: always show offset; leading digits set the precision.
+            'o' => {
+                let digits: String = rest.chars().take_while(|d| d.is_ascii_digit()).collect();
+                out.push("--offset-always".into());
+                if !digits.is_empty() {
+                    out.push("--offset-digits".into());
+                    out.push(digits.clone().into());
+                }
+                let consumed = digits.len();
+                if i + 1 + consumed >= chars.len() {
+                    break;
+                }
+                i += 1 + consumed;
+            }
+            // -s [p:s]: bare -> always size; with a colon spec -> state filter.
+            's' => {
+                if rest.is_empty() {
+                    out.push("--size-always".into());
+                    break;
+                } else if rest.contains(':') {
+                    out.push("--state-filter".into());
+                    out.push(rest.into());
+                    break;
+                } else {
+                    out.push("--size-always".into());
+                    i += 1;
+                }
+            }
+            // Meaningful lsof-only flags with optional selectors we accept but
+            // treat as "show all" / "enable".
+            'T' => {
+                out.push("--tcp-info".into());
+                break;
+            }
+            'x' => {
+                out.push("--cross-over".into());
+                break;
+            }
+            'K' => {
+                out.push("--list-tasks".into());
+                break;
+            }
+            // Unknown single-char: keep it and let clap decide.
+            _ => {
+                out.push(format!("-{c}").into());
+                i += 1;
+            }
+        }
+    }
+    (out, false)
+}
+
+/// Expand a single `+`-prefixed lsof token into clap tokens.
+fn expand_plus_token(s: &str, next: Option<&str>) -> (Vec<std::ffi::OsString>, bool) {
+    let mut out: Vec<std::ffi::OsString> = Vec::new();
+    let rest = &s[2..]; // characters after `+X`
+    match &s[1..2] {
+        "L" => {
+            if rest.is_empty() {
+                out.push("--list-nlink".into());
+            } else if let Ok(n) = rest.parse::<u64>() {
+                out.push("--list-nlink".into());
+                out.push("--link-count-max".into());
+                out.push(n.to_string().into());
+            } else {
+                out.push(s.into()); // not a valid +Ln token
+            }
+        }
+        // Directory search — clap pairs the value (attached or next token).
+        "d" => {
+            out.push("--dir".into());
+            if !rest.is_empty() {
+                out.push(rest.into());
+            }
+        }
+        "D" => {
+            out.push("--dir-recurse".into());
+            if !rest.is_empty() {
+                out.push(rest.into());
+            }
+        }
+        // Command column width (0 = unlimited).
+        "c" => {
+            out.push("--command-width".into());
+            if !rest.is_empty() {
+                out.push(rest.into());
+            }
+        }
+        // Repeat until no output; optional attached interval.
+        "r" => {
+            out.push("--repeat-until".into());
+            out.push("-r".into());
+            let interval = if rest.chars().all(|c| c.is_ascii_digit()) && !rest.is_empty() {
+                rest
+            } else {
+                "1"
+            };
+            out.push(interval.into());
+        }
+        // Accept-and-ignore `+` options that take a separate arg.
+        "e" => {
+            let consumed = rest.is_empty() && next.is_some();
+            return (out, consumed);
+        }
+        // Accept-and-ignore `+` toggles.
+        "w" | "f" | "E" | "M" | "X" | "m" => {}
+        _ => out.push(s.into()),
+    }
+    (out, false)
 }
 
 #[cfg(test)]
@@ -1339,5 +1620,199 @@ mod tests {
     fn parse_command_comma_separated_literals() {
         let args = Args::parse_from(["lsofrs", "-c", "sshd,nginx"]);
         assert_eq!(args.command.as_deref(), Some("sshd,nginx"));
+    }
+
+    #[test]
+    fn parse_plus_l_bare_enables_nlink_listing_no_filter() {
+        let args = Args::parse_from(["lsofrs", "+L"]);
+        assert!(args.list_nlink);
+        assert_eq!(args.link_count_max, None);
+    }
+
+    #[test]
+    fn parse_plus_l1_selects_unlinked_files() {
+        let args = Args::parse_from(["lsofrs", "+L1"]);
+        assert!(args.list_nlink);
+        assert_eq!(args.link_count_max, Some(1));
+    }
+
+    #[test]
+    fn parse_plus_ln_arbitrary_number() {
+        let args = Args::parse_from(["lsofrs", "+L5"]);
+        assert!(args.list_nlink);
+        assert_eq!(args.link_count_max, Some(5));
+    }
+
+    #[test]
+    fn parse_minus_l_is_default_no_listing() {
+        let args = Args::parse_from(["lsofrs", "-L"]);
+        assert!(!args.list_nlink);
+        assert_eq!(args.link_count_max, None);
+    }
+
+    #[test]
+    fn parse_plus_l1_with_pid_filter() {
+        let args = Args::parse_from(["lsofrs", "+L1", "-p", "1234"]);
+        assert!(args.list_nlink);
+        assert_eq!(args.link_count_max, Some(1));
+        assert_eq!(args.pid.as_deref(), Some("1234"));
+    }
+
+    #[test]
+    fn parse_plus_l_nonnumeric_suffix_is_positional() {
+        // `+Lx` isn't a valid link-count token; it must not be swallowed.
+        let args = Args::parse_from(["lsofrs", "+Lx"]);
+        assert!(!args.list_nlink);
+        assert_eq!(args.link_count_max, None);
+        assert_eq!(args.files, vec!["+Lx"]);
+    }
+
+    #[test]
+    fn normalize_leaves_unrelated_args_untouched() {
+        let out = normalize_lsof_args(["lsofrs", "-p", "1", "/tmp/x"]);
+        let strs: Vec<String> = out.iter().map(|s| s.to_string_lossy().into()).collect();
+        assert_eq!(strs, vec!["lsofrs", "-p", "1", "/tmp/x"]);
+    }
+
+    // Helper: run the normalizer and return the emitted tokens as Strings.
+    fn norm(args: &[&str]) -> Vec<String> {
+        normalize_lsof_args(args.iter().copied())
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn normalize_splits_grouped_short_flags() {
+        assert_eq!(norm(&["lsofrs", "-nP"]), vec!["lsofrs", "-n", "-P"]);
+        assert_eq!(norm(&["lsofrs", "-aNP"]), vec!["lsofrs", "-a", "-N", "-P"]);
+    }
+
+    #[test]
+    fn normalize_cluster_ends_at_arg_taking_flag() {
+        // `-nPi4TCP` → -n -P -i with attached value 4TCP.
+        assert_eq!(norm(&["lsofrs", "-nPi4TCP"]), vec!["lsofrs", "-n", "-P", "-i4TCP"]);
+    }
+
+    #[test]
+    fn normalize_bare_arg_option_lets_clap_pair_next() {
+        assert_eq!(norm(&["lsofrs", "-p", "123"]), vec!["lsofrs", "-p", "123"]);
+        assert_eq!(norm(&["lsofrs", "-i", "TCP"]), vec!["lsofrs", "-i", "TCP"]);
+    }
+
+    #[test]
+    fn normalize_offset_option() {
+        assert_eq!(norm(&["lsofrs", "-o"]), vec!["lsofrs", "--offset-always"]);
+        assert_eq!(
+            norm(&["lsofrs", "-o9"]),
+            vec!["lsofrs", "--offset-always", "--offset-digits", "9"]
+        );
+    }
+
+    #[test]
+    fn normalize_size_and_state_filter() {
+        assert_eq!(norm(&["lsofrs", "-s"]), vec!["lsofrs", "--size-always"]);
+        assert_eq!(
+            norm(&["lsofrs", "-sTCP:LISTEN"]),
+            vec!["lsofrs", "--state-filter", "TCP:LISTEN"]
+        );
+    }
+
+    #[test]
+    fn normalize_accept_ignore_no_arg_flags_dropped() {
+        // -b -O -C -M -X -E carry no behavior; they must not reach clap or leak.
+        assert_eq!(norm(&["lsofrs", "-bOC", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
+    }
+
+    #[test]
+    fn normalize_accept_ignore_arg_option_consumes_value() {
+        // -A takes a device-cache path; both the flag and its value are dropped.
+        assert_eq!(norm(&["lsofrs", "-A", "/dev/cache", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
+        assert_eq!(norm(&["lsofrs", "-k/vmunix", "-p", "1"]), vec!["lsofrs", "-p", "1"]);
+    }
+
+    #[test]
+    fn normalize_tcp_info_and_cross_over_ignore_selectors() {
+        assert_eq!(norm(&["lsofrs", "-Tqs"]), vec!["lsofrs", "--tcp-info"]);
+        assert_eq!(norm(&["lsofrs", "-xl"]), vec!["lsofrs", "--cross-over"]);
+    }
+
+    #[test]
+    fn normalize_plus_c_command_width() {
+        assert_eq!(norm(&["lsofrs", "+c0"]), vec!["lsofrs", "--command-width", "0"]);
+        assert_eq!(norm(&["lsofrs", "+c", "20"]), vec!["lsofrs", "--command-width", "20"]);
+    }
+
+    #[test]
+    fn normalize_plus_d_dir_forms() {
+        assert_eq!(norm(&["lsofrs", "+d", "/tmp"]), vec!["lsofrs", "--dir", "/tmp"]);
+        assert_eq!(norm(&["lsofrs", "+D/var"]), vec!["lsofrs", "--dir-recurse", "/var"]);
+    }
+
+    #[test]
+    fn normalize_stops_transforming_after_double_dash() {
+        assert_eq!(
+            norm(&["lsofrs", "--", "-o", "+L1"]),
+            vec!["lsofrs", "--", "-o", "+L1"]
+        );
+    }
+
+    #[test]
+    fn parse_lowercase_v_is_version() {
+        let args = Args::parse_from(["lsofrs", "-v"]);
+        assert!(args.version);
+        assert!(!args.report_unfound);
+    }
+
+    #[test]
+    fn parse_uppercase_v_is_report_unfound() {
+        let args = Args::parse_from(["lsofrs", "-V", "-p", "1"]);
+        assert!(args.report_unfound);
+        assert!(!args.version);
+    }
+
+    #[test]
+    fn parse_numeric_uid_flag() {
+        let args = Args::parse_from(["lsofrs", "-l"]);
+        assert!(args.numeric_uid);
+    }
+
+    #[test]
+    fn parse_offset_always_and_digits() {
+        let bare = Args::parse_from(["lsofrs", "-o"]);
+        assert!(bare.offset_always);
+        assert_eq!(bare.offset_digits, None);
+        let padded = Args::parse_from(["lsofrs", "-o9"]);
+        assert!(padded.offset_always);
+        assert_eq!(padded.offset_digits, Some(9));
+    }
+
+    #[test]
+    fn parse_size_always_and_state_filter() {
+        let size = Args::parse_from(["lsofrs", "-s"]);
+        assert!(size.size_always);
+        let state = Args::parse_from(["lsofrs", "-sTCP:LISTEN"]);
+        assert_eq!(state.state_filter, vec!["TCP:LISTEN"]);
+    }
+
+    #[test]
+    fn parse_command_width_via_plus_c() {
+        let args = Args::parse_from(["lsofrs", "+c0"]);
+        assert_eq!(args.command_width, Some(0));
+    }
+
+    #[test]
+    fn parse_tcp_info_and_cross_over_and_tasks() {
+        let args = Args::parse_from(["lsofrs", "-T", "-x", "-K"]);
+        assert!(args.tcp_info);
+        assert!(args.cross_over);
+        assert!(args.list_tasks);
+    }
+
+    #[test]
+    fn parse_accept_ignore_options_do_not_error() {
+        // These legacy/platform options must parse cleanly and select nothing.
+        let args = Args::parse_from(["lsofrs", "-b", "-O", "-C", "-A", "/dev/x", "-p", "1"]);
+        assert_eq!(args.pid.as_deref(), Some("1"));
     }
 }

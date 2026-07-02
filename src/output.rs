@@ -111,6 +111,74 @@ impl Theme {
     }
 }
 
+/// Display-affecting options derived from lsof flags (`-l`, `-o`, `-s`, `+c`,
+/// `-T`, `+L`). Controls how the columnar output is rendered, not which rows
+/// are selected.
+#[derive(Default, Clone)]
+pub struct DisplayOpts {
+    /// `+L`: show the NLINK column.
+    pub show_nlink: bool,
+    /// `-l`: show numeric UID instead of login name.
+    pub numeric_uid: bool,
+    /// `-o`: always show file offset in the SIZE/OFF column.
+    pub offset_always: bool,
+    /// `-s` (bare): always show file size in the SIZE/OFF column.
+    pub size_always: bool,
+    /// `-on`: decimal digits to pad the offset to.
+    pub offset_digits: Option<usize>,
+    /// `-T`: TCP/TPI info requested (state is already shown by default).
+    pub tcp_info: bool,
+    /// `+c w`: command column width; `Some(0)` means unlimited.
+    pub command_width: Option<usize>,
+}
+
+impl DisplayOpts {
+    /// Build from parsed CLI args.
+    pub fn from_args(args: &crate::cli::Args) -> Self {
+        Self {
+            show_nlink: args.list_nlink,
+            numeric_uid: args.numeric_uid,
+            offset_always: args.offset_always,
+            size_always: args.size_always,
+            offset_digits: args.offset_digits,
+            tcp_info: args.tcp_info,
+            command_width: args.command_width,
+        }
+    }
+
+    /// Maximum command-column width in bytes; `+c 0` means unlimited.
+    fn cmd_cap(&self) -> usize {
+        match self.command_width {
+            Some(0) => usize::MAX,
+            Some(w) => w,
+            None => 15,
+        }
+    }
+
+    /// Render the SIZE/OFF cell for a file, honoring `-o`/`-s`.
+    fn size_off_cell(&self, f: &OpenFile) -> String {
+        if self.offset_always && let Some(off) = f.offset {
+            return match self.offset_digits {
+                Some(d) => format!("0t{off:0width$}", width = d),
+                None => format!("0t{off}"),
+            };
+        }
+        if self.size_always && let Some(sz) = f.size {
+            return format!("{sz}");
+        }
+        f.size_or_offset_str()
+    }
+
+    /// Render the USER cell for a process, honoring `-l`.
+    fn user_cell(&self, p: &Process) -> String {
+        if self.numeric_uid {
+            p.uid.to_string()
+        } else {
+            truncate_max_bytes(p.username(), 8).to_string()
+        }
+    }
+}
+
 /// Column widths computed from data
 struct ColWidths {
     cmd: usize,
@@ -121,12 +189,13 @@ struct ColWidths {
     device: usize,
     size_off: usize,
     node: usize,
+    nlink: usize,
     pgid: usize,
     ppid: usize,
 }
 
 impl ColWidths {
-    fn compute(procs: &[Process], show_pgid: bool, show_ppid: bool) -> Self {
+    fn compute(procs: &[Process], show_pgid: bool, show_ppid: bool, disp: &DisplayOpts) -> Self {
         let mut w = ColWidths {
             cmd: 7,      // "COMMAND" or "PROCESS"
             pid: 3,      // "PID" or "PRC"
@@ -136,14 +205,16 @@ impl ColWidths {
             device: 6,   // "DEVICE" or "DEV/ICE"
             size_off: 8, // "SIZE/OFF"
             node: 4,     // "NODE"
+            nlink: 5,    // "NLINK"
             pgid: 4,     // "PGID"
             ppid: 4,     // "PPID"
         };
 
+        let cmd_cap = disp.cmd_cap();
         for p in procs {
-            w.cmd = w.cmd.max(p.command.len().min(15));
+            w.cmd = w.cmd.max(p.command.len().min(cmd_cap));
             w.pid = w.pid.max(p.pid.to_string().len());
-            w.user = w.user.max(p.username().len().min(8));
+            w.user = w.user.max(disp.user_cell(p).len());
             if show_pgid {
                 w.pgid = w.pgid.max(p.pgid.to_string().len());
             }
@@ -156,8 +227,11 @@ impl ColWidths {
                 w.fd = w.fd.max(fd_str.len());
                 w.type_ = w.type_.max(f.file_type.as_str().len());
                 w.device = w.device.max(f.device_str().len());
-                w.size_off = w.size_off.max(f.size_or_offset_str().len());
+                w.size_off = w.size_off.max(disp.size_off_cell(f).len());
                 w.node = w.node.max(f.node_str().len());
+                if disp.show_nlink {
+                    w.nlink = w.nlink.max(f.nlink_str().len());
+                }
             }
         }
 
@@ -170,9 +244,11 @@ pub fn print_processes(
     theme: &Theme,
     show_pgid: bool,
     show_ppid: bool,
+    disp: &DisplayOpts,
     delta_status: DeltaFn<'_>,
 ) {
-    let w = ColWidths::compute(procs, show_pgid, show_ppid);
+    let show_nlink = disp.show_nlink;
+    let w = ColWidths::compute(procs, show_pgid, show_ppid, disp);
     let out = io::stdout();
     let mut out = out.lock();
 
@@ -193,9 +269,9 @@ pub fn print_processes(
     if show_ppid {
         let _ = write!(out, "{:>rw$} ", theme.ppid_title(), rw = w.ppid);
     }
-    let _ = writeln!(
+    let _ = write!(
         out,
-        "{user:<uw$} {fd:<fw$} {type_:<tw$} {dev:<dw$} {szoff:>sw$} {node:<nw$} {name}{reset}",
+        "{user:<uw$} {fd:<fw$} {type_:<tw$} {dev:<dw$} {szoff:>sw$} {node:<nw$} ",
         user = theme.user_title(),
         uw = w.user,
         fd = theme.fd_title(),
@@ -208,15 +284,21 @@ pub fn print_processes(
         sw = w.size_off,
         node = theme.node_title(),
         nw = w.node,
+    );
+    if show_nlink {
+        let _ = write!(out, "{:>lw$} ", "NLINK", lw = w.nlink);
+    }
+    let _ = writeln!(
+        out,
+        "{name}{reset}",
         name = theme.name_title(),
         reset = theme.reset(),
     );
 
     let mut row = 0usize;
     for p in procs {
-        let username = p.username();
-        let user_display = truncate_max_bytes(username, 8);
-        let cmd_display = truncate_max_bytes(&p.command, 15);
+        let user_display = disp.user_cell(p);
+        let cmd_display = truncate_max_bytes(&p.command, disp.cmd_cap());
 
         let mut first = true;
         for f in &p.files {
@@ -224,7 +306,7 @@ pub fn print_processes(
             let fd_str = f.fd.with_access(f.access);
             let type_str = f.file_type.as_str();
             let dev_str = f.device_str();
-            let szoff_str = f.size_or_offset_str();
+            let szoff_str = disp.size_off_cell(f);
             let node_str = f.node_str();
             let name_str = f.full_name();
 
@@ -280,9 +362,9 @@ pub fn print_processes(
                 let _ = write!(out, "{:<uw$} ", "", uw = w.user);
             }
 
-            let _ = writeln!(
+            let _ = write!(
                 out,
-                "{green}{fd:<fw$}{reset} {blue}{type_:<tw$}{reset} {dim}{dev:<dw$}{reset} {szoff:>sw$} {node:<nw$} {name}{suffix}{reset}",
+                "{green}{fd:<fw$}{reset} {blue}{type_:<tw$}{reset} {dim}{dev:<dw$}{reset} {szoff:>sw$} {node:<nw$} ",
                 green = theme.green(),
                 fd = fd_str,
                 fw = w.fd,
@@ -297,8 +379,16 @@ pub fn print_processes(
                 sw = w.size_off,
                 node = node_str,
                 nw = w.node,
+            );
+            if show_nlink {
+                let _ = write!(out, "{:>lw$} ", f.nlink_str(), lw = w.nlink);
+            }
+            let _ = writeln!(
+                out,
+                "{name}{suffix}{reset}",
                 name = name_str,
                 suffix = suffix,
+                reset = theme.reset(),
             );
 
             row += 1;
@@ -507,7 +597,7 @@ mod tests {
 
     #[test]
     fn col_widths_defaults_on_empty() {
-        let w = ColWidths::compute(&[], false, false);
+        let w = ColWidths::compute(&[], false, false, &DisplayOpts::default());
         assert!(w.cmd >= 7);
         assert!(w.pid >= 3);
     }
@@ -515,22 +605,22 @@ mod tests {
     #[test]
     fn col_widths_grows_for_long_pid() {
         let p = make_proc(1234567, "test", vec![make_file(3, FileType::Reg, "/x")]);
-        let w = ColWidths::compute(&[p], false, false);
+        let w = ColWidths::compute(&[p], false, false, &DisplayOpts::default());
         assert!(w.pid >= 7); // "1234567" is 7 chars
     }
 
     #[test]
     fn col_widths_cmd_capped_at_15() {
         let p = make_proc(1, "a_very_long_command_name_here", vec![]);
-        let w = ColWidths::compute(&[p], false, false);
+        let w = ColWidths::compute(&[p], false, false, &DisplayOpts::default());
         assert!(w.cmd <= 15);
     }
 
     #[test]
     fn col_widths_pgid_only_with_flag() {
         let p = make_proc(1, "test", vec![]);
-        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false);
-        let w_yes = ColWidths::compute(std::slice::from_ref(&p), true, false);
+        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w_yes = ColWidths::compute(std::slice::from_ref(&p), true, false, &DisplayOpts::default());
         // pgid width should only grow when show_pgid is true
         assert_eq!(w_no.pgid, 4); // default
         assert!(w_yes.pgid >= 1);
@@ -539,8 +629,8 @@ mod tests {
     #[test]
     fn col_widths_ppid_only_with_flag() {
         let p = Process::new(1, 123456, 1, 0, "x".to_string(), vec![]);
-        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false);
-        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, true);
+        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, true, &DisplayOpts::default());
         assert_eq!(w_no.ppid, 4);
         assert!(w_yes.ppid >= 6);
     }
@@ -555,7 +645,7 @@ mod tests {
             ..Default::default()
         };
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
         assert!(w.fd >= "cwd".len());
     }
 
@@ -569,7 +659,7 @@ mod tests {
             ..Default::default()
         };
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
         assert!(w.type_ >= "VERYLONGTYPE".len());
     }
 
@@ -578,7 +668,7 @@ mod tests {
         let mut f = make_file(1, FileType::Reg, "/x");
         f.offset = Some(4096);
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
         assert!(w.size_off >= "0t4096".len());
     }
 
@@ -590,7 +680,7 @@ mod tests {
             ..Default::default()
         });
         let p = make_proc(1, "x", vec![f]);
-        let w = ColWidths::compute(std::slice::from_ref(&p), false, false);
+        let w = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
         assert!(w.node >= "TCP".len());
     }
 
@@ -599,7 +689,87 @@ mod tests {
     #[test]
     fn print_processes_empty_no_panic() {
         let theme = Theme::new(false);
-        print_processes(&[], &theme, false, false, None);
+        print_processes(&[], &theme, false, false, &DisplayOpts::default(), None);
+    }
+
+    #[test]
+    fn col_widths_nlink_only_with_flag() {
+        let mut f = make_file(3, FileType::Reg, "/x");
+        f.nlink = Some(123456);
+        let p = make_proc(1, "x", vec![f]);
+        let w_no = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts::default());
+        let w_yes = ColWidths::compute(std::slice::from_ref(&p), false, false, &DisplayOpts { show_nlink: true, ..Default::default() });
+        assert_eq!(w_no.nlink, 5); // default "NLINK" width, not grown
+        assert!(w_yes.nlink >= "123456".len());
+    }
+
+    #[test]
+    fn display_opts_size_off_cell_offset_always() {
+        let mut f = make_file(3, FileType::Reg, "/x");
+        f.size = Some(4096);
+        f.offset = Some(128);
+        let disp = DisplayOpts {
+            offset_always: true,
+            ..Default::default()
+        };
+        // -o forces the offset even though a size is present.
+        assert_eq!(disp.size_off_cell(&f), "0t128");
+        // -o9 pads to 9 decimal digits.
+        let padded = DisplayOpts {
+            offset_always: true,
+            offset_digits: Some(9),
+            ..Default::default()
+        };
+        assert_eq!(padded.size_off_cell(&f), "0t000000128");
+    }
+
+    #[test]
+    fn display_opts_size_off_cell_size_always() {
+        let mut f = make_file(3, FileType::Reg, "/x");
+        f.size = Some(4096);
+        f.offset = Some(128);
+        let disp = DisplayOpts {
+            size_always: true,
+            ..Default::default()
+        };
+        assert_eq!(disp.size_off_cell(&f), "4096");
+    }
+
+    #[test]
+    fn display_opts_user_cell_numeric_uid() {
+        let p = Process::new(10, 1, 10, 501, "x".to_string(), vec![]);
+        let numeric = DisplayOpts {
+            numeric_uid: true,
+            ..Default::default()
+        };
+        assert_eq!(numeric.user_cell(&p), "501");
+        // Default renders the login name (falls back to uid when unresolved).
+        let named = DisplayOpts::default();
+        assert!(!named.user_cell(&p).is_empty());
+    }
+
+    #[test]
+    fn display_opts_cmd_cap_unlimited_and_default() {
+        assert_eq!(DisplayOpts::default().cmd_cap(), 15);
+        let unlimited = DisplayOpts {
+            command_width: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(unlimited.cmd_cap(), usize::MAX);
+        let fixed = DisplayOpts {
+            command_width: Some(30),
+            ..Default::default()
+        };
+        assert_eq!(fixed.cmd_cap(), 30);
+    }
+
+    #[test]
+    fn print_processes_with_nlink_column_no_panic() {
+        let theme = Theme::new(false);
+        let mut f = make_file(3, FileType::Reg, "/tmp/x");
+        f.nlink = Some(0);
+        let procs = vec![make_proc(42, "test", vec![f])];
+        print_processes(&procs, &theme, false, false, &DisplayOpts { show_nlink: true, ..Default::default() }, None);
     }
 
     #[test]
@@ -610,7 +780,7 @@ mod tests {
             "test",
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
-        print_processes(&procs, &theme, false, false, None);
+        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), None);
     }
 
     #[test]
@@ -621,7 +791,7 @@ mod tests {
             "test",
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
-        print_processes(&procs, &theme, false, false, None);
+        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), None);
     }
 
     #[test]
@@ -632,7 +802,7 @@ mod tests {
             "test",
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
-        print_processes(&procs, &theme, true, true, None);
+        print_processes(&procs, &theme, true, true, &DisplayOpts::default(), None);
     }
 
     #[test]
@@ -644,7 +814,7 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::New;
-        print_processes(&procs, &theme, false, false, Some(&delta));
+        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
     }
 
     #[test]
@@ -656,7 +826,7 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::Gone;
-        print_processes(&procs, &theme, false, false, Some(&delta));
+        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
     }
 
     #[test]
@@ -668,7 +838,7 @@ mod tests {
             vec![make_file(3, FileType::Reg, "/tmp/x")],
         )];
         let delta = |_pid: i32, _fd: &str, _name: &str| DeltaStatus::Unchanged;
-        print_processes(&procs, &theme, false, false, Some(&delta));
+        print_processes(&procs, &theme, false, false, &DisplayOpts::default(), Some(&delta));
     }
 
     #[test]

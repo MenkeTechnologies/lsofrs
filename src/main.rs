@@ -35,18 +35,21 @@ use std::io::{self, IsTerminal};
 use std::thread;
 use std::time::Duration;
 
-use clap::Parser;
-
 use cli::Args;
 use filter::Filter;
 use output::Theme;
 use theme::{LsofTheme, ThemeName};
 
 fn main() {
-    let args = Args::parse();
+    let args = Args::parse_from(std::env::args_os());
 
     if args.help {
         Args::print_help();
+        return;
+    }
+
+    if args.version {
+        println!("lsofrs {}", env!("CARGO_PKG_VERSION"));
         return;
     }
 
@@ -69,6 +72,7 @@ fn main() {
     };
     let tui_theme = LsofTheme::from_name(ThemeName::from_str_loose(&theme_name));
     let filter = Filter::from_args(&args);
+    let disp = output::DisplayOpts::from_args(&args);
     let interval = args
         .repeat
         .unwrap_or_else(|| prefs.refresh_rate.unwrap_or(1));
@@ -172,7 +176,11 @@ fn main() {
         return;
     }
 
-    output::print_processes(&procs, &theme, args.show_pgid, args.show_ppid, None);
+    if args.report_unfound {
+        report_unfound(&args, &procs, &theme);
+    }
+
+    output::print_processes(&procs, &theme, args.show_pgid, args.show_ppid, &disp, None);
 }
 /// `gather_processes` — see implementation.
 pub fn gather_processes() -> Vec<types::Process> {
@@ -192,6 +200,67 @@ pub fn gather_processes() -> Vec<types::Process> {
     {
         eprintln!("lsofrs: unsupported platform (macOS, Linux, and FreeBSD are supported)");
         Vec::new()
+    }
+}
+
+/// lsof `-V`: report the positive search specifications (`-p`, `-c`, `-u`, and
+/// named files) that matched nothing in the (already-filtered) result set.
+/// Written to stderr, one line per unmatched spec, in lsof's terse style.
+fn report_unfound(args: &Args, procs: &[types::Process], theme: &Theme) {
+    let mut msgs: Vec<String> = Vec::new();
+
+    if let Some(ref pids) = args.pid {
+        for spec in pids.split(',').map(str::trim) {
+            if spec.starts_with('^') || spec.is_empty() {
+                continue;
+            }
+            if let Ok(pid) = spec.parse::<i32>()
+                && !procs.iter().any(|p| p.pid == pid)
+            {
+                msgs.push(format!("no PID found: {spec}"));
+            }
+        }
+    }
+
+    if let Some(ref cmds) = args.command {
+        for spec in cmds.split(',').map(str::trim) {
+            if spec.starts_with('^') || spec.is_empty() || spec.starts_with('/') {
+                continue; // skip exclusions and regexes
+            }
+            if !procs.iter().any(|p| p.command.starts_with(spec)) {
+                msgs.push(format!("no command found: {spec}"));
+            }
+        }
+    }
+
+    if let Some(ref users) = args.user {
+        for spec in users.split(',').map(str::trim) {
+            if spec.starts_with('^') || spec.is_empty() {
+                continue;
+            }
+            let found = if let Ok(uid) = spec.parse::<u32>() {
+                procs.iter().any(|p| p.uid == uid)
+            } else {
+                procs.iter().any(|p| p.username() == spec)
+            };
+            if !found {
+                msgs.push(format!("no user found: {spec}"));
+            }
+        }
+    }
+
+    for path in &args.files {
+        let matched = procs
+            .iter()
+            .flat_map(|p| &p.files)
+            .any(|f| f.name == *path || f.name.starts_with(&format!("{path}/")));
+        if !matched {
+            msgs.push(format!("no file found: {path}"));
+        }
+    }
+
+    for m in msgs {
+        eprintln!("{}lsofrs: {m}{}", theme.red(), theme.reset());
     }
 }
 
@@ -249,13 +318,24 @@ fn run_repeat(args: &Args, filter: &Filter, theme: &Theme, interval: u64) {
                 }
             });
 
+            let disp = output::DisplayOpts::from_args(args);
             match delta_fn {
-                Some(f) => {
-                    output::print_processes(&procs, theme, args.show_pgid, args.show_ppid, Some(&f))
-                }
-                None => {
-                    output::print_processes(&procs, theme, args.show_pgid, args.show_ppid, None)
-                }
+                Some(f) => output::print_processes(
+                    &procs,
+                    theme,
+                    args.show_pgid,
+                    args.show_ppid,
+                    &disp,
+                    Some(&f),
+                ),
+                None => output::print_processes(
+                    &procs,
+                    theme,
+                    args.show_pgid,
+                    args.show_ppid,
+                    &disp,
+                    None,
+                ),
             }
 
             // Print gone entries

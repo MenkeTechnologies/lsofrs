@@ -17,6 +17,14 @@ _arguments -C -s -S \
   '-P[inhibit port name lookup]' \
   '-U[select UNIX domain socket files]' \
   '-F[field output format (chars: p=pid, c=cmd, f=fd, n=name, t=type)]:fields:->fields' \
+  '+L[list link counts (NLINK); +Ln selects link count < n, +L1 = unlinked files]' \
+  '-l[show numeric UID instead of login name]' \
+  '-o[always show file offset instead of size]' \
+  '-s[always show size; -s PROTO:STATE selects sockets by state]:proto\:state:->states' \
+  '-T[TCP/TPI info (state shown by default)]' \
+  '+c[command column width (0 = unlimited)]:width' \
+  '-V[report search items that matched nothing]' \
+  '(-v --version)'{-v,--version}'[display version]' \
   '(-J --json)'{-J,--json}'[JSON output]' \
   '-R[show parent PIDs]' \
   '--pgid-show[show process group IDs]' \
@@ -42,7 +50,6 @@ _arguments -C -s -S \
   '--tui[unified TUI with tabs for all modes]' \
   '--color[color output mode]:mode:(auto always never)' \
   '--theme[color theme for TUI modes]:theme:(neon-sprawl classic solar-flare ice-breaker matrix blade-runner synthwave acid-rain ghost-wire red-sector deep-net overlock sakura-den data-stream neon-noir chrome-heart void-walker toxic-waste cyber-frost plasma-core steel-nerve dark-signal glitch-pop holo-shift night-city laser-grid quantum-flux bio-hazard darkwave megacorp zaibatsu)' \
-  '(-)'{-V,--version}'[display version]' \
   '*:file:_files' && ret=0
 
 case $state in
@@ -95,6 +102,15 @@ case $state in
   filedes)
     _sequence -s , _wanted -x file-descriptors expl "file descriptor" compadd - \
         cwd err jld ltz mem mmap pd rtd tr txt v86 && ret=0
+  ;;
+  states)
+    if compset -P 1 '*:'; then
+      _wanted -x tcp-states expl "TCP state" compadd -- \
+          LISTEN ESTABLISHED SYN_SENT SYN_RCVD CLOSE_WAIT FIN_WAIT_1 \
+          FIN_WAIT_2 TIME_WAIT CLOSED CLOSING LAST_ACK && ret=0
+    else
+      _wanted -x protocols expl "protocol" compadd -qS : -- TCP UDP && ret=0
+    fi
   ;;
 esac
 
