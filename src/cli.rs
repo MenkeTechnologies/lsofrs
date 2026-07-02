@@ -1815,4 +1815,67 @@ mod tests {
         let args = Args::parse_from(["lsofrs", "-b", "-O", "-C", "-A", "/dev/x", "-p", "1"]);
         assert_eq!(args.pid.as_deref(), Some("1"));
     }
+
+    #[test]
+    fn normalize_plus_r_repeat_until() {
+        // +r bare -> repeat-until with default 1s interval; +r5 keeps the interval.
+        assert_eq!(
+            norm(&["lsofrs", "+r"]),
+            vec!["lsofrs", "--repeat-until", "-r", "1"]
+        );
+        assert_eq!(
+            norm(&["lsofrs", "+r5"]),
+            vec!["lsofrs", "--repeat-until", "-r", "5"]
+        );
+    }
+
+    #[test]
+    fn normalize_offset_with_trailing_flag_letter() {
+        // -o9a: offset(9 digits) then a separate -a flag — the digit run must not
+        // swallow the trailing 'a'.
+        assert_eq!(
+            norm(&["lsofrs", "-o9a"]),
+            vec!["lsofrs", "--offset-always", "--offset-digits", "9", "-a"]
+        );
+    }
+
+    #[test]
+    fn normalize_optional_arg_ignores_do_not_consume_next() {
+        // -z/-Z/-S have optional args; a following positional must survive.
+        assert_eq!(norm(&["lsofrs", "-z", "/tmp/x"]), vec!["lsofrs", "/tmp/x"]);
+        assert_eq!(norm(&["lsofrs", "-S", "/tmp/x"]), vec!["lsofrs", "/tmp/x"]);
+    }
+
+    #[test]
+    fn normalize_plus_toggles_dropped() {
+        assert_eq!(
+            norm(&["lsofrs", "+w", "+f", "+E", "+M", "+X", "-p", "1"]),
+            vec!["lsofrs", "-p", "1"]
+        );
+    }
+
+    #[test]
+    fn normalize_plus_e_consumes_separate_arg() {
+        // +e takes a filesystem path; both are dropped, positional survives.
+        assert_eq!(norm(&["lsofrs", "+e", "/mnt", "/tmp/x"]), vec!["lsofrs", "/tmp/x"]);
+    }
+
+    #[test]
+    fn normalize_plus_lx_invalid_passes_through() {
+        // +Lx is not a valid +Ln token and must reach clap unchanged (positional).
+        assert_eq!(norm(&["lsofrs", "+Lx"]), vec!["lsofrs", "+Lx"]);
+    }
+
+    #[test]
+    fn normalize_standalone_meaningful_lsof_only_flags() {
+        assert_eq!(norm(&["lsofrs", "-K"]), vec!["lsofrs", "--list-tasks"]);
+        assert_eq!(norm(&["lsofrs", "-x"]), vec!["lsofrs", "--cross-over"]);
+    }
+
+    #[test]
+    fn normalize_bare_dash_and_program_name_preserved() {
+        // A lone "-" (stdin convention) and argv[0] pass through untouched.
+        assert_eq!(norm(&["lsofrs", "-"]), vec!["lsofrs", "-"]);
+        assert_eq!(norm(&["lsofrs"]), vec!["lsofrs"]);
+    }
 }

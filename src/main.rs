@@ -207,6 +207,15 @@ pub fn gather_processes() -> Vec<types::Process> {
 /// named files) that matched nothing in the (already-filtered) result set.
 /// Written to stderr, one line per unmatched spec, in lsof's terse style.
 fn report_unfound(args: &Args, procs: &[types::Process], theme: &Theme) {
+    for m in unfound_specs(args, procs) {
+        eprintln!("{}lsofrs: {m}{}", theme.red(), theme.reset());
+    }
+}
+
+/// Pure core of [`report_unfound`]: build the list of "no ... found" messages
+/// for every positive search spec that matched nothing. Exclusions (`^`) and
+/// regex command specs (`/.../`) are skipped.
+fn unfound_specs(args: &Args, procs: &[types::Process]) -> Vec<String> {
     let mut msgs: Vec<String> = Vec::new();
 
     if let Some(ref pids) = args.pid {
@@ -259,9 +268,7 @@ fn report_unfound(args: &Args, procs: &[types::Process], theme: &Theme) {
         }
     }
 
-    for m in msgs {
-        eprintln!("{}lsofrs: {m}{}", theme.red(), theme.reset());
-    }
+    msgs
 }
 
 fn gather_and_filter(filter: &Filter) -> Vec<types::Process> {
@@ -359,5 +366,71 @@ fn run_leak_detect(filter: &Filter, interval: u64, threshold: usize, theme: &The
         detector.report(theme);
 
         thread::sleep(Duration::from_secs(interval));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use types::{OpenFile, Process};
+
+    fn proc_with(pid: i32, uid: u32, cmd: &str, file: &str) -> Process {
+        let f = OpenFile {
+            name: file.to_string(),
+            ..Default::default()
+        };
+        Process::new(pid, 1, pid, uid, cmd.to_string(), vec![f])
+    }
+
+    #[test]
+    fn unfound_reports_missing_pid_only() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        let args = Args::parse_from(["lsofrs", "-V", "-p", "100,999"]);
+        assert_eq!(unfound_specs(&args, &procs), vec!["no PID found: 999"]);
+    }
+
+    #[test]
+    fn unfound_skips_excluded_pid_spec() {
+        // `^100` is an exclusion, never reported even though no proc "matches" it.
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        let args = Args::parse_from(["lsofrs", "-V", "-p", "^100"]);
+        assert!(unfound_specs(&args, &procs).is_empty());
+    }
+
+    #[test]
+    fn unfound_command_prefix_match_counts_as_found() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        // "ba" is a prefix of "bash" -> found; "ghost" -> unfound.
+        let args = Args::parse_from(["lsofrs", "-V", "-c", "ba,ghost"]);
+        assert_eq!(unfound_specs(&args, &procs), vec!["no command found: ghost"]);
+    }
+
+    #[test]
+    fn unfound_command_regex_spec_is_skipped() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        let args = Args::parse_from(["lsofrs", "-V", "-c", "/nomatch/"]);
+        assert!(unfound_specs(&args, &procs).is_empty());
+    }
+
+    #[test]
+    fn unfound_numeric_user_spec() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        let args = Args::parse_from(["lsofrs", "-V", "-u", "501,4242"]);
+        assert_eq!(unfound_specs(&args, &procs), vec!["no user found: 4242"]);
+    }
+
+    #[test]
+    fn unfound_file_exact_and_prefix() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        // "/tmp" matches "/tmp/x" as a directory prefix -> found; "/no/such" -> unfound.
+        let args = Args::parse_from(["lsofrs", "-V", "/tmp", "/no/such"]);
+        assert_eq!(unfound_specs(&args, &procs), vec!["no file found: /no/such"]);
+    }
+
+    #[test]
+    fn unfound_empty_when_all_specs_match() {
+        let procs = vec![proc_with(100, 501, "bash", "/tmp/x")];
+        let args = Args::parse_from(["lsofrs", "-V", "-p", "100", "-c", "bash", "-u", "501"]);
+        assert!(unfound_specs(&args, &procs).is_empty());
     }
 }

@@ -749,6 +749,46 @@ mod tests {
     }
 
     #[test]
+    fn display_opts_offset_always_falls_back_when_no_offset() {
+        // -o with a file that has only a size (no offset) falls back to size.
+        let mut f = make_file(3, FileType::Reg, "/x");
+        f.size = Some(512);
+        f.offset = None;
+        let disp = DisplayOpts {
+            offset_always: true,
+            ..Default::default()
+        };
+        assert_eq!(disp.size_off_cell(&f), "512");
+    }
+
+    #[test]
+    fn display_opts_size_always_falls_back_when_no_size() {
+        // -s with a file that has only an offset (no size) falls back to offset.
+        let mut f = make_file(3, FileType::Reg, "/x");
+        f.size = None;
+        f.offset = Some(64);
+        let disp = DisplayOpts {
+            size_always: true,
+            ..Default::default()
+        };
+        assert_eq!(disp.size_off_cell(&f), "0t64");
+    }
+
+    #[test]
+    fn display_opts_from_args_maps_all_flags() {
+        let args = crate::cli::Args::parse_from([
+            "lsofrs", "+L", "-l", "-o", "-s", "-T", "+c0",
+        ]);
+        let disp = DisplayOpts::from_args(&args);
+        assert!(disp.show_nlink);
+        assert!(disp.numeric_uid);
+        assert!(disp.offset_always);
+        assert!(disp.size_always);
+        assert!(disp.tcp_info);
+        assert_eq!(disp.command_width, Some(0));
+    }
+
+    #[test]
     fn display_opts_cmd_cap_unlimited_and_default() {
         assert_eq!(DisplayOpts::default().cmd_cap(), 15);
         let unlimited = DisplayOpts {

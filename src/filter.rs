@@ -2967,6 +2967,57 @@ mod tests {
         assert!(f.matches_file(&listen));
     }
 
+    // Helper: a TCP socket file forced to a specific state.
+    fn tcp_in_state(state: TcpState) -> OpenFile {
+        let mut file = make_tcp_file(3, "TCP", 8080, 0);
+        file.socket_info.as_mut().unwrap().tcp_state = Some(state);
+        file
+    }
+
+    #[test]
+    fn state_filter_multiple_states_comma_list() {
+        let mut f = Filter::default();
+        f.state_filters.push(StateFilter {
+            protocol: "TCP".to_string(),
+            states: vec!["LISTEN".to_string(), "ESTABLISHED".to_string()],
+        });
+        assert!(f.matches_file(&tcp_in_state(TcpState::Listen)));
+        assert!(f.matches_file(&tcp_in_state(TcpState::Established)));
+        assert!(!f.matches_file(&tcp_in_state(TcpState::CloseWait)));
+    }
+
+    #[test]
+    fn state_filter_lowercase_spec_matches_via_args() {
+        // `-stcp:listen` must select the same as `-sTCP:LISTEN`.
+        let args = Args::parse_from(["lsofrs", "-stcp:listen"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.state_filters[0].protocol, "TCP");
+        assert_eq!(f.state_filters[0].states, vec!["LISTEN"]);
+        assert!(f.matches_file(&tcp_in_state(TcpState::Listen)));
+    }
+
+    #[test]
+    fn state_filter_wrong_protocol_excluded() {
+        let mut f = Filter::default();
+        f.state_filters.push(StateFilter {
+            protocol: "UDP".to_string(),
+            states: vec![],
+        });
+        // A TCP socket is not selected by a UDP-only state filter.
+        assert!(!f.matches_file(&make_tcp_file(3, "TCP", 8080, 0)));
+    }
+
+    #[test]
+    fn state_filter_multiple_specs_are_ored() {
+        // Two -s specs: match if either applies.
+        let args = Args::parse_from(["lsofrs", "-sTCP:LISTEN", "-sTCP:ESTABLISHED"]);
+        let f = Filter::from_args(&args);
+        assert_eq!(f.state_filters.len(), 2);
+        assert!(f.matches_file(&tcp_in_state(TcpState::Listen)));
+        assert!(f.matches_file(&tcp_in_state(TcpState::Established)));
+        assert!(!f.matches_file(&tcp_in_state(TcpState::TimeWait)));
+    }
+
     #[test]
     fn from_args_plus_l_bare_has_no_link_filter() {
         let args = Args::parse_from(["lsofrs", "+L"]);
