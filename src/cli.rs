@@ -7,7 +7,7 @@ use clap::Parser;
     name = "lsofrs",
     version = env!("CARGO_PKG_VERSION"),
     about = "List System Open Files — modern Rust implementation",
-    author = "Jacob Menke",
+    author = "MenkeTechnologies",
     long_about = "lsofrs maps the relationship between processes and the files they hold open.\n\
                   Supports regular files, directories, sockets, pipes, devices, and streams.",
     disable_help_flag = true,
