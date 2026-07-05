@@ -2,7 +2,7 @@
 name = "lsofrs"
 version = "4.9.1"
 edition = "2024"
-authors = ["MenkeTechnologies"]
+authors = ["MenkeTechnologies <linux.dev25@gmail.com>"]
 description = "Modern, high-performance lsof implementation in Rust"
 license = "MIT"
 repository = "https://github.com/MenkeTechnologies/lsofrs"
