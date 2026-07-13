@@ -33,6 +33,7 @@ _arguments -C -s -S \
   '-w[suppress warnings]' \
   '-r[repeat every N seconds]:seconds' \
   '--leak-detect=-[FD leak detection \[interval,threshold\]]::interval,threshold' \
+  '--stall[per-FD socket backpressure classifier (TX-STALLED/RX-STARVED)]' \
   '--delta[delta highlighting in repeat mode]' \
   '(-W --monitor)'{-W,--monitor}'[live full-screen monitor mode]' \
   '(--summary --stats)'{--summary,--stats}'[aggregate FD summary/statistics]' \

@@ -294,6 +294,22 @@ lsf --leak-detect=10,5        # 10s interval, flag after 5 consecutive increases
 lsf --leak-detect -u wizard   # monitor only wizard's processes
 ```
 
+### Socket Backpressure (`--stall`)
+
+Polls each socket FD's kernel send/recv buffer occupancy across successive samples and issues a directional verdict per `(pid, fd)`:
+
+- **TX-STALLED** — send buffer persistently near capacity and not draining: the peer (or the network) is not reading.
+- **RX-STARVED** — recv buffer persistently high and growing: the local process is not `read()`-ing fast enough.
+- **HEALTHY** — neither buffer is backed up.
+
+macOS reports both queue occupancy and buffer limits, so classification is fill-ratio based. On Linux the queue occupancies come from `/proc/net/tcp` (buffer limits are unavailable there), so the classifier uses a trend rule (persistently non-zero and non-draining/growing).
+
+```bash
+lsf --stall                   # single scan, then poll on the default interval
+lsf --stall -r 2              # sample every 2s
+lsf --stall -i TCP -c myapp   # only myapp's TCP sockets
+```
+
 ### Summary / Statistics (`--summary`)
 
 Aggregate FD breakdown with bar charts, top processes, per-user totals. Add `-r N` for live auto-refreshing TUI mode.
@@ -404,6 +420,7 @@ src/
 ├── monitor.rs   # Live full-screen mode (crossterm alternate screen)
 ├── follow.rs    # Single-process FD tracking with status transitions
 ├── leak.rs      # Circular-buffer leak detector
+├── stall.rs     # Per-FD socket backpressure classifier (TX-STALLED / RX-STARVED)
 ├── delta.rs     # Iteration-diff engine for change highlighting
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance

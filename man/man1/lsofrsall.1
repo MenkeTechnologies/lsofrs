@@ -28,7 +28,7 @@ page so you can grep with `/`:
 .RB "\(em " "-F fields, -J JSON, -t terse, -0 NUL, --csv, +L link counts, -l/-o/-s/+c/-T"
 .br
 .B 5.  ADVANCED LIVE MODES
-.RB "\(em " "--tui, --top, --watch, --stale, --ports, --pipe-chain, --net-map, --tree, --monitor, --follow, --leak-detect, --summary, --delta"
+.RB "\(em " "--tui, --top, --watch, --stale, --ports, --pipe-chain, --net-map, --tree, --monitor, --follow, --leak-detect, --stall, --summary, --delta"
 .br
 .B 6.  CYBERPUNK THEMES
 .RB "\(em " "31 built-in themes, custom palette editor"
@@ -477,7 +477,23 @@ monotonically increasing FD counts.
 .PP
 .BR \-\-leak-detect [= INTERVAL [, THRESHOLD ]]
 defaults to 5-second interval, 3-iteration threshold (minimum 2).
-.SS 5.13 Summary / Statistics (\-\-summary)
+.SS 5.13 Socket Backpressure (\-\-stall)
+Polls each socket FD's kernel send/recv buffer occupancy across successive
+samples and issues a directional verdict per
+.RB ( pid ", " fd ):
+.B TX-STALLED
+(send buffer persistently near capacity, not draining \(em peer not reading),
+.B RX-STARVED
+(recv buffer persistently high and growing \(em local process not draining),
+or
+.BR HEALTHY .
+Combine with
+.B \-r
+to set the sampling interval.  On macOS classification is fill-ratio based;
+on Linux the queue occupancies come from
+.I /proc/net/tcp
+and a trend rule is used (buffer limits are unavailable there).
+.SS 5.14 Summary / Statistics (\-\-summary)
 Aggregate FD breakdown with bar charts, top processes, per-user totals.
 Add
 .B \-r N
@@ -485,7 +501,7 @@ for live auto-refreshing TUI mode.
 Add
 .B \-i
 for network-only summary.
-.SS 5.14 Delta Highlighting (\-\-delta)
+.SS 5.15 Delta Highlighting (\-\-delta)
 Color-code changes between repeat iterations.  New FDs in green, gone
 in red.  Combine with
 .B "\-r SECONDS"
@@ -637,6 +653,7 @@ src/json.rs       \(em JSON serialization (serde)
 src/monitor.rs    \(em live full-screen (crossterm alternate screen)
 src/follow.rs     \(em single-process FD tracking
 src/leak.rs       \(em circular-buffer leak detector
+src/stall.rs      \(em per-FD socket backpressure classifier
 src/delta.rs      \(em iteration-diff engine
 src/summary.rs    \(em aggregate statistics with bar charts
 src/tree.rs       \(em process tree with FD inheritance

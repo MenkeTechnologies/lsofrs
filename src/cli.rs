@@ -106,6 +106,10 @@ pub struct Args {
     #[arg(long = "leak-detect")]
     pub leak_detect: Option<Option<String>>,
 
+    /// Per-FD socket backpressure classifier (TX-STALLED / RX-STARVED / HEALTHY)
+    #[arg(long = "stall")]
+    pub stall: bool,
+
     /// Process tree view with FD inheritance
     #[arg(long = "tree")]
     pub tree: bool,
@@ -300,6 +304,7 @@ impl Args {
 {cyan}  ── SYSTEM ────────────────────────────────────────{reset}
 {green}   +|-r [SECONDS]    {reset}repeat mode {magenta}(default: 1; +r repeats until no output){reset}
 {green}   --leak-detect[=I[,N]] {reset}detect FD leaks: poll every I secs {magenta}(default: 5,3){reset}
+{green}   --stall            {reset}per-FD socket backpressure: TX-STALLED / RX-STARVED {magenta}(use with -r){reset}
 {green}   --delta           {reset}highlight new/gone FDs in repeat mode
 {green}   -W, --monitor     {reset}live full-screen refresh mode {magenta}(like top){reset}
 {green}   --summary, --stats {reset}aggregate FD summary: type breakdown, top processes, per-user

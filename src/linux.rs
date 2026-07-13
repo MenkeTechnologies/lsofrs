@@ -283,6 +283,10 @@ struct SocketEntry {
     foreign: InetAddr,
     state: Option<TcpState>,
     unix_path: Option<String>,
+    /// Bytes queued in the kernel send buffer (`tx_queue` from `/proc/net/tcp`).
+    send_queue: Option<u64>,
+    /// Bytes queued in the kernel receive buffer (`rx_queue` from `/proc/net/tcp`).
+    recv_queue: Option<u64>,
 }
 
 /// Build a map of inode -> socket info from /proc/net/*
@@ -317,6 +321,8 @@ fn parse_inet_sockets(
         let local = parse_hex_endpoint(fields[1], &file_type);
         let foreign = parse_hex_endpoint(fields[2], &file_type);
         let state_hex = u32::from_str_radix(fields[3], 16).unwrap_or(0);
+        // fields[4] is `tx_queue:rx_queue`, both 8-digit hex byte counts.
+        let (send_queue, recv_queue) = parse_hex_queues(fields[4]);
         let inode: u64 = fields[9].parse().unwrap_or(0);
 
         if inode == 0 {
@@ -338,9 +344,20 @@ fn parse_inet_sockets(
                 foreign,
                 state,
                 unix_path: None,
+                send_queue,
+                recv_queue,
             },
         );
     }
+}
+
+/// Split the `/proc/net/tcp` `tx_queue:rx_queue` column into `(send, recv)`
+/// byte counts. Both halves are hexadecimal; a malformed half yields `None`.
+fn parse_hex_queues(field: &str) -> (Option<u64>, Option<u64>) {
+    let mut parts = field.split(':');
+    let tx = parts.next().and_then(|s| u64::from_str_radix(s, 16).ok());
+    let rx = parts.next().and_then(|s| u64::from_str_radix(s, 16).ok());
+    (tx, rx)
 }
 
 fn parse_hex_endpoint(hex: &str, file_type: &FileType) -> InetAddr {
@@ -428,6 +445,8 @@ fn parse_unix_sockets(path: &str, map: &mut HashMap<u64, SocketEntry>) {
                 foreign: InetAddr::default(),
                 state: None,
                 unix_path,
+                send_queue: None,
+                recv_queue: None,
             },
         );
     }
@@ -459,6 +478,8 @@ fn process_socket(
                 local: entry.local.clone(),
                 foreign: entry.foreign.clone(),
                 tcp_state: entry.state,
+                send_queue: entry.send_queue,
+                recv_queue: entry.recv_queue,
                 ..Default::default()
             }),
             ..Default::default()

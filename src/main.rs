@@ -21,6 +21,7 @@ mod output;
 mod pipe_chain;
 mod ports;
 mod stale;
+mod stall;
 mod strutil;
 mod summary;
 mod theme;
@@ -111,6 +112,12 @@ fn main() {
     // Leak detection mode
     if let Some((leak_interval, threshold)) = args.leak_detect_params() {
         run_leak_detect(&filter, leak_interval, threshold, &theme);
+        return;
+    }
+
+    // Socket backpressure classifier
+    if args.stall {
+        run_stall(&filter, interval, &theme);
         return;
     }
 
@@ -359,6 +366,18 @@ fn run_repeat(args: &Args, filter: &Filter, theme: &Theme, interval: u64) {
 
 fn run_leak_detect(filter: &Filter, interval: u64, threshold: usize, theme: &Theme) {
     let mut detector = leak::LeakDetector::new(threshold);
+
+    loop {
+        let procs = gather_and_filter(filter);
+        detector.update(&procs);
+        detector.report(theme);
+
+        thread::sleep(Duration::from_secs(interval));
+    }
+}
+
+fn run_stall(filter: &Filter, interval: u64, theme: &Theme) {
+    let mut detector = stall::StallDetector::new();
 
     loop {
         let procs = gather_and_filter(filter);

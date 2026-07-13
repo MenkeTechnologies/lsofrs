@@ -175,6 +175,25 @@ Report when a process's FD count has grown in at least
 .I THRESHOLD
 consecutive iterations (default: 3, minimum: 2).
 .TP
+.B \-\-stall
+Per-FD socket backpressure classifier. Polls each socket file descriptor's
+kernel send/recv buffer occupancy across successive samples and issues a
+directional verdict per
+.RB ( pid ", " fd ):
+.B TX-STALLED
+(send buffer persistently near capacity and not draining \(em the peer is not
+reading),
+.B RX-STARVED
+(recv buffer persistently high and growing \(em the local process is not
+draining it), or
+.BR HEALTHY .
+Combine with
+.B \-r
+to control the sampling interval. On macOS classification is fill-ratio based
+(buffer limits are known); on Linux the queue occupancies come from
+.I /proc/net/tcp
+and a trend rule is used.
+.TP
 .BR \-W ", " \-\-monitor
 Live full-screen refresh mode, similar to
 .BR top (1).
