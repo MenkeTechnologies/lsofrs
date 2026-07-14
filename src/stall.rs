@@ -166,8 +166,7 @@ impl StallDetector {
         }
 
         // Drop FDs that are gone and not currently stalled.
-        self.table
-            .retain(|_, e| e.seen || e.verdict.is_stalled());
+        self.table.retain(|_, e| e.seen || e.verdict.is_stalled());
     }
 
     /// Print the current backpressure report.
@@ -266,7 +265,10 @@ fn tx_severity(w: &[StallSample]) -> Option<f64> {
     if w.iter().all(|s| s.send_buf > 0) {
         // Fill-ratio rule: send buffer never drained below the high-water mark
         // across the window, and is not on a downward trend.
-        let ratios: Vec<f64> = w.iter().map(|s| s.send_q as f64 / s.send_buf as f64).collect();
+        let ratios: Vec<f64> = w
+            .iter()
+            .map(|s| s.send_q as f64 / s.send_buf as f64)
+            .collect();
         let min_r = ratios.iter().copied().fold(f64::INFINITY, f64::min);
         let first = *ratios.first().unwrap();
         let last = *ratios.last().unwrap();
@@ -296,7 +298,10 @@ fn tx_severity(w: &[StallSample]) -> Option<f64> {
 /// `None`.
 fn rx_severity(w: &[StallSample]) -> Option<f64> {
     if w.iter().all(|s| s.recv_buf > 0) {
-        let ratios: Vec<f64> = w.iter().map(|s| s.recv_q as f64 / s.recv_buf as f64).collect();
+        let ratios: Vec<f64> = w
+            .iter()
+            .map(|s| s.recv_q as f64 / s.recv_buf as f64)
+            .collect();
         let min_r = ratios.iter().copied().fold(f64::INFINITY, f64::min);
         let first = *ratios.first().unwrap();
         let last = *ratios.last().unwrap();
