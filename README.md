@@ -512,10 +512,10 @@ The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI struct
 
 ## [0x08] LICENSE
 
-MIT License — Jacob Menke
+MIT License — MenkeTechnologies
 
 ---
 
 ## [0xFF] CREDITS
 
-Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng) by Jacob Menke, which itself is a modernized fork of the original [lsof](https://github.com/lsof-org/lsof) by Vic Abell.
+Rust rewrite of [lsofng](https://github.com/MenkeTechnologies/lsofng) by MenkeTechnologies, which itself is a modernized fork of the original [lsof](https://github.com/lsof-org/lsof) by Vic Abell.
