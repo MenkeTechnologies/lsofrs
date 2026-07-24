@@ -203,24 +203,24 @@ struct InSockInfo {
     insi_flow: u32,
     insi_vflag: u8,
     insi_ip_ttl: u8,
-    _pad: [u8; 2],
+    insi_rfu_1: u32,
     insi_faddr: InAddr46,
     insi_laddr: InAddr46,
-    insi_v4: InAddr46V4,
-    insi_v6: InAddr46V6,
+    insi_v46: InAddr46Union,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct InAddr46 {
-    ina_46: InAddr46Union,
+    ia46_pad32: [u32; 3],
+    ia46_addr4: libc::in_addr,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 union InAddr46Union {
-    i46a_addr4: libc::in_addr,
-    i46a_addr6: libc::in6_addr,
+    insi_v4: InAddr46V4,
+    insi_v6: InAddr46V6,
 }
 
 #[repr(C)]
@@ -653,10 +653,10 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
 
                         if family == AF_INET {
                             let la = Ipv4Addr::from(u32::from_be(
-                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
+                                ini.insi_laddr.ia46_addr4.s_addr,
                             ));
                             let fa = Ipv4Addr::from(u32::from_be(
-                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
+                                ini.insi_faddr.ia46_addr4.s_addr,
                             ));
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
@@ -673,8 +673,10 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                             name =
                                 format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
+                            let la_bytes: [u8; 16] = unsafe { mem::transmute(ini.insi_laddr) };
+                            let fa_bytes: [u8; 16] = unsafe { mem::transmute(ini.insi_faddr) };
+                            let la = Ipv6Addr::from(la_bytes);
+                            let fa = Ipv6Addr::from(fa_bytes);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
@@ -700,10 +702,10 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
 
                         if family == AF_INET {
                             let la = Ipv4Addr::from(u32::from_be(
-                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
+                                ini.insi_laddr.ia46_addr4.s_addr,
                             ));
                             let fa = Ipv4Addr::from(u32::from_be(
-                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
+                                ini.insi_faddr.ia46_addr4.s_addr,
                             ));
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
@@ -720,8 +722,10 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                             name =
                                 format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
+                            let la_bytes: [u8; 16] = unsafe { mem::transmute(ini.insi_laddr) };
+                            let fa_bytes: [u8; 16] = unsafe { mem::transmute(ini.insi_faddr) };
+                            let la = Ipv6Addr::from(la_bytes);
+                            let fa = Ipv6Addr::from(fa_bytes);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
