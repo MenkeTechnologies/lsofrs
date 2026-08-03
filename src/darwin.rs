@@ -192,7 +192,7 @@ struct VnodeFdInfoWithPath {
     pvip: VnodeInfoPath,
 }
 
-// Socket info structures
+// Socket info structures — mirrors `struct in_sockinfo` in <sys/proc_info.h>.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct InSockInfo {
@@ -203,36 +203,43 @@ struct InSockInfo {
     insi_flow: u32,
     insi_vflag: u8,
     insi_ip_ttl: u8,
-    _pad: [u8; 2],
+    // `uint32_t rfu_1` in the header — a full reserved word, not 2 bytes of
+    // padding. Shrinking it slides insi_faddr/insi_laddr 4 bytes earlier and
+    // makes every address read land on the wrong field.
+    insi_rfu_1: u32,
     insi_faddr: InAddr46,
     insi_laddr: InAddr46,
-    insi_v4: InAddr46V4,
-    insi_v6: InAddr46V6,
+    insi_v4: InSockInfoV4,
+    insi_v6: InSockInfoV6,
 }
 
+/// `struct in4in6_addr` — an IPv4 address stored in the tail of a 16-byte slot,
+/// so it overlays the low word of the equivalent IPv6 address.
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct InAddr46 {
-    ina_46: InAddr46Union,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-union InAddr46Union {
+struct In4In6Addr {
+    i46a_pad32: [u32; 3],
     i46a_addr4: libc::in_addr,
-    i46a_addr6: libc::in6_addr,
+}
+
+/// The anonymous `insi_faddr` / `insi_laddr` union in `struct in_sockinfo`.
+#[repr(C)]
+#[derive(Copy, Clone)]
+union InAddr46 {
+    ina_46: In4In6Addr,
+    ina_6: libc::in6_addr,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct InAddr46V4 {
+struct InSockInfoV4 {
     in4_tos: u8,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct InAddr46V6 {
-    in6_hlim: c_int,
+struct InSockInfoV6 {
+    in6_hlim: u8,
     in6_cksum: c_int,
     in6_ifindex: u16,
     in6_hops: i16,
@@ -673,8 +680,8 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                             name =
                                 format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
+                            let la = Ipv6Addr::from(ini.insi_laddr.ina_6.s6_addr);
+                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_6.s6_addr);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
@@ -720,8 +727,8 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                             name =
                                 format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
                         } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_46.i46a_addr6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_46.i46a_addr6.s6_addr);
+                            let la = Ipv6Addr::from(ini.insi_laddr.ina_6.s6_addr);
+                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_6.s6_addr);
                             let lp = u16::from_be(ini.insi_lport as u16);
                             let fp = u16::from_be(ini.insi_fport as u16);
 
@@ -1081,6 +1088,32 @@ mod tests {
             );
             let _ = base;
         }
+    }
+
+    /// `in_sockinfo` layout drift silently swaps the local and foreign address
+    /// columns instead of failing, so pin every offset the address reads depend
+    /// on against <sys/proc_info.h>.
+    #[test]
+    fn ffi_in_sockinfo_field_offsets() {
+        assert_eq!(
+            mem::offset_of!(InSockInfo, insi_faddr) + mem::offset_of!(In4In6Addr, i46a_addr4),
+            44,
+            "insi_faddr.ina_46.i46a_addr4 offset"
+        );
+        assert_eq!(
+            mem::offset_of!(InSockInfo, insi_laddr) + mem::offset_of!(In4In6Addr, i46a_addr4),
+            60,
+            "insi_laddr.ina_46.i46a_addr4 offset"
+        );
+        assert_eq!(mem::offset_of!(InSockInfo, insi_faddr), 32, "insi_faddr");
+        assert_eq!(mem::offset_of!(InSockInfo, insi_laddr), 48, "insi_laddr");
+        assert_eq!(mem::offset_of!(InSockInfo, insi_v4), 64, "insi_v4");
+        assert_eq!(mem::offset_of!(InSockInfo, insi_v6), 68, "insi_v6");
+    }
+
+    #[test]
+    fn ffi_tcp_sockinfo_field_offsets() {
+        assert_eq!(mem::offset_of!(TcpSockInfo, tcpsi_state), 80, "tcpsi_state");
     }
 
     // ── Functional tests ────────────────────────────────────────────
