@@ -18,6 +18,14 @@ exclude = ["screenshots/", "*.png", "alias/"]
 name = "lsofrs"
 path = "src/main.rs"
 
+# `lsf` is the short name, built from the same main.rs — see the crate docs and
+# `src/main.rs`, both of which name it. The release workflow tars `lsofrs lsf`
+# and the Homebrew formula installs both, so dropping this declaration only made
+# the build rely on a stale artifact left in the cached target dir.
+[[bin]]
+name = "lsf"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

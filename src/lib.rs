@@ -4,7 +4,7 @@
 //! Supports regular files, directories, sockets, pipes, devices, and streams.
 //!
 //! The binary entry points (`lsofrs`, `lsf`, and the `lsof` alias crate) are
-//! all one line over [`run`], so every shipped name runs identical code.
+//! all one line over [`run()`], so every shipped name runs identical code.
 
 #![allow(dead_code)]
 
