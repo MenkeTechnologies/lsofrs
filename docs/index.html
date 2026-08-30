@@ -173,9 +173,10 @@
 
       <section class="tutorial-section">
         <h2>Quickstart</h2>
-        <p>Install from crates.io or source. The same binary is published twice — <code>lsofrs</code> (long) and <code>lsf</code> (short, quicker to type):</p>
+        <p>Install from crates.io or source. The tool ships under three command names &mdash; <code>lsofrs</code> (long), <code>lsf</code> (short, quicker to type), and <code>lsof</code> (the traditional name, shipped as an alias crate that is one line over <code>lsofrs::run()</code>):</p>
 <pre># install
-cargo install lsofrs
+cargo install lsofrs          # lsofrs + lsf
+cargo install lsof            # the lsof command name itself
 
 # from source
 git clone https://github.com/MenkeTechnologies/lsofrs
