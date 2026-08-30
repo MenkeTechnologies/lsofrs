@@ -1,6 +1,6 @@
 [package]
 name = "lsofrs"
-version = "4.9.3"
+version = "4.10.0"
 edition = "2024"
 authors = ["MenkeTechnologies <linux.dev25@gmail.com>"]
 description = "Modern, high-performance lsof implementation in Rust"
@@ -12,11 +12,7 @@ keywords = ["lsof", "process", "files", "sockets", "diagnostics"]
 categories = ["command-line-utilities", "os"]
 readme = "README.md"
 default-run = "lsofrs"
-exclude = ["screenshots/", "*.png"]
-
-[[bin]]
-name = "lsf"
-path = "src/main.rs"
+exclude = ["screenshots/", "*.png", "alias/"]
 
 [[bin]]
 name = "lsofrs"

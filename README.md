@@ -69,8 +69,14 @@ The same build also emits `target/release/lsf` (shorter form of `lsofrs`; same b
 Or install directly:
 
 ```bash
-cargo install --path .
+cargo install lsofrs                    # installs `lsofrs` and `lsf`
+cargo install lsof                      # installs the `lsof` command name itself
+cargo install --path .                  # from a checkout
 ```
+
+The [`lsof`](https://crates.io/crates/lsof) crate is a single `fn main()` over
+`lsofrs::run()` — same binary behaviour under the traditional name, and it
+shadows the system `lsof` on `PATH`.
 
 Install the man pages (short + full reference):
 

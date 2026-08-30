@@ -292,6 +292,12 @@ pub struct SummaryLiveMode {
     total_files: usize,
 }
 
+impl Default for SummaryLiveMode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SummaryLiveMode {
     /// `new` — see implementation.
     pub fn new() -> Self {
