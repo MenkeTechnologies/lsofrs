@@ -6,11 +6,11 @@ local -a state line expl alts suf hsuf pref
 _arguments -C -s -S \
   '(-)'{-\?,-h,--help}'[display help]' \
   '-a[AND selections (default: OR)]' \
-  '-c[select by command name (prefix, ^exclude, /regex/)]:command name' \
+  '(-c --command)'{-c,--command}'[select by command name (prefix, ^exclude, /regex/)]:command name' \
   '-d[select file descriptors (comma-separated, N-M ranges, ^FD to exclude)]:file descriptors:->filedes' \
-  '-g[select by process group ID (comma-separated)]:process group ID:_sequence -s , _pgids' \
-  '-p[select by PID (comma-separated, ^PID to exclude)]:process ID:_sequence -s , _pids' \
-  '-u[select by user (comma-separated, ^user to exclude)]:user:_users -S,' \
+  '(-g --pgid)'{-g,--pgid}'[select by process group ID (comma-separated)]:process group ID:_sequence -s , _pgids' \
+  '(-p --pid)'{-p,--pid}'[select by PID (comma-separated, ^PID to exclude)]:process ID:_sequence -s , _pids' \
+  '(-u --user)'{-u,--user}'[select by user (comma-separated, ^user to exclude)]:user:_users -S,' \
   '(*)*-i[select internet connections \[4|6|protocol@host:port\]]::address:->addresses' \
   '-n[inhibit hostname lookup]' \
   '-N[select NFS files]' \
@@ -37,6 +37,17 @@ _arguments -C -s -S \
   '--delta[delta highlighting in repeat mode]' \
   '(-W --monitor)'{-W,--monitor}'[live full-screen monitor mode]' \
   '(--summary --stats)'{--summary,--stats}'[aggregate FD summary/statistics]' \
+  '--list-nlink[list file link counts (NLINK column); set by +L / +Ln]' \
+  '--link-count-max[only files whose link count is below N (+Ln; +L1 = unlinked)]:count' \
+  '--offset-always[always display file offset instead of size (lsof -o)]' \
+  '--offset-digits[decimal digits to show in the offset (lsof -on)]:digits' \
+  '--size-always[always display file size, never offset (lsof -s with no spec)]' \
+  '*--state-filter[select sockets by protocol state, e.g. TCP:LISTEN (lsof -s p:s)]:state' \
+  '--tcp-info[show TCP/TPI state and queue info (lsof -T)]' \
+  '--cross-over[follow symlinks and mount points while walking +d/+D (lsof -x)]' \
+  '--command-width[command column width; 0 means unlimited (lsof +c w)]:width' \
+  '--list-tasks[list tasks/threads of matching processes (lsof -K)]' \
+  '--repeat-until[repeat until no output is produced (lsof +r)]' \
   '--follow[follow a single process FDs in real-time]:process ID:_pids' \
   '--tree[process tree view with FD counts]' \
   '--top=-[live top-N processes by FD count]::count' \
