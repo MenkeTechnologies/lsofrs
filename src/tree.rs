@@ -175,7 +175,7 @@ fn print_node(
         "├── "
     };
 
-    let username = users::get_user_by_uid(node.uid)
+    let username = uzers::get_user_by_uid(node.uid)
         .map(|u| u.name().to_string_lossy().into_owned())
         .unwrap_or_else(|| node.uid.to_string());
     let user_display = truncate_max_bytes(&username, 8);

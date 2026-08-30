@@ -211,7 +211,7 @@ fn render_summary_text(
         bold = theme.bold(),
     );
     for ps in procs.iter().take(TOP_N) {
-        let username = users::get_user_by_uid(ps.uid)
+        let username = uzers::get_user_by_uid(ps.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| ps.uid.to_string());
         let cmd = truncate_max_bytes(&ps.command, 15);
@@ -353,7 +353,7 @@ impl SummaryLiveMode {
         if content_row >= proc_data_start && content_row < proc_end {
             let idx = content_row - proc_data_start;
             if let Some(ps) = self.proc_stats.get(idx) {
-                let username = users::get_user_by_uid(ps.uid)
+                let username = uzers::get_user_by_uid(ps.uid)
                     .map(|u| u.name().to_string_lossy().into_owned())
                     .unwrap_or_else(|| ps.uid.to_string());
                 return vec![
@@ -546,7 +546,7 @@ fn render_summary_ratatui(
         if row >= area.y + area.height {
             break;
         }
-        let username = users::get_user_by_uid(ps.uid)
+        let username = uzers::get_user_by_uid(ps.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| ps.uid.to_string());
         let cmd = truncate_max_bytes(&ps.command, 15);

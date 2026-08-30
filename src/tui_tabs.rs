@@ -1464,7 +1464,7 @@ impl TabbedTui {
             } else {
                 "|-- ".to_string()
             };
-            let user = users::get_user_by_uid(uid)
+            let user = uzers::get_user_by_uid(uid)
                 .map(|u| u.name().to_string_lossy().into_owned())
                 .unwrap_or_else(|| uid.to_string());
             rows.push(TreeRow {

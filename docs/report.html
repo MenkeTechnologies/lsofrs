@@ -177,7 +177,7 @@
         </div>
         <div class="feature-card">
           <h4>Single-binary footprint</h4>
-          <p>One static <code>lsofrs</code> / <code>lsf</code> binary &mdash; clap derive parser, serde JSON, RFC 4180 CSV, ratatui TUI, crossterm terminal control, nix POSIX bindings, libc FFI, rayon work-stealing, regex selector, chrono timestamps, TOML config &mdash; all linked in. <strong>13 direct dependencies</strong>, all foundational crates likely to still build cleanly in 2035 (<code>clap</code>, <code>serde</code>, <code>libc</code>, <code>nix</code>, <code>regex</code>, <code>rayon</code>, <code>ratatui</code>, <code>crossterm</code>, <code>chrono</code>, <code>toml</code>, <code>dirs</code>, <code>users</code>, <code>serde_json</code>).</p>
+          <p>One static <code>lsofrs</code> / <code>lsf</code> binary &mdash; clap derive parser, serde JSON, RFC 4180 CSV, ratatui TUI, crossterm terminal control, nix POSIX bindings, libc FFI, rayon work-stealing, regex selector, chrono timestamps, TOML config &mdash; all linked in. <strong>13 direct dependencies</strong>, all foundational crates likely to still build cleanly in 2035 (<code>clap</code>, <code>serde</code>, <code>libc</code>, <code>nix</code>, <code>regex</code>, <code>rayon</code>, <code>ratatui</code>, <code>crossterm</code>, <code>chrono</code>, <code>toml</code>, <code>dirs</code>, <code>uzers</code>, <code>serde_json</code>).</p>
         </div>
         <div class="feature-card">
           <h4>Cross-platform parity</h4>
@@ -374,7 +374,7 @@
           <tr><td><code>crossterm</code></td><td>0.29</td><td>Terminal control (alternate screen, raw mode, key/mouse events) under every live mode</td></tr>
           <tr><td><code>libc</code></td><td>0.2</td><td>Raw FFI types for Darwin libproc structs and POSIX <code>getpwuid</code></td></tr>
           <tr><td><code>nix</code></td><td>0.31</td><td>Safe POSIX bindings &mdash; signal, term, ioctl, user, fs, net, hostname feature set</td></tr>
-          <tr><td><code>users</code></td><td>0.11</td><td>Username lookup wrapped in a <code>OnceCell</code> cache (v4.8.0 hot-path optimization)</td></tr>
+          <tr><td><code>uzers</code></td><td>0.12</td><td>Username lookup wrapped in a <code>OnceCell</code> cache (v4.8.0 hot-path optimization)</td></tr>
           <tr><td><code>regex</code></td><td>1.x</td><td>Regex matcher for command-name selectors via <code>/&hellip;/</code> grammar</td></tr>
           <tr><td><code>chrono</code></td><td>0.4</td><td>Timestamps for <code>--watch</code> open/close events and live-mode footers</td></tr>
           <tr><td><code>rayon</code></td><td>1.x</td><td>Work-stealing thread pool for per-PID FD enumeration &mdash; CPU count = parallel degree</td></tr>

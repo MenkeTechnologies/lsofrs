@@ -33,7 +33,7 @@ serde_json = "1"
 crossterm = "0.29"
 libc = "0.2"
 nix = { version = "0.31", features = ["signal", "term", "ioctl", "user", "fs", "net", "hostname"] }
-users = "0.11"
+uzers = "0.12"
 regex = "1"
 chrono = "0.4"
 rayon = "1"

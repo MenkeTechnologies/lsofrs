@@ -465,7 +465,7 @@ impl Process {
     /// Cached username lookup — the syscall runs at most once per Process.
     pub fn username(&self) -> &str {
         self.username_cache.get_or_init(|| {
-            users::get_user_by_uid(self.uid)
+            uzers::get_user_by_uid(self.uid)
                 .map(|u| u.name().to_string_lossy().into_owned())
                 .unwrap_or_else(|| self.uid.to_string())
         })

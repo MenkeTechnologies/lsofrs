@@ -148,7 +148,7 @@ fn print_event(theme: &Theme, tag: &str, pid: i32, cmd: &str, uid: u32, fd: &str
     let mut out = out.lock();
     let r = theme.reset();
 
-    let username = users::get_user_by_uid(uid)
+    let username = uzers::get_user_by_uid(uid)
         .map(|u| u.name().to_string_lossy().into_owned())
         .unwrap_or_else(|| uid.to_string());
 
@@ -213,7 +213,7 @@ fn print_snapshot(
     entries.sort_by_key(|e| e.pid);
 
     for e in entries {
-        let username = users::get_user_by_uid(e.uid)
+        let username = uzers::get_user_by_uid(e.uid)
             .map(|u| u.name().to_string_lossy().into_owned())
             .unwrap_or_else(|| e.uid.to_string());
         let user_display = truncate_max_bytes(&username, 8);

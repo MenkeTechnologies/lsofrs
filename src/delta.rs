@@ -96,7 +96,7 @@ impl DeltaTracker {
 
         for (key, entry) in &self.prev {
             if !self.curr.contains_key(key) {
-                let username = users::get_user_by_uid(entry.uid)
+                let username = uzers::get_user_by_uid(entry.uid)
                     .map(|u| u.name().to_string_lossy().into_owned())
                     .unwrap_or_else(|| entry.uid.to_string());
 
