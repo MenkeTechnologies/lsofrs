@@ -18,13 +18,11 @@ exclude = ["screenshots/", "*.png", "alias/"]
 name = "lsofrs"
 path = "src/main.rs"
 
-# `lsf` is the short name, built from the same main.rs — see the crate docs and
-# `src/main.rs`, both of which name it. The release workflow tars `lsofrs lsf`
-# and the Homebrew formula installs both, so dropping this declaration only made
-# the build rely on a stale artifact left in the cached target dir.
-[[bin]]
-name = "lsf"
-path = "src/main.rs"
+# `lsf` is the short name. It is `src/bin/lsf.rs` — three lines over
+# `lsofrs::run()` — rather than a second [[bin]] pointing at src/main.rs,
+# because two targets sharing one path make cargo warn on every build and
+# every `cargo doc`. The release workflow tars `lsofrs lsf` and the Homebrew
+# formula installs both; cargo discovers src/bin/lsf.rs without a declaration.
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
