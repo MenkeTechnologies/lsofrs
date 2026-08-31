@@ -19,37 +19,15 @@ fn process_pid(pid: i32, socket_map: &HashMap<u64, SocketEntry>) -> Option<Proce
 
     let mut files = Vec::new();
 
-    // cwd
-    if let Ok(target) = fs::read_link(proc_dir.join("cwd")) {
-        files.push(OpenFile {
-            fd: FdName::Cwd,
-            access: Access::Read,
-            file_type: FileType::Dir,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
-    }
-
-    // root dir
-    if let Ok(target) = fs::read_link(proc_dir.join("root")) {
-        files.push(OpenFile {
-            fd: FdName::Rtd,
-            access: Access::Read,
-            file_type: FileType::Dir,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
-    }
-
-    // exe (txt)
-    if let Ok(target) = fs::read_link(proc_dir.join("exe")) {
-        files.push(OpenFile {
-            fd: FdName::Txt,
-            access: Access::Read,
-            file_type: FileType::Reg,
-            name: target.to_string_lossy().into_owned(),
-            ..Default::default()
-        });
+    // cwd, root dir, executable (txt)
+    for (link, fd, fallback) in [
+        ("cwd", FdName::Cwd, FileType::Dir),
+        ("root", FdName::Rtd, FileType::Dir),
+        ("exe", FdName::Txt, FileType::Reg),
+    ] {
+        if let Some(f) = path_link_file(&proc_dir, link, fd, fallback) {
+            files.push(f);
+        }
     }
 
     // Open file descriptors
@@ -189,14 +167,22 @@ fn process_fd(
         .ok()
         .or_else(|| fs::metadata(&target).ok());
 
-    let (file_type, device, inode, size) = if let Some(m) = &meta {
+    let (file_type, device, rdev, inode, size) = if let Some(m) = &meta {
         let ft = mode_to_file_type(m.mode());
-        let dev = m.dev();
-        let major = ((dev >> 8) & 0xff) as u32;
-        let minor = (dev & 0xff) as u32;
-        (ft, Some((major, minor)), Some(m.ino()), Some(m.size()))
+        // Character/block nodes report the device they *are*, like lsof.
+        let rdev = match ft {
+            FileType::Chr | FileType::Blk => Some(split_dev(m.rdev())),
+            _ => None,
+        };
+        (
+            ft,
+            Some(split_dev(m.dev())),
+            rdev,
+            Some(m.ino()),
+            Some(m.size()),
+        )
     } else {
-        (FileType::Reg, None, None, None)
+        (FileType::Reg, None, None, None, None)
     };
 
     // Check for deleted files
@@ -214,6 +200,7 @@ fn process_fd(
         access,
         file_type,
         device,
+        rdev,
         size,
         offset,
         inode,
@@ -221,6 +208,45 @@ fn process_fd(
         name_append,
         ..Default::default()
     })
+}
+
+/// Resolve one of `/proc/<pid>/{cwd,root,exe}` into an `OpenFile`, filling in
+/// the device/inode/size columns from the target's metadata when it is
+/// readable (it is not for processes owned by another user).
+fn path_link_file(
+    proc_dir: &Path,
+    link: &str,
+    fd: FdName,
+    fallback: FileType,
+) -> Option<OpenFile> {
+    let target = fs::read_link(proc_dir.join(link)).ok()?;
+    let meta = fs::metadata(&target).ok();
+
+    let (file_type, device, inode, size) = match &meta {
+        Some(m) => (
+            mode_to_file_type(m.mode()),
+            Some(split_dev(m.dev())),
+            Some(m.ino()),
+            Some(m.size()),
+        ),
+        None => (fallback, None, None, None),
+    };
+
+    Some(OpenFile {
+        fd,
+        access: Access::Read,
+        file_type,
+        device,
+        inode,
+        size,
+        name: target.to_string_lossy().into_owned(),
+        ..Default::default()
+    })
+}
+
+/// Split a `dev_t` into the (major, minor) pair lsof prints.
+fn split_dev(dev: u64) -> (u32, u32) {
+    (((dev >> 8) & 0xff) as u32, (dev & 0xff) as u32)
 }
 
 fn mode_to_file_type(mode: u32) -> FileType {

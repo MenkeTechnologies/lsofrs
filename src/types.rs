@@ -368,9 +368,17 @@ impl OpenFile {
             String::new()
         }
     }
-    /// `device_str` — see implementation.
+    /// `device_str` — DEVICE column text.
+    ///
+    /// Character and block special files report their `rdev` (the device the
+    /// node *is*), every other type reports the `st_dev` of the filesystem
+    /// holding it. This mirrors lsof.
     pub fn device_str(&self) -> String {
-        match self.device {
+        let dev = match self.file_type {
+            FileType::Chr | FileType::Blk => self.rdev.or(self.device),
+            _ => self.device,
+        };
+        match dev {
             Some((maj, min)) => format!("{maj},{min}"),
             None => String::new(),
         }
@@ -883,6 +891,44 @@ mod tests {
 
         let f2 = OpenFile::default();
         assert_eq!(f2.device_str(), "");
+    }
+
+    /// lsof prints a character/block node's `rdev`, not the `st_dev` of the
+    /// devfs it lives on: `/dev/null` is `3,2`, never devfs's own id.
+    #[test]
+    fn open_file_device_str_prefers_rdev_for_special_files() {
+        let chr = OpenFile {
+            file_type: FileType::Chr,
+            device: Some((53, 10_917_010)),
+            rdev: Some((3, 2)),
+            ..Default::default()
+        };
+        assert_eq!(chr.device_str(), "3,2");
+
+        let blk = OpenFile {
+            file_type: FileType::Blk,
+            device: Some((53, 10_917_010)),
+            rdev: Some((1, 4)),
+            ..Default::default()
+        };
+        assert_eq!(blk.device_str(), "1,4");
+
+        // Regular files keep reporting the filesystem device.
+        let reg = OpenFile {
+            file_type: FileType::Reg,
+            device: Some((1, 13)),
+            rdev: Some((9, 9)),
+            ..Default::default()
+        };
+        assert_eq!(reg.device_str(), "1,13");
+
+        // A special file with no rdev falls back rather than printing nothing.
+        let no_rdev = OpenFile {
+            file_type: FileType::Chr,
+            device: Some((1, 13)),
+            ..Default::default()
+        };
+        assert_eq!(no_rdev.device_str(), "1,13");
     }
 
     #[test]

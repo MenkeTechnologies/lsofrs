@@ -11,14 +11,15 @@ use crate::types::*;
 // libproc constants
 const PROC_ALL_PIDS: u32 = 1;
 const PROC_PIDTASKALLINFO: c_int = 2;
-const PROC_PIDVNODEPATHINFO: c_int = 6;
+const PROC_PIDVNODEPATHINFO: c_int = 9;
+const PROC_PIDREGIONPATHINFO: c_int = 8;
 const PROC_PIDLISTFDS: c_int = 1;
 const PROC_PIDFDSOCKETINFO: c_int = 3;
 const PROC_PIDFDVNODEPATHINFO: c_int = 2;
 const PROC_PIDFDPIPEINFO: c_int = 6;
 const PROC_PIDFDKQUEUEINFO: c_int = 7;
-const PROC_PIDFDPSEMINFO: c_int = 8;
-const PROC_PIDFDPSHMINFO: c_int = 9;
+const PROC_PIDFDPSEMINFO: c_int = 4;
+const PROC_PIDFDPSHMINFO: c_int = 5;
 
 // FD types
 const PROX_FDTYPE_VNODE: u32 = 1;
@@ -172,6 +173,40 @@ struct VnodeInfoPath {
 struct ProcVnodePathInfo {
     pvi_cdir: VnodeInfoPath,
     pvi_rdir: VnodeInfoPath,
+}
+
+// proc_regioninfo / proc_regionwithpathinfo — mirrors <sys/proc_info.h>.
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ProcRegionInfo {
+    pri_protection: u32,
+    pri_max_protection: u32,
+    pri_inheritance: u32,
+    pri_flags: u32,
+    pri_offset: u64,
+    pri_behavior: u32,
+    pri_user_wired_count: u32,
+    pri_user_tag: u32,
+    pri_pages_resident: u32,
+    pri_pages_shared_now_private: u32,
+    pri_pages_swapped_out: u32,
+    pri_pages_dirtied: u32,
+    pri_ref_count: u32,
+    pri_shadow_depth: u32,
+    pri_share_mode: u32,
+    pri_private_pages_resident: u32,
+    pri_shared_pages_resident: u32,
+    pri_obj_id: u32,
+    pri_depth: u32,
+    pri_address: u64,
+    pri_size: u64,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ProcRegionWithPathInfo {
+    prp_prinfo: ProcRegionInfo,
+    prp_vip: VnodeInfoPath,
 }
 
 // vnode_fdinfowithpath
@@ -547,6 +582,56 @@ fn get_vnode_path_info(pid: pid_t) -> Option<ProcVnodePathInfo> {
             None
         }
     }
+}
+
+/// Mapped-file (`txt`) entries for a PID.
+///
+/// Walks the task's VM regions with `PROC_PIDREGIONPATHINFO`, keeping the
+/// distinct vnodes backing them — the executable, dyld, shared libraries and
+/// any other `mmap`ed file. Matches what lsof reports as `txt` on Darwin.
+fn text_files(pid: pid_t) -> Vec<OpenFile> {
+    // Bound the walk so a pathological map can never spin forever.
+    const MAX_REGIONS: usize = 200_000;
+
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut addr: u64 = 0;
+
+    for _ in 0..MAX_REGIONS {
+        let rwpi = unsafe {
+            let mut rwpi: ProcRegionWithPathInfo = mem::zeroed();
+            let ret = proc_pidinfo(
+                pid,
+                PROC_PIDREGIONPATHINFO,
+                addr,
+                &mut rwpi as *mut _ as *mut c_void,
+                mem::size_of::<ProcRegionWithPathInfo>() as c_int,
+            );
+            if (ret as usize) < mem::size_of::<ProcRegionWithPathInfo>() {
+                break;
+            }
+            rwpi
+        };
+
+        let next = rwpi.prp_prinfo.pri_address.saturating_add(rwpi.prp_prinfo.pri_size);
+        if next <= addr {
+            break;
+        }
+        addr = next;
+
+        if rwpi.prp_vip.vip_path[0] == 0 {
+            continue;
+        }
+        let st = &rwpi.prp_vip.vip_vi.vi_stat;
+        if !seen.insert((st.vst_dev, st.vst_ino)) {
+            continue;
+        }
+        let mut f = process_vnode_info(&rwpi.prp_vip, None);
+        f.fd = FdName::Txt;
+        out.push(f);
+    }
+
+    out
 }
 
 /// List FDs for a PID
@@ -936,6 +1021,9 @@ fn process_pid(pid: pid_t) -> Option<Process> {
         }
     }
 
+    // Mapped files (txt)
+    files.extend(text_files(pid));
+
     // Get open FDs
     let fds = list_fds(pid);
     for fdi in &fds {
@@ -1132,6 +1220,44 @@ mod tests {
     fn cstr_from_bytes_empty() {
         assert_eq!(cstr_from_bytes(b"\0"), "");
         assert_eq!(cstr_from_bytes(b""), "");
+    }
+
+    /// `PROC_PIDVNODEPATHINFO` must be flavor 9; it was once 6
+    /// (`PROC_PIDLISTTHREADS`), which silently dropped every `cwd` row.
+    #[test]
+    fn vnode_path_info_returns_our_cwd() {
+        let vpi = get_vnode_path_info(unsafe { libc::getpid() })
+            .expect("PROC_PIDVNODEPATHINFO failed for our own pid");
+        let cwd = cstr_from_bytes(&vpi.pvi_cdir.vip_path);
+        assert_eq!(
+            cwd,
+            std::env::current_dir().unwrap().to_string_lossy(),
+            "pvi_cdir did not match the real cwd"
+        );
+    }
+
+    /// `txt` rows come from the mapped-region walk; our own test binary and
+    /// dyld are always mapped.
+    #[test]
+    fn text_files_include_the_running_binary_and_dyld() {
+        let files = text_files(unsafe { libc::getpid() });
+        assert!(!files.is_empty(), "no mapped files found for our own pid");
+        assert!(
+            files.iter().all(|f| matches!(f.fd, FdName::Txt)),
+            "mapped files must be reported as txt"
+        );
+        assert!(
+            files.iter().any(|f| f.name.ends_with("/dyld")),
+            "dyld missing from mapped files: {:?}",
+            files.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+
+        // Each vnode appears once, matching lsof's dedup.
+        let mut keys: Vec<_> = files.iter().map(|f| (f.device, f.inode)).collect();
+        let before = keys.len();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(before, keys.len(), "duplicate txt entries emitted");
     }
 
     #[test]

@@ -204,14 +204,22 @@ fn process_fd(
         .ok()
         .or_else(|| fs::metadata(&target).ok());
 
-    let (file_type, device, inode, size) = if let Some(m) = &meta {
+    let (file_type, device, rdev, inode, size) = if let Some(m) = &meta {
         let ft = mode_to_file_type(m.mode());
-        let dev = m.dev();
-        let major = ((dev >> 8) & 0xff) as u32;
-        let minor = (dev & 0xff) as u32;
-        (ft, Some((major, minor)), Some(m.ino()), Some(m.size()))
+        // Character/block nodes report the device they *are*, like lsof.
+        let rdev = match ft {
+            FileType::Chr | FileType::Blk => Some(split_dev(m.rdev())),
+            _ => None,
+        };
+        (
+            ft,
+            Some(split_dev(m.dev())),
+            rdev,
+            Some(m.ino()),
+            Some(m.size()),
+        )
     } else {
-        (FileType::Reg, None, None, None)
+        (FileType::Reg, None, None, None, None)
     };
 
     let (name, name_append) = if target_str.ends_with(" (deleted)") {
@@ -228,6 +236,7 @@ fn process_fd(
         access,
         file_type,
         device,
+        rdev,
         size,
         offset,
         inode,
@@ -235,6 +244,11 @@ fn process_fd(
         name_append,
         ..Default::default()
     })
+}
+
+/// Split a `dev_t` into the (major, minor) pair lsof prints.
+fn split_dev(dev: u64) -> (u32, u32) {
+    (((dev >> 8) & 0xff) as u32, (dev & 0xff) as u32)
 }
 
 fn mode_to_file_type(mode: u32) -> FileType {

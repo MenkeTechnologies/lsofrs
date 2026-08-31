@@ -60,7 +60,10 @@ fn build_json_processes(procs: &[Process]) -> Vec<JsonProcess> {
                         None
                     };
                     let size_off = f.size.or(f.offset);
-                    let device = f.device.map(|(maj, min)| format!("{maj},{min}"));
+                    let device = match f.device_str() {
+                        d if d.is_empty() => None,
+                        d => Some(d),
+                    };
                     let protocol = f
                         .socket_info
                         .as_ref()
