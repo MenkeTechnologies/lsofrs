@@ -613,7 +613,10 @@ fn text_files(pid: pid_t) -> Vec<OpenFile> {
             rwpi
         };
 
-        let next = rwpi.prp_prinfo.pri_address.saturating_add(rwpi.prp_prinfo.pri_size);
+        let next = rwpi
+            .prp_prinfo
+            .pri_address
+            .saturating_add(rwpi.prp_prinfo.pri_size);
         if next <= addr {
             break;
         }

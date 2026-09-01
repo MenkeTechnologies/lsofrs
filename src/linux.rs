@@ -1,6 +1,6 @@
 //! Linux process enumeration via /proc filesystem
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::unix::fs::MetadataExt;
@@ -29,6 +29,16 @@ fn process_pid(pid: i32, socket_map: &HashMap<u64, SocketEntry>) -> Option<Proce
             files.push(f);
         }
     }
+
+    // Mapped files (mem) — the executable is already reported as txt.
+    let mut mapped_seen: HashSet<(u32, u32, u64)> = files
+        .iter()
+        .filter_map(|f| match (f.device, f.inode) {
+            (Some((maj, min)), Some(ino)) => Some((maj, min, ino)),
+            _ => None,
+        })
+        .collect();
+    files.extend(mapped_files(&proc_dir, &mut mapped_seen));
 
     // Open file descriptors
     let fd_dir = proc_dir.join("fd");
@@ -137,10 +147,14 @@ fn process_fd(
     }
 
     if target_str.starts_with("pipe:[") {
+        // The pipefs device and inode only come from stat'ing the fd itself.
+        let meta = fs::metadata(fd_path).ok();
         return Some(OpenFile {
             fd: FdName::Number(fd_num),
             access,
             file_type: FileType::Pipe,
+            device: meta.as_ref().map(|m| split_dev(m.dev())),
+            inode: meta.as_ref().map(|m| m.ino()),
             name: target_str,
             offset,
             ..Default::default()
@@ -162,8 +176,10 @@ fn process_fd(
         });
     }
 
-    // Regular file — stat for metadata
-    let meta = fs::symlink_metadata(fd_path)
+    // Regular file — stat through the fd link, which is what the descriptor
+    // actually refers to. Stat'ing the link itself only describes the /proc
+    // symlink (always `LINK`, size 64), never the file behind it.
+    let meta = fs::metadata(fd_path)
         .ok()
         .or_else(|| fs::metadata(&target).ok());
 
@@ -174,13 +190,12 @@ fn process_fd(
             FileType::Chr | FileType::Blk => Some(split_dev(m.rdev())),
             _ => None,
         };
-        (
-            ft,
-            Some(split_dev(m.dev())),
-            rdev,
-            Some(m.ino()),
-            Some(m.size()),
-        )
+        // Devices and FIFOs have no meaningful size; lsof prints the offset.
+        let size = match ft {
+            FileType::Chr | FileType::Blk | FileType::Fifo => None,
+            _ => Some(m.size()),
+        };
+        (ft, Some(split_dev(m.dev())), rdev, Some(m.ino()), size)
     } else {
         (FileType::Reg, None, None, None, None)
     };
@@ -213,12 +228,7 @@ fn process_fd(
 /// Resolve one of `/proc/<pid>/{cwd,root,exe}` into an `OpenFile`, filling in
 /// the device/inode/size columns from the target's metadata when it is
 /// readable (it is not for processes owned by another user).
-fn path_link_file(
-    proc_dir: &Path,
-    link: &str,
-    fd: FdName,
-    fallback: FileType,
-) -> Option<OpenFile> {
+fn path_link_file(proc_dir: &Path, link: &str, fd: FdName, fallback: FileType) -> Option<OpenFile> {
     let target = fs::read_link(proc_dir.join(link)).ok()?;
     let meta = fs::metadata(&target).ok();
 
@@ -244,9 +254,97 @@ fn path_link_file(
     })
 }
 
+/// Mapped files (`mem`) read from `/proc/<pid>/maps`.
+///
+/// One row per distinct file-backed mapping — shared libraries, the loader,
+/// `mmap`ed data files — deduped by (device, inode) against `seen`, which
+/// already holds the cwd/root/exe entries so the executable is not repeated.
+/// Anonymous mappings and pseudo-regions (`[heap]`, `[stack]`, …) have no
+/// inode and are skipped, as lsof does.
+fn mapped_files(proc_dir: &Path, seen: &mut HashSet<(u32, u32, u64)>) -> Vec<OpenFile> {
+    let Ok(maps) = fs::read_to_string(proc_dir.join("maps")) else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    for line in maps.lines() {
+        let Some((dev_field, inode_field, path)) = split_maps_line(line) else {
+            continue;
+        };
+        if !path.starts_with('/') {
+            continue;
+        }
+        let Some(inode) = inode_field.parse::<u64>().ok().filter(|&i| i != 0) else {
+            continue;
+        };
+        let Some(device) = parse_maps_dev(dev_field) else {
+            continue;
+        };
+        if !seen.insert((device.0, device.1, inode)) {
+            continue;
+        }
+
+        let (name, name_append) = match path.strip_suffix(" (deleted)") {
+            Some(p) => (p.to_string(), Some("(deleted)".to_string())),
+            None => (path.to_string(), None),
+        };
+
+        let meta = fs::metadata(&name).ok();
+        out.push(OpenFile {
+            fd: FdName::Mem,
+            access: Access::Read,
+            file_type: meta
+                .as_ref()
+                .map_or(FileType::Reg, |m| mode_to_file_type(m.mode())),
+            device: Some(device),
+            size: meta.as_ref().map(|m| m.size()),
+            inode: Some(inode),
+            name,
+            name_append,
+            ..Default::default()
+        });
+    }
+
+    out
+}
+
+/// Split a `/proc/<pid>/maps` line into its device, inode and path fields.
+///
+/// The layout is `addr perms offset dev inode path`; the path is everything
+/// after the fifth field and may itself contain spaces.
+fn split_maps_line(line: &str) -> Option<(&str, &str, &str)> {
+    let mut rest = line;
+    let mut fields = [""; 5];
+    for field in &mut fields {
+        rest = rest.trim_start();
+        if rest.is_empty() {
+            return None;
+        }
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        (*field, rest) = rest.split_at(end);
+    }
+    Some((fields[3], fields[4], rest.trim()))
+}
+
+/// Parse the `maj:min` hex device field of a `/proc/<pid>/maps` line.
+fn parse_maps_dev(field: &str) -> Option<(u32, u32)> {
+    let (maj, min) = field.split_once(':')?;
+    Some((
+        u32::from_str_radix(maj, 16).ok()?,
+        u32::from_str_radix(min, 16).ok()?,
+    ))
+}
+
 /// Split a `dev_t` into the (major, minor) pair lsof prints.
+///
+/// Linux encodes both numbers in a 64-bit `dev_t`: 12 low bits of major at
+/// 8..20 plus 32 high bits, 8 low bits of minor plus the rest at 12..32. The
+/// naive 8-bit split is only correct for tiny device numbers — it mangles
+/// anonymous filesystems (`0,2049`) and any minor above 255.
 fn split_dev(dev: u64) -> (u32, u32) {
-    (((dev >> 8) & 0xff) as u32, (dev & 0xff) as u32)
+    let major = ((dev >> 8) & 0xfff) | ((dev >> 32) & !0xfff);
+    let minor = (dev & 0xff) | ((dev >> 12) & !0xff);
+    (major as u32, minor as u32)
 }
 
 fn mode_to_file_type(mode: u32) -> FileType {
@@ -562,6 +660,107 @@ fn format_endpoint(addr: &InetAddr) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── device numbers ──────────────────────────────────────────────
+
+    /// Linux packs major/minor across the whole 64-bit `dev_t`; the naive
+    /// 8-bit split mangled anonymous filesystems and any minor above 255.
+    #[test]
+    fn split_dev_handles_wide_minors() {
+        // /dev/null: 1,3
+        assert_eq!(split_dev(0x0103), (1, 3));
+        // sda1: 8,1
+        assert_eq!(split_dev(0x0801), (8, 1));
+        // anonymous fs (overlay, tmpfs): 0,2049 -> minor needs 12 bits
+        assert_eq!(split_dev(0x80_0001), (0, 2049));
+        // Round-trip a major/minor pair too wide for the 12/8-bit low fields,
+        // encoded the way glibc's makedev does.
+        let makedev = |maj: u64, min: u64| {
+            (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
+        };
+        assert_eq!(split_dev(makedev(259, 12_345)), (259, 12_345));
+        assert_eq!(split_dev(makedev(0x1_2345, 0x6_789a)), (0x1_2345, 0x6_789a));
+    }
+
+    // ── /proc/<pid>/maps ────────────────────────────────────────────
+
+    #[test]
+    fn split_maps_line_extracts_dev_inode_and_path() {
+        let line = "7f9c1a000000-7f9c1a029000 r--p 00000000 fd:01 1310734 /usr/lib/libc.so.6";
+        assert_eq!(
+            split_maps_line(line),
+            Some(("fd:01", "1310734", "/usr/lib/libc.so.6"))
+        );
+    }
+
+    /// Paths in maps may contain spaces — everything past the fifth field is
+    /// the name, not just the next token.
+    #[test]
+    fn split_maps_line_keeps_spaces_in_path() {
+        let line = "00400000-00452000 r-xp 00000000 08:01 917 /opt/my app/bin/tool (deleted)";
+        let (dev, inode, path) = split_maps_line(line).unwrap();
+        assert_eq!((dev, inode), ("08:01", "917"));
+        assert_eq!(path, "/opt/my app/bin/tool (deleted)");
+    }
+
+    #[test]
+    fn split_maps_line_rejects_anonymous_regions() {
+        // Anonymous mappings still have five fields, with a zero inode.
+        let line = "7ffd1c000000-7ffd1c021000 rw-p 00000000 00:00 0 ";
+        assert_eq!(split_maps_line(line), Some(("00:00", "0", "")));
+        assert_eq!(split_maps_line("garbage"), None);
+    }
+
+    #[test]
+    fn parse_maps_dev_reads_hex() {
+        assert_eq!(parse_maps_dev("fd:01"), Some((253, 1)));
+        assert_eq!(parse_maps_dev("08:01"), Some((8, 1)));
+        assert_eq!(parse_maps_dev("0"), None);
+    }
+
+    /// Our own process always maps libc (or, on a static build, at least the
+    /// executable) — the mem rows must be real, deduped, and file-backed.
+    #[test]
+    fn mapped_files_reports_our_own_mappings() {
+        let mut seen = HashSet::new();
+        let files = mapped_files(Path::new("/proc/self"), &mut seen);
+        assert!(!files.is_empty(), "no mem entries for our own process");
+        assert!(files.iter().all(|f| matches!(f.fd, FdName::Mem)));
+        assert!(files.iter().all(|f| f.name.starts_with('/')));
+
+        let mut keys: Vec<_> = files.iter().map(|f| (f.device, f.inode)).collect();
+        let before = keys.len();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(before, keys.len(), "duplicate mem entries emitted");
+    }
+
+    /// cwd/root/exe carry the device, inode and size columns, and the exe is
+    /// not repeated as a mem row.
+    #[test]
+    fn path_link_file_fills_metadata_and_suppresses_duplicate_mem() {
+        let cwd = path_link_file(Path::new("/proc/self"), "cwd", FdName::Cwd, FileType::Dir)
+            .expect("no cwd for our own process");
+        assert_eq!(cwd.fd, FdName::Cwd);
+        assert_eq!(cwd.file_type, FileType::Dir);
+        assert!(cwd.device.is_some() && cwd.inode.is_some());
+
+        let exe = path_link_file(Path::new("/proc/self"), "exe", FdName::Txt, FileType::Reg)
+            .expect("no exe for our own process");
+        let key = (
+            exe.device.unwrap().0,
+            exe.device.unwrap().1,
+            exe.inode.unwrap(),
+        );
+
+        let mut seen = HashSet::from([key]);
+        let mem = mapped_files(Path::new("/proc/self"), &mut seen);
+        assert!(
+            !mem.iter()
+                .any(|f| f.inode == exe.inode && f.device == exe.device),
+            "executable repeated as a mem row"
+        );
+    }
 
     // ── parse_stat ──────────────────────────────────────────────────
 
