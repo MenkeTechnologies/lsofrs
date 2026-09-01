@@ -4,6 +4,7 @@
 //! (the `lsof` package) are a two-line `fn main() { lsofrs::run() }` over the
 //! same code instead of a second copy of it.
 
+use crate::resolve;
 use crate::{
     config, csv_out, delta, follow, json, leak, monitor, net_map, output, pipe_chain, ports, stale,
     stall, summary, top, tree, tui_tabs, types, watch,
@@ -37,6 +38,14 @@ pub fn run() {
         println!("lsofrs {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+
+    // `-F ?` asks what the field identifiers mean; it lists nothing else.
+    if args.field_output.as_deref() == Some("?") {
+        output::print_field_help();
+        return;
+    }
+
+    resolve::configure(!args.no_host_lookup, !args.no_port_lookup);
 
     let is_tty = match args.color.as_str() {
         "always" => true,
@@ -160,6 +169,9 @@ pub fn run() {
         output::print_terse(&procs);
         return;
     }
+
+    // Resolve every distinct address once, in parallel, before printing.
+    resolve::warm(&procs);
 
     if let Some(ref fields) = args.field_output {
         let term = if args.nul_terminator { '\0' } else { '\n' };

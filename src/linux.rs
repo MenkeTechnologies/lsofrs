@@ -133,7 +133,8 @@ fn process_fd(
     let target = fs::read_link(fd_path).ok()?;
     let target_str = target.to_string_lossy().into_owned();
 
-    // Read access mode from fdinfo
+    // Read access mode and open flags from fdinfo
+    let file_flags = read_fd_flags(proc_dir, fd_num);
     let access = read_fd_access(proc_dir, fd_num);
     let offset = read_fd_offset(proc_dir, fd_num);
 
@@ -148,15 +149,20 @@ fn process_fd(
 
     if target_str.starts_with("pipe:[") {
         // The pipefs device and inode only come from stat'ing the fd itself.
+        // lsof types an anonymous pipe FIFO and names it just `pipe`; the
+        // inode in the link target is what identifies it, and it is reported
+        // in the NODE column.
         let meta = fs::metadata(fd_path).ok();
         return Some(OpenFile {
             fd: FdName::Number(fd_num),
             access,
-            file_type: FileType::Pipe,
+            file_type: FileType::Fifo,
             device: meta.as_ref().map(|m| split_dev(m.dev())),
             inode: meta.as_ref().map(|m| m.ino()),
-            name: target_str,
+            nlink: meta.as_ref().map(|m| m.nlink()),
+            name: "pipe".to_string(),
             offset,
+            file_flags: file_flags.map(i64::from),
             ..Default::default()
         });
     }
@@ -199,6 +205,7 @@ fn process_fd(
     } else {
         (FileType::Reg, None, None, None, None)
     };
+    let nlink = meta.as_ref().map(|m| m.nlink());
 
     // Check for deleted files
     let (name, name_append) = if target_str.ends_with(" (deleted)") {
@@ -219,8 +226,10 @@ fn process_fd(
         size,
         offset,
         inode,
+        nlink,
         name,
         name_append,
+        file_flags: file_flags.map(i64::from),
         ..Default::default()
     })
 }
@@ -244,11 +253,13 @@ fn path_link_file(proc_dir: &Path, link: &str, fd: FdName, fallback: FileType) -
 
     Some(OpenFile {
         fd,
-        access: Access::Read,
+        // lsof reports no access mode for cwd, root or the executable.
+        access: Access::None,
         file_type,
         device,
         inode,
         size,
+        nlink: meta.as_ref().map(|m| m.nlink()),
         name: target.to_string_lossy().into_owned(),
         ..Default::default()
     })
@@ -292,12 +303,13 @@ fn mapped_files(proc_dir: &Path, seen: &mut HashSet<(u32, u32, u64)>) -> Vec<Ope
         let meta = fs::metadata(&name).ok();
         out.push(OpenFile {
             fd: FdName::Mem,
-            access: Access::Read,
+            access: Access::None,
             file_type: meta
                 .as_ref()
                 .map_or(FileType::Reg, |m| mode_to_file_type(m.mode())),
             device: Some(device),
             size: meta.as_ref().map(|m| m.size()),
+            nlink: meta.as_ref().map(|m| m.nlink()),
             inode: Some(inode),
             name,
             name_append,
@@ -361,28 +373,26 @@ fn mode_to_file_type(mode: u32) -> FileType {
 }
 
 fn read_fd_access(proc_dir: &Path, fd_num: i32) -> Access {
-    let fdinfo_path = proc_dir.join("fdinfo").join(fd_num.to_string());
-    let Ok(content) = fs::read_to_string(fdinfo_path) else {
-        return Access::None;
-    };
-
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("flags:") {
-            let flags: u32 = rest
-                .trim()
-                .trim_start_matches("0")
-                .parse()
-                .unwrap_or(0o10000);
-            let accmode = flags & 3;
-            return match accmode {
-                0 => Access::Read,
-                1 => Access::Write,
-                2 => Access::ReadWrite,
-                _ => Access::None,
-            };
-        }
+    match read_fd_flags(proc_dir, fd_num) {
+        Some(flags) => match flags & 0o3 {
+            0 => Access::Read,
+            1 => Access::Write,
+            2 => Access::ReadWrite,
+            _ => Access::None,
+        },
+        None => Access::None,
     }
-    Access::None
+}
+
+/// The open flags of a descriptor, from `/proc/<pid>/fdinfo/<fd>`.
+///
+/// The kernel writes them in octal, leading zero and all.
+fn read_fd_flags(proc_dir: &Path, fd_num: i32) -> Option<u32> {
+    let content = fs::read_to_string(proc_dir.join("fdinfo").join(fd_num.to_string())).ok()?;
+    content
+        .lines()
+        .find_map(|line| line.strip_prefix("flags:"))
+        .and_then(|rest| u32::from_str_radix(rest.trim(), 8).ok())
 }
 
 fn read_fd_offset(proc_dir: &Path, fd_num: i32) -> Option<u64> {
@@ -589,7 +599,7 @@ fn process_socket(
                 .clone()
                 .unwrap_or_else(|| format!("socket:[{inode}]"))
         } else {
-            format_inet_name(&entry.local, &entry.foreign, &entry.protocol, &entry.state)
+            format_inet_name(&entry.local, &entry.foreign, &entry.protocol)
         };
 
         OpenFile {
@@ -619,27 +629,17 @@ fn process_socket(
     }
 }
 
-fn format_inet_name(
-    local: &InetAddr,
-    foreign: &InetAddr,
-    _protocol: &str,
-    state: &Option<TcpState>,
-) -> String {
+fn format_inet_name(local: &InetAddr, foreign: &InetAddr, _protocol: &str) -> String {
     let local_str = format_endpoint(local);
     let foreign_str = format_endpoint(foreign);
 
-    let mut name = if foreign.port == 0 && foreign.addr.as_ref().is_none_or(|a| a.is_unspecified())
-    {
+    // The connection state is carried on the file, not glued into the name:
+    // column output appends it, field output reports it in `T`.
+    if foreign.port == 0 && foreign.addr.as_ref().is_none_or(|a| a.is_unspecified()) {
         local_str
     } else {
         format!("{local_str}->{foreign_str}")
-    };
-
-    if let Some(s) = state {
-        name.push_str(&format!(" ({s})"));
     }
-
-    name
 }
 
 fn format_endpoint(addr: &InetAddr) -> String {
@@ -918,8 +918,10 @@ mod tests {
             port: 80,
         };
         let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Listen));
-        assert_eq!(name, "*:80 (LISTEN)");
+        // The state is no longer part of the name; the column output appends
+        // it and field output reports it separately.
+        let name = format_inet_name(&local, &foreign, "TCP");
+        assert_eq!(name, "*:80");
     }
 
     #[test]
@@ -932,10 +934,8 @@ mod tests {
             addr: Some(IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))),
             port: 443,
         };
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Established));
-        assert!(name.contains("10.0.0.1:45000"));
-        assert!(name.contains("93.184.216.34:443"));
-        assert!(name.contains("ESTABLISHED"));
+        let name = format_inet_name(&local, &foreign, "TCP");
+        assert_eq!(name, "10.0.0.1:45000->93.184.216.34:443");
     }
 
     // ── tcp state exhaustive ──────────────────────────────────────────
@@ -984,7 +984,7 @@ mod tests {
             port: 53,
         };
         let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "UDP", &None);
+        let name = format_inet_name(&local, &foreign, "UDP");
         assert_eq!(name, "*:53");
     }
 
@@ -995,9 +995,8 @@ mod tests {
             port: 443,
         };
         let foreign = InetAddr::default();
-        let name = format_inet_name(&local, &foreign, "TCP", &Some(TcpState::Listen));
-        assert!(name.contains("[::1]:443"));
-        assert!(name.contains("LISTEN"));
+        let name = format_inet_name(&local, &foreign, "TCP");
+        assert_eq!(name, "[::1]:443");
     }
 
     // ── parse_stat edge cases ───────────────────────────────────────

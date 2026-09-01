@@ -298,10 +298,9 @@ impl Filter {
 
         // Network filter
         if self.network {
-            let is_network = matches!(
-                file.file_type,
-                FileType::IPv4 | FileType::IPv6 | FileType::Unix | FileType::Sock
-            );
+            // -i selects internet files only; UNIX-domain sockets are what
+            // -U is for.
+            let is_network = matches!(file.file_type, FileType::IPv4 | FileType::IPv6);
             if !is_network {
                 if self.and_mode || !self.files.is_empty() || self.nfs_only {
                     // Allow non-network files through if other file filters exist
@@ -1074,7 +1073,6 @@ mod tests {
         assert!(!f.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
         assert!(f.matches_file(&make_file(3, FileType::IPv4, "*:80")));
         assert!(f.matches_file(&make_file(3, FileType::IPv6, "*:80")));
-        assert!(f.matches_file(&make_file(3, FileType::Unix, "/tmp/sock")));
     }
 
     #[test]
@@ -1721,11 +1719,15 @@ mod tests {
         assert!(matches!(&filters[0], FdFilter::Range(7, 7)));
     }
 
+    /// `-i` is internet-only: a UNIX-domain or generic socket is not selected
+    /// by it, matching lsof (`-U` is what lists those).
     #[test]
-    fn network_allows_sock_type() {
+    fn network_excludes_non_internet_sockets() {
         let mut f = empty_filter();
         f.network = true;
-        assert!(f.matches_file(&make_file(3, FileType::Sock, "sock")));
+        assert!(!f.matches_file(&make_file(3, FileType::Sock, "sock")));
+        assert!(!f.matches_file(&make_file(3, FileType::Unix, "/tmp/sock")));
+        assert!(f.matches_file(&make_file(3, FileType::IPv4, "*:80")));
     }
 
     #[test]

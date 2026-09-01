@@ -73,6 +73,16 @@ pub enum FileType {
     Atalk,
     /// `Fsevents` variant.
     Fsevents,
+    /// `Npolicy` variant — Darwin network-policy descriptor.
+    Npolicy,
+    /// `Channel` variant — Darwin skywalk channel.
+    Channel,
+    /// `Nexus` variant — Darwin skywalk nexus.
+    Nexus,
+    /// `Rte` variant — routing socket.
+    Rte,
+    /// `Ndrv` variant — raw network-driver socket.
+    Ndrv,
     /// `Unknown` variant.
     Unknown(String),
 }
@@ -89,15 +99,20 @@ impl FileType {
             Self::Sock => "sock",
             Self::Link => "LINK",
             Self::Pipe => "PIPE",
-            Self::Kqueue => "KQUE",
+            Self::Kqueue => "KQUEUE",
             Self::Unix => "unix",
             Self::IPv4 => "IPv4",
             Self::IPv6 => "IPv6",
             Self::Systm => "systm",
-            Self::Psem => "PSEM",
-            Self::Pshm => "PSHM",
+            Self::Psem => "PSXSEM",
+            Self::Pshm => "PSXSHM",
             Self::Atalk => "ATALK",
-            Self::Fsevents => "FSEV",
+            Self::Fsevents => "FSEVENT",
+            Self::Npolicy => "NPOLICY",
+            Self::Channel => "CHAN",
+            Self::Nexus => "NEXUS",
+            Self::Rte => "rte",
+            Self::Ndrv => "ndrv",
             Self::Unknown(s) => s.as_str(),
         }
     }
@@ -239,6 +254,19 @@ pub struct SocketInfo {
     pub socket_state: Option<u32>,
 }
 
+/// Pack a (major, minor) pair back into the platform's `dev_t` encoding.
+///
+/// Darwin puts the major in the top 8 bits of a 32-bit device number; Linux
+/// spreads both numbers across 64 bits the way `makedev` does.
+pub fn make_dev(major: u32, minor: u32) -> u64 {
+    if cfg!(target_os = "macos") {
+        ((major as u64) << 24) | (minor as u64 & 0x00ff_ffff)
+    } else {
+        let (major, minor) = (major as u64, minor as u64);
+        (minor & 0xff) | ((major & 0xfff) << 8) | ((minor & !0xff) << 12) | ((major & !0xfff) << 32)
+    }
+}
+
 /// FD descriptor name
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FdName {
@@ -251,6 +279,8 @@ pub enum FdName {
     /// `Mem` variant.
     Mem,
     Err,
+    /// `FilePort` variant — a file held through a Mach file port, not an fd.
+    FilePort,
     /// `Number` variant.
     Number(i32),
     /// `Other` variant.
@@ -266,6 +296,7 @@ impl FdName {
             Self::Txt => Cow::Borrowed("txt"),
             Self::Mem => Cow::Borrowed("mem"),
             Self::Err => Cow::Borrowed("err"),
+            Self::FilePort => Cow::Borrowed("fp."),
             Self::Number(n) => Cow::Owned(format!("{n}")),
             Self::Other(s) => Cow::Borrowed(s),
         }
@@ -273,14 +304,14 @@ impl FdName {
     /// `with_access` — see implementation.
     pub fn with_access(&self, access: Access) -> String {
         match self {
-            Self::Number(n) => {
+            Self::Number(_) | Self::FilePort => {
                 let suffix = match access {
                     Access::Read => "r",
                     Access::Write => "w",
                     Access::ReadWrite => "u",
                     Access::None => "",
                 };
-                format!("{n}{suffix}")
+                format!("{}{suffix}", self.as_display())
             }
             _ => self.as_display().into_owned(),
         }
@@ -320,8 +351,18 @@ pub struct OpenFile {
     pub is_nfs: bool,
     /// `rdev` field.
     pub rdev: Option<(u32, u32)>,
+    /// `device_label` field — what the DEVICE column shows for objects with no
+    /// major/minor pair: a kernel handle (`0x…`) for Darwin pipes and sockets,
+    /// or the channel kind for a skywalk channel.
+    pub device_label: Option<String>,
     /// `file_flags` field.
     pub file_flags: Option<i64>,
+    /// `file_port` field — the Mach file port a file was reached through,
+    /// shown in the NAME column but not in field output, as lsof does.
+    pub file_port: Option<u32>,
+    /// `file_status` field — the kernel's per-file status bits, printed
+    /// beside the open flags in the `-F G` field.
+    pub file_status: Option<u32>,
     /// `file_struct_addr` field.
     pub file_struct_addr: Option<u64>,
 }
@@ -344,7 +385,10 @@ impl Default for OpenFile {
             sel_flags: 0,
             is_nfs: false,
             rdev: None,
+            device_label: None,
             file_flags: None,
+            file_port: None,
+            file_status: None,
             file_struct_addr: None,
         }
     }
@@ -353,9 +397,42 @@ impl Default for OpenFile {
 impl OpenFile {
     /// `full_name` — see implementation.
     pub fn full_name(&self) -> String {
+        // Internet sockets are re-rendered at display time: the host and
+        // service lookups depend on -n / -P, which the gather step does not
+        // know about.
+        let base = match &self.socket_info {
+            Some(si)
+                if si.local.addr.is_some()
+                    && (crate::resolve::host_lookup() || crate::resolve::port_lookup()) =>
+            {
+                crate::resolve::inet_name(si)
+            }
+            _ => self.name.clone(),
+        };
         match &self.name_append {
-            Some(extra) => format!("{} {extra}", self.name),
-            None => self.name.clone(),
+            Some(extra) => format!("{base} {extra}"),
+            None => base,
+        }
+    }
+    /// `display_name` — the NAME column text.
+    ///
+    /// Same as [`Self::full_name`] plus the TCP state lsof shows in the column
+    /// output. Field output (`-F`) reports the state separately in `T`, so it
+    /// uses `full_name` instead.
+    pub fn display_name(&self) -> String {
+        let mut name = self.full_name();
+        if let Some(port) = self.file_port {
+            name = format!("{name} (fileport=0x{port:x})")
+                .trim_start()
+                .to_string();
+        }
+        match self
+            .socket_info
+            .as_ref()
+            .and_then(|si| si.tcp_state.as_ref())
+        {
+            Some(state) => format!("{name} ({state})"),
+            None => name,
         }
     }
     /// `size_or_offset_str` — see implementation.
@@ -378,10 +455,21 @@ impl OpenFile {
             FileType::Chr | FileType::Blk => self.rdev.or(self.device),
             _ => self.device,
         };
-        match dev {
-            Some((maj, min)) => format!("{maj},{min}"),
-            None => String::new(),
+        match (dev, &self.device_label) {
+            (Some((maj, min)), _) => format!("{maj},{min}"),
+            (None, Some(label)) => label.clone(),
+            (None, None) => String::new(),
         }
+    }
+    /// `raw_device` — the DEVICE number the way `-F D` reports it: the raw
+    /// `dev_t`, in the platform's own encoding.
+    pub fn raw_device(&self) -> Option<u64> {
+        self.device.map(|(maj, min)| make_dev(maj, min))
+    }
+    /// `raw_rdev` — the raw `dev_t` of the device a special file *is*,
+    /// reported by `-F r`.
+    pub fn raw_rdev(&self) -> Option<u64> {
+        self.rdev.map(|(maj, min)| make_dev(maj, min))
     }
     /// `nlink_str` — link count as a string, empty when unavailable.
     pub fn nlink_str(&self) -> String {
@@ -572,15 +660,15 @@ mod tests {
         assert_eq!(FileType::Sock.as_str(), "sock");
         assert_eq!(FileType::Link.as_str(), "LINK");
         assert_eq!(FileType::Pipe.as_str(), "PIPE");
-        assert_eq!(FileType::Kqueue.as_str(), "KQUE");
+        assert_eq!(FileType::Kqueue.as_str(), "KQUEUE");
         assert_eq!(FileType::Unix.as_str(), "unix");
         assert_eq!(FileType::IPv4.as_str(), "IPv4");
         assert_eq!(FileType::IPv6.as_str(), "IPv6");
         assert_eq!(FileType::Systm.as_str(), "systm");
-        assert_eq!(FileType::Psem.as_str(), "PSEM");
-        assert_eq!(FileType::Pshm.as_str(), "PSHM");
+        assert_eq!(FileType::Psem.as_str(), "PSXSEM");
+        assert_eq!(FileType::Pshm.as_str(), "PSXSHM");
         assert_eq!(FileType::Atalk.as_str(), "ATALK");
-        assert_eq!(FileType::Fsevents.as_str(), "FSEV");
+        assert_eq!(FileType::Fsevents.as_str(), "FSEVENT");
         assert_eq!(FileType::Unknown("0014".to_string()).as_str(), "0014");
     }
 
@@ -680,12 +768,12 @@ mod tests {
         assert_eq!(FileType::Sock.as_str(), "sock");
         assert_eq!(FileType::Link.as_str(), "LINK");
         assert_eq!(FileType::Pipe.as_str(), "PIPE");
-        assert_eq!(FileType::Kqueue.as_str(), "KQUE");
+        assert_eq!(FileType::Kqueue.as_str(), "KQUEUE");
         assert_eq!(FileType::Systm.as_str(), "systm");
-        assert_eq!(FileType::Psem.as_str(), "PSEM");
-        assert_eq!(FileType::Pshm.as_str(), "PSHM");
+        assert_eq!(FileType::Psem.as_str(), "PSXSEM");
+        assert_eq!(FileType::Pshm.as_str(), "PSXSHM");
         assert_eq!(FileType::Atalk.as_str(), "ATALK");
-        assert_eq!(FileType::Fsevents.as_str(), "FSEV");
+        assert_eq!(FileType::Fsevents.as_str(), "FSEVENT");
     }
 
     // ── Access ──────────────────────────────────────────────────────

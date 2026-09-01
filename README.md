@@ -111,7 +111,14 @@ lsf -i 6                      # IPv6 only
 lsf -i TCP                    # TCP only
 lsf -i :443                   # port 443
 lsf -i TCP:443                # TCP port 443
+lsf -i -n                     # skip reverse DNS (addresses stay numeric)
+lsf -i -P                     # skip /etc/services (ports stay numeric)
 ```
+
+Host names and service names are resolved by default, as lsof does; `-n` and
+`-P` turn off the respective lookup. Reverse DNS dominates the runtime of a
+listing that contains unresolvable remote addresses, so `-n` is worth having in
+scripts.
 
 ### Output Formats
 
@@ -120,6 +127,8 @@ lsf                           # columnar (default, cyberpunk-themed on TTY)
 lsf --json                    # JSON array output
 lsf -J                        # JSON (short form)
 lsf -F pcfn                   # field output (p=pid, c=cmd, f=fd, n=name)
+lsf -F                        # field output, every field
+lsf -F ?                      # list the field identifiers
 lsf -t                        # terse (PIDs only)
 lsf +L                        # add NLINK (link count) column
 lsf +L1                       # select unlinked open files (link count < 1)

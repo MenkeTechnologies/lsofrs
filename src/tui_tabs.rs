@@ -1346,7 +1346,7 @@ impl TabbedTui {
                         fd: f.fd.with_access(f.access),
                         file_type: f.file_type.as_str().to_string(),
                         size: f.size,
-                        name: f.full_name(),
+                        name: f.display_name(),
                         device: f.device_str(),
                         inode: f.node_str(),
                     });

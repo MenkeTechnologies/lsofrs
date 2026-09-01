@@ -251,8 +251,32 @@ with a single character identifying the field.  Field characters:
 .B i
 \(em inode
 .br
+.B D
+\(em device number, as 0x<hex>
+.br
 .B d
-\(em device number
+\(em device character code (pipe and socket kernel handles)
+.br
+.B r
+\(em raw device number, as 0x<hex>
+.br
+.B a
+\(em access mode (r, w, u)
+.br
+.B l
+\(em lock status
+.br
+.B k
+\(em link count
+.br
+.B G
+\(em file flags, as 0x<flags>;0x<status>
+.br
+.B P
+\(em protocol name
+.br
+.B T
+\(em TCP/TPI info (ST=state, QR=, QS=)
 .br
 .B g
 \(em PGID
@@ -260,6 +284,17 @@ with a single character identifying the field.  Field characters:
 .B R
 \(em parent PID
 .RE
+.PP
+Bare
+.B \-F
+selects every field, and
+.B "\-F ?"
+prints this table.  The PID
+.RB ( p )
+and file descriptor
+.RB ( f )
+fields are always produced, whatever the list asks for, and fields are
+written in lsof's own order rather than the order requested.
 .TP
 .BR \-J ", " \-\-json
 Emit each row as a JSON object, one per line (JSONL/NDJSON).

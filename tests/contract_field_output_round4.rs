@@ -104,14 +104,20 @@ fn test_field_output_p_only_lines_start_with_p_marker() {
         !nonblank.is_empty(),
         "-F p -p <self> must produce at least one record line"
     );
+    // lsof always emits the process (`p`) and descriptor (`f`) fields, whatever
+    // the -F list says: `lsof -F p` answers `p<pid>` followed by one `f<fd>`
+    // per open file. Nothing else may appear.
+    assert!(
+        nonblank[0].starts_with('p'),
+        "first line: {:?}",
+        nonblank[0]
+    );
     for line in &nonblank {
         assert!(
-            line.starts_with('p'),
-            "-F p produced a line not starting with 'p' marker: {line:?}"
+            line.starts_with('p') || line.starts_with('f'),
+            "-F p produced a line that is neither a pid nor an fd: {line:?}"
         );
-        // None of the other common field markers should appear as a line prefix
-        // when only `p` was requested.
-        for unwanted in ['c', 'u', 'f', 'n', 't'] {
+        for unwanted in ['c', 'u', 'n', 't', 'D', 's', 'i'] {
             assert!(
                 !line.starts_with(unwanted),
                 "-F p produced a line with stray {unwanted:?} marker: {line:?}"
@@ -141,10 +147,20 @@ fn test_field_output_t_only_lines_start_with_t_marker() {
         !nonblank.is_empty(),
         "-F t -p <self> must produce at least one type record"
     );
+    // As with -F p: the always-selected pid and fd fields frame the types.
+    assert!(
+        nonblank[0].starts_with('p'),
+        "first line: {:?}",
+        nonblank[0]
+    );
+    assert!(
+        nonblank.iter().any(|l| l.starts_with('t')),
+        "-F t produced no type records: {nonblank:?}"
+    );
     for line in &nonblank {
         assert!(
-            line.starts_with('t'),
-            "-F t produced a line not starting with 't' marker: {line:?}"
+            line.starts_with('t') || line.starts_with('p') || line.starts_with('f'),
+            "-F t produced an unrequested field: {line:?}"
         );
     }
 }

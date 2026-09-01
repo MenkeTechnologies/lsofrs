@@ -87,9 +87,22 @@ Field characters:
 .BR p =PID,
 .BR c =command,
 .BR f =FD,
+.BR a =access,
 .BR n =name,
 .BR t =type,
-etc.
+.BR D =device,
+.BR s =size,
+.BR i =inode,
+.BR T =TCP/TPI info.
+Bare
+.B \-F
+selects every field;
+.B "\-F ?"
+lists them.  The PID
+.RB ( p )
+and descriptor
+.RB ( f )
+fields are always produced.
 .TP
 .BR \-J ", " \-\-json
 Output in JSON format.

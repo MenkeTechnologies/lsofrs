@@ -59,7 +59,9 @@ pub struct Args {
     pub terse: bool,
 
     /// Field output format (chars: p=pid, c=cmd, f=fd, n=name, t=type, etc.)
-    #[arg(short = 'F')]
+    ///
+    /// Bare `-F` selects every field, as in lsof; `-F ?` lists them.
+    #[arg(short = 'F', num_args = 0..=1, default_missing_value = "")]
     pub field_output: Option<String>,
 
     /// Repeat every N seconds

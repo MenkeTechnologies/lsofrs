@@ -273,6 +273,12 @@ pub fn print_processes(
     if show_ppid {
         let _ = write!(out, "{:>rw$} ", theme.ppid_title(), rw = w.ppid);
     }
+    // lsof renames the column when -o or -s pins it to one of the two values.
+    let size_off_title = match (disp.offset_always, disp.size_always) {
+        (true, false) => "OFFSET",
+        (false, true) => "SIZE",
+        _ => theme.size_off_title(),
+    };
     let _ = write!(
         out,
         "{user:<uw$} {fd:<fw$} {type_:<tw$} {dev:<dw$} {szoff:>sw$} {node:<nw$} ",
@@ -284,7 +290,7 @@ pub fn print_processes(
         tw = w.type_,
         dev = theme.dev_title(),
         dw = w.device,
-        szoff = theme.size_off_title(),
+        szoff = size_off_title,
         sw = w.size_off,
         node = theme.node_title(),
         nw = w.node,
@@ -312,7 +318,7 @@ pub fn print_processes(
             let dev_str = f.device_str();
             let szoff_str = disp.size_off_cell(f);
             let node_str = f.node_str();
-            let name_str = f.full_name();
+            let name_str = f.display_name();
 
             // Delta coloring
             let (prefix, suffix) = if let Some(ref classify) = delta_status {
@@ -412,71 +418,104 @@ pub fn print_terse(procs: &[Process]) {
 /// Print field output (-F format)
 pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
     let out = io::stdout();
-    let mut out = out.lock();
+    write_field_output(&mut out.lock(), procs, fields, terminator);
+}
 
-    let field_chars: Vec<char> = if fields.is_empty() {
-        vec!['p', 'f', 'n'] // default fields
+/// Field output, written to any sink — the printing path locks stdout, tests
+/// hand it a buffer.
+pub fn write_field_output<W: io::Write>(
+    out: &mut W,
+    procs: &[Process],
+    fields: &str,
+    terminator: char,
+) {
+    // lsof selects every field when -F is given no list, and always emits the
+    // process (`p`) and descriptor (`f`) fields whatever else was asked for.
+    // Fields are written in lsof's own order, not the order they were asked
+    // for, so a parser can rely on the layout.
+    let wanted: Vec<char> = if fields.is_empty() {
+        ALL_FIELDS.chars().collect()
     } else {
         fields.chars().collect()
     };
+    let on = |c: char| wanted.contains(&c);
 
     for p in procs {
-        // Process-level fields
-        for &fc in &field_chars {
-            match fc {
-                'p' => {
-                    let _ = write!(out, "p{}{}", p.pid, terminator);
-                }
-                'c' => {
-                    let _ = write!(out, "c{}{}", p.command, terminator);
-                }
-                'g' => {
-                    let _ = write!(out, "g{}{}", p.pgid, terminator);
-                }
-                'R' => {
-                    let _ = write!(out, "R{}{}", p.ppid, terminator);
-                }
-                'u' => {
-                    let _ = write!(out, "u{}{}", p.uid, terminator);
-                }
-                'L' => {
-                    let _ = write!(out, "L{}{}", p.username(), terminator);
-                }
-                _ => {}
-            }
+        let _ = write!(out, "p{}{}", p.pid, terminator);
+        for fc in PROCESS_FIELD_ORDER.chars().filter(|&c| on(c)) {
+            let _ = match fc {
+                'g' => write!(out, "g{}{}", p.pgid, terminator),
+                'R' => write!(out, "R{}{}", p.ppid, terminator),
+                'c' => write!(out, "c{}{}", p.command, terminator),
+                'u' => write!(out, "u{}{}", p.uid, terminator),
+                'L' => write!(out, "L{}{}", p.username(), terminator),
+                _ => Ok(()),
+            };
         }
 
-        // File-level fields
         for f in &p.files {
-            for &fc in &field_chars {
+            let _ = write!(out, "f{}{}", f.fd.as_display(), terminator);
+            for fc in FILE_FIELD_ORDER.chars().filter(|&c| on(c)) {
                 match fc {
-                    'f' => {
-                        let _ = write!(out, "f{}{}", f.fd.with_access(f.access), terminator);
-                    }
-                    'a' if f.access != Access::None => {
+                    // lsof writes a blank access and lock rather than omitting
+                    // the field.
+                    'a' => {
                         let _ = write!(out, "a{}{}", f.access.as_char(), terminator);
                     }
-                    't' => {
+                    'l' => {
+                        let _ = write!(out, "l{}{}", f.lock, terminator);
+                    }
+                    't' if !f.file_type.as_str().is_empty() => {
                         let _ = write!(out, "t{}{}", f.file_type.as_str(), terminator);
                     }
+                    // lsof prints the open flags and the file status as one
+                    // `0x…;0x…` pair.
+                    'G' => {
+                        if let Some(flags) = f.file_flags {
+                            let _ = write!(
+                                out,
+                                "G0x{flags:x};0x{:x}{terminator}",
+                                f.file_status.unwrap_or(0)
+                            );
+                        }
+                    }
+                    // D and d are mutually exclusive: a major/minor pair, or
+                    // the kernel handle a pipe or socket is known by.
                     'D' => {
-                        if let Some((maj, min)) = f.device {
-                            let _ = write!(out, "D0x{:x}{:02x}{}", maj, min, terminator);
+                        if let Some(dev) = f.raw_device() {
+                            let _ = write!(out, "D0x{dev:x}{terminator}");
+                        }
+                    }
+                    'd' => {
+                        if f.device.is_none()
+                            && let Some(label) = &f.device_label
+                        {
+                            let _ = write!(out, "d{label}{terminator}");
+                        }
+                    }
+                    'r' => {
+                        if let Some(rdev) = f.raw_rdev() {
+                            let _ = write!(out, "r0x{rdev:x}{terminator}");
                         }
                     }
                     's' => {
                         if let Some(sz) = f.size {
-                            let _ = write!(out, "s{}{}", sz, terminator);
+                            let _ = write!(out, "s{sz}{terminator}");
                         }
                     }
                     'o' => {
                         if let Some(off) = f.offset {
-                            let _ = write!(out, "o0t{}{}", off, terminator);
+                            let _ = write!(out, "o0t{off}{terminator}");
                         }
                     }
                     'i' => {
                         if let Some(ino) = f.inode {
-                            let _ = write!(out, "i{}{}", ino, terminator);
+                            let _ = write!(out, "i{ino}{terminator}");
+                        }
+                    }
+                    'k' => {
+                        if let Some(n) = f.nlink {
+                            let _ = write!(out, "k{n}{terminator}");
                         }
                     }
                     'n' => {
@@ -489,11 +528,19 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
                             let _ = write!(out, "P{}{}", si.protocol, terminator);
                         }
                     }
+                    // Queue sizes accompany a connection state; lsof reports
+                    // neither for a socket that has no TCP state.
                     'T' => {
                         if let Some(ref si) = f.socket_info
                             && let Some(ref state) = si.tcp_state
                         {
-                            let _ = write!(out, "TST={}{}", state, terminator);
+                            let _ = write!(out, "TST={state}{terminator}");
+                            if let Some(q) = si.recv_queue {
+                                let _ = write!(out, "TQR={q}{terminator}");
+                            }
+                            if let Some(q) = si.send_queue {
+                                let _ = write!(out, "TQS={q}{terminator}");
+                            }
                         }
                     }
                     _ => {}
@@ -504,6 +551,49 @@ pub fn print_field_output(procs: &[Process], fields: &str, terminator: char) {
         if terminator == '\0' {
             let _ = writeln!(out);
         }
+    }
+}
+
+/// Process-level fields, in the order lsof writes them.
+const PROCESS_FIELD_ORDER: &str = "gRcuL";
+
+/// File-level fields, in the order lsof writes them.
+const FILE_FIELD_ORDER: &str = "altGDdsoikPnT";
+
+/// Every field identifier `-F` can select, in the order lsof lists them.
+pub const ALL_FIELDS: &str = "acCdDfGgiklLnNoPrRsStTu";
+
+/// The `-F ?` help table: identifier and description, verbatim from lsof.
+pub const FIELD_HELP: &[(char, &str)] = &[
+    ('a', "access: r = read; w = write; u = read/write"),
+    ('c', "command name"),
+    ('d', "device character code"),
+    ('D', "major/minor device number as 0x<hex>"),
+    ('f', "file descriptor (always selected)"),
+    ('G', "file flaGs"),
+    ('g', "process group ID (PGID)"),
+    ('i', "inode number"),
+    ('k', "link count"),
+    ('l', "lock: r/R = read; w/W = write; u = read/write"),
+    ('L', "login name"),
+    ('n', "comment, name, Internet addresses"),
+    ('o', "file offset as 0t<dec> or 0x<hex>"),
+    ('p', "process ID (PID)"),
+    ('P', "protocol name"),
+    ('r', "raw device number as 0x<hex>"),
+    ('R', "paRent PID"),
+    ('s', "file size"),
+    ('t', "file type"),
+    ('T', "TCP/TPI info"),
+    ('u', "user ID (UID)"),
+    ('0', "(zero) use NUL field terminator instead of NL"),
+];
+
+/// Print the `-F ?` field table.
+pub fn print_field_help() {
+    println!("lsofrs:\tID    field description");
+    for (id, desc) in FIELD_HELP {
+        println!("\t {id}    {desc}");
     }
 }
 
@@ -977,6 +1067,79 @@ mod tests {
     fn print_terse_duplicate_pid_no_panic() {
         let procs = vec![make_proc(42, "x", vec![]), make_proc(42, "y", vec![])];
         print_terse(&procs);
+    }
+
+    /// Render field output into a string for assertions.
+    fn capture_field_output(procs: &[Process], fields: &str, terminator: char) -> String {
+        let mut buf: Vec<u8> = Vec::new();
+        write_field_output(&mut buf, procs, fields, terminator);
+        String::from_utf8(buf).expect("field output is UTF-8")
+    }
+
+    /// `-F` must always emit the process and descriptor fields, and must put
+    /// the access mode in `a`, never glued onto `f`.
+    #[test]
+    fn field_output_always_emits_pid_and_bare_fd() {
+        let mut f = OpenFile {
+            fd: FdName::Number(7),
+            access: Access::Write,
+            file_type: FileType::Reg,
+            name: "/tmp/x".to_string(),
+            ..Default::default()
+        };
+        f.device = Some((1, 13));
+        let p = Process::new(42, 1, 1, 501, "cmd".into(), vec![f]);
+
+        let out = capture_field_output(std::slice::from_ref(&p), "n", '\n');
+        assert!(out.starts_with("p42\n"), "pid field missing: {out:?}");
+        assert!(out.contains("\nf7\n"), "bare fd field missing: {out:?}");
+        assert!(
+            !out.contains("f7w"),
+            "access must not ride on the fd: {out:?}"
+        );
+
+        let with_access = capture_field_output(&[p], "a", '\n');
+        assert!(with_access.contains("\naw\n"), "{with_access:?}");
+    }
+
+    /// The `D` field is the platform's raw `dev_t`, not the two halves
+    /// concatenated: major 1, minor 13 is 0x100000d on Darwin.
+    #[test]
+    fn field_output_device_is_the_raw_dev_t() {
+        let f = OpenFile {
+            fd: FdName::Number(3),
+            file_type: FileType::Reg,
+            device: Some((1, 13)),
+            ..Default::default()
+        };
+        let p = Process::new(42, 1, 1, 501, "cmd".into(), vec![f]);
+        let out = capture_field_output(&[p], "D", '\n');
+        let expected = format!("D0x{:x}", crate::types::make_dev(1, 13));
+        assert!(out.contains(&expected), "{out:?} lacks {expected}");
+    }
+
+    /// A connection state belongs in `T`, not in the name; the column output
+    /// is where it is appended.
+    #[test]
+    fn field_output_keeps_tcp_state_out_of_the_name() {
+        let f = OpenFile {
+            fd: FdName::Number(3),
+            file_type: FileType::IPv4,
+            name: "1.2.3.4:80".to_string(),
+            socket_info: Some(crate::types::SocketInfo {
+                protocol: "TCP".to_string(),
+                tcp_state: Some(TcpState::Listen),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(f.full_name(), "1.2.3.4:80");
+        assert_eq!(f.display_name(), "1.2.3.4:80 (LISTEN)");
+
+        let p = Process::new(42, 1, 1, 501, "cmd".into(), vec![f]);
+        let out = capture_field_output(&[p], "nT", '\n');
+        assert!(out.contains("n1.2.3.4:80\n"), "{out:?}");
+        assert!(out.contains("TST=LISTEN\n"), "{out:?}");
     }
 
     #[test]

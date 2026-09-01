@@ -43,7 +43,7 @@ pub fn print_stale(procs: &[Process], theme: &Theme, json: bool) {
                     fd: f.fd.with_access(f.access),
                     file_type: f.file_type.as_str().to_string(),
                     size: f.size,
-                    name: f.full_name(),
+                    name: f.display_name(),
                 })
         })
         .collect();
@@ -300,7 +300,7 @@ mod tests {
                         fd: f.fd.with_access(f.access),
                         file_type: f.file_type.as_str().to_string(),
                         size: f.size,
-                        name: f.full_name(),
+                        name: f.display_name(),
                     })
             })
             .collect();

@@ -272,7 +272,7 @@ fn print_node(
             dim = theme.dim(),
             fd = fd_str,
             type_ = f.file_type.as_str(),
-            name = f.full_name(),
+            name = f.display_name(),
             reset = theme.reset(),
         );
     }

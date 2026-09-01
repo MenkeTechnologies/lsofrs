@@ -83,7 +83,7 @@ fn build_json_processes(procs: &[Process]) -> Vec<JsonProcess> {
                         node: f.inode,
                         access,
                         lock,
-                        name: f.full_name(),
+                        name: f.display_name(),
                         protocol,
                         tcp_state,
                     }

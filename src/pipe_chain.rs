@@ -29,6 +29,12 @@ struct PipeEndpoint {
 fn pipe_identifier(file: &OpenFile) -> Option<(String, String)> {
     let name = &file.name;
 
+    // An anonymous pipe on Linux is identified by its inode, which is all the
+    // kernel gives both ends in common.
+    if file.file_type == FileType::Fifo && name == "pipe" {
+        return file.inode.map(|ino| ("pipe".to_string(), ino.to_string()));
+    }
+
     // macOS: pipe names contain "->0x..." hex addresses
     if file.file_type == FileType::Pipe {
         // macOS style: look for hex address in name

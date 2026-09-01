@@ -13,6 +13,7 @@ const PROC_ALL_PIDS: u32 = 1;
 const PROC_PIDTASKALLINFO: c_int = 2;
 const PROC_PIDVNODEPATHINFO: c_int = 9;
 const PROC_PIDREGIONPATHINFO: c_int = 8;
+const PROC_PIDLISTFILEPORTS: c_int = 14;
 const PROC_PIDLISTFDS: c_int = 1;
 const PROC_PIDFDSOCKETINFO: c_int = 3;
 const PROC_PIDFDVNODEPATHINFO: c_int = 2;
@@ -29,7 +30,11 @@ const PROX_FDTYPE_PSEM: u32 = 4;
 const PROX_FDTYPE_KQUEUE: u32 = 5;
 const PROX_FDTYPE_PIPE: u32 = 6;
 const PROX_FDTYPE_FSEVENTS: u32 = 7;
-const PROX_FDTYPE_ATALK: u32 = 8;
+const PROX_FDTYPE_ATALK: u32 = 0;
+const PROX_FDTYPE_NETPOLICY: u32 = 9;
+const PROX_FDTYPE_CHANNEL: u32 = 10;
+const PROX_FDTYPE_NEXUS: u32 = 11;
+const PROC_PIDFDCHANNELINFO: c_int = 10;
 
 // Socket families and protocols
 const AF_INET: c_int = 2;
@@ -41,9 +46,26 @@ const IPPROTO_TCP: c_int = 6;
 const IPPROTO_UDP: c_int = 17;
 
 // Socket info kinds
-const SOCKINFO_TCP: c_int = 1;
-const SOCKINFO_IN: c_int = 2;
+const SOCKINFO_IN: c_int = 1;
+const SOCKINFO_TCP: c_int = 2;
 const SOCKINFO_UN: c_int = 3;
+const SOCKINFO_NDRV: c_int = 4;
+const SOCKINFO_KERN_EVENT: c_int = 5;
+const SOCKINFO_KERN_CTL: c_int = 6;
+
+const AF_ROUTE: c_int = 17;
+const AF_NDRV: c_int = 27;
+
+const MAXPATHLEN: usize = 1024;
+const MAX_KCTL_NAME: usize = 96;
+const IF_NAMESIZE: usize = 16;
+
+// proc_channel_info chi_type
+const PROC_CHANNEL_TYPE_USER_PIPE: u32 = 0;
+const PROC_CHANNEL_TYPE_KERNEL_PIPE: u32 = 1;
+const PROC_CHANNEL_TYPE_NET_IF: u32 = 2;
+const PROC_CHANNEL_TYPE_FLOW_SWITCH: u32 = 3;
+const PROC_CHANNEL_FLAGS_USER_PACKET_POOL: u32 = 0x20;
 
 // File mode bits
 const S_IFMT: u16 = 0o170000;
@@ -165,7 +187,7 @@ struct VnodeInfo {
 #[derive(Copy, Clone)]
 struct VnodeInfoPath {
     vip_vi: VnodeInfo,
-    vip_path: [u8; 1024],
+    vip_path: [u8; MAXPATHLEN],
 }
 
 #[repr(C)]
@@ -173,6 +195,13 @@ struct VnodeInfoPath {
 struct ProcVnodePathInfo {
     pvi_cdir: VnodeInfoPath,
     pvi_rdir: VnodeInfoPath,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ProcFilePortInfo {
+    proc_fileport: u32,
+    proc_fdtype: u32,
 }
 
 // proc_regioninfo / proc_regionwithpathinfo — mirrors <sys/proc_info.h>.
@@ -395,13 +424,92 @@ struct PipeFdInfo {
     pipe_info: PipeInfo,
 }
 
+// POSIX semaphore / shared memory info
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct PsemInfo {
+    psem_stat: VinfoStat,
+    psem_name: [u8; MAXPATHLEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct PsemFdInfo {
+    pfi: ProcFileInfo,
+    pseminfo: PsemInfo,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct PshmInfo {
+    pshm_stat: VinfoStat,
+    pshm_mappaddr: u64,
+    pshm_name: [u8; MAXPATHLEN],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct PshmFdInfo {
+    pfi: ProcFileInfo,
+    pshminfo: PshmInfo,
+}
+
+// Skywalk channel info
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ProcChannelInfo {
+    chi_instance: [u8; 16],
+    chi_port: u32,
+    chi_type: u32,
+    chi_flags: u32,
+    rfu_1: u32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct ChannelFdInfo {
+    pfi: ProcFileInfo,
+    channelinfo: ProcChannelInfo,
+}
+
+// Raw network driver socket info (SOCKINFO_NDRV)
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct NdrvInfo {
+    ndrvsi_if_family: u32,
+    ndrvsi_if_unit: u32,
+    ndrvsi_if_name: [u8; IF_NAMESIZE],
+}
+
+// Kernel event socket info (SOCKINFO_KERN_EVENT)
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct KernEventInfo {
+    kesi_vendor_code_filter: u32,
+    kesi_class_filter: u32,
+    kesi_subclass_filter: u32,
+}
+
+// Kernel control socket info (SOCKINFO_KERN_CTL)
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct KernCtlInfo {
+    kcsi_id: u32,
+    kcsi_reg_unit: u32,
+    kcsi_flags: u32,
+    kcsi_recvbufsize: u32,
+    kcsi_sendbufsize: u32,
+    kcsi_unit: u32,
+    kcsi_name: [u8; MAX_KCTL_NAME],
+}
+
 // Kqueue info
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct KqueueInfo {
     kq_stat: VinfoStat,
     kq_state: u32,
-    _pad: [u32; 3],
+    rfu_1: u32,
 }
 
 #[repr(C)]
@@ -417,6 +525,13 @@ unsafe extern "C" {
         pid: pid_t,
         flavor: c_int,
         arg: u64,
+        buffer: *mut c_void,
+        buffersize: c_int,
+    ) -> c_int;
+    fn proc_pidfileportinfo(
+        pid: pid_t,
+        fileport: u32,
+        flavor: c_int,
         buffer: *mut c_void,
         buffersize: c_int,
     ) -> c_int;
@@ -468,34 +583,75 @@ fn access_from_flags(flags: u32) -> Access {
     }
 }
 
-fn process_vnode_info(vip: &VnodeInfoPath, pfi: Option<&ProcFileInfo>) -> OpenFile {
-    let ft = file_type_from_mode(vip.vip_vi.vi_stat.vst_mode);
-    let path = cstr_from_bytes(&vip.vip_path);
-    let dev = vip.vip_vi.vi_stat.vst_dev;
+/// stat(2) a path into the kernel's `vinfo_stat` shape.
+fn stat_path(path: &str) -> Option<VinfoStat> {
+    if path.is_empty() {
+        return None;
+    }
+    let c_path = std::ffi::CString::new(path).ok()?;
+    unsafe {
+        let mut st: libc::stat = mem::zeroed();
+        if libc::stat(c_path.as_ptr(), &mut st) != 0 {
+            return None;
+        }
+        let mut vst: VinfoStat = mem::zeroed();
+        vst.vst_dev = st.st_dev as u32;
+        vst.vst_mode = st.st_mode;
+        vst.vst_nlink = st.st_nlink;
+        vst.vst_ino = st.st_ino;
+        vst.vst_size = st.st_size;
+        vst.vst_rdev = st.st_rdev as u32;
+        Some(vst)
+    }
+}
 
-    let (access, offset, file_flags) = match pfi {
+fn process_vnode_info(vip: &VnodeInfoPath, pfi: Option<&ProcFileInfo>) -> OpenFile {
+    let path = cstr_from_bytes(&vip.vip_path);
+
+    // Mapped regions sometimes come back with an empty vnode stat. lsof falls
+    // back to stat(2) on the path rather than printing a zero mode.
+    let stat = (vip.vip_vi.vi_stat.vst_mode == 0)
+        .then(|| stat_path(&path))
+        .flatten();
+    let vst = stat.as_ref().unwrap_or(&vip.vip_vi.vi_stat);
+
+    // A vnode we could not stat — SIP data vaults refuse it to anything
+    // without Apple's entitlement — still came from a mapped file, so report
+    // the type lsof does and leave the numbers we do not have blank.
+    let unknown = vst.vst_mode == 0 && !path.is_empty();
+    let ft = if unknown {
+        FileType::Reg
+    } else {
+        file_type_from_mode(vst.vst_mode)
+    };
+    let dev = vst.vst_dev;
+
+    let (access, offset, file_flags, file_status) = match pfi {
         Some(fi) => (
             access_from_flags(fi.fi_openflags),
             Some(fi.fi_offset as u64),
             Some(fi.fi_openflags as i64),
+            Some(fi.fi_status),
         ),
-        None => (Access::None, None, None),
+        None => (Access::None, None, None, None),
     };
 
     let (size, has_offset) = match ft {
+        _ if unknown => (None, false),
         FileType::Chr | FileType::Fifo => (None, true),
-        _ => (Some(vip.vip_vi.vi_stat.vst_size as u64), false),
+        _ => (Some(vst.vst_size as u64), false),
     };
 
     let rdev = match ft {
         FileType::Chr | FileType::Blk => {
-            let rd = vip.vip_vi.vi_stat.vst_rdev;
+            let rd = vst.vst_rdev;
             Some((major(rd), minor(rd)))
         }
         _ => None,
     };
 
     let device = match ft {
+        _ if unknown => None,
         FileType::Fifo => None,
         _ => Some((major(dev), minor(dev))),
     };
@@ -508,15 +664,18 @@ fn process_vnode_info(vip: &VnodeInfoPath, pfi: Option<&ProcFileInfo>) -> OpenFi
         device,
         size,
         offset: if has_offset { offset } else { None },
-        inode: Some(vip.vip_vi.vi_stat.vst_ino),
-        nlink: Some(vip.vip_vi.vi_stat.vst_nlink as u64),
+        inode: (!unknown).then_some(vst.vst_ino),
+        nlink: (!unknown).then_some(vst.vst_nlink as u64),
         name: path,
         name_append: None,
         socket_info: None,
         sel_flags: 0,
         is_nfs: false,
         rdev,
+        device_label: None,
+        file_port: None,
         file_flags,
+        file_status,
         file_struct_addr: None,
     }
 }
@@ -663,33 +822,131 @@ fn list_fds(pid: pid_t) -> Vec<ProcFdInfo> {
     }
 }
 
+/// Build the `OpenFile` for one descriptor, whatever kind of object it holds.
+fn descriptor(pid: pid_t, src: FdSource, fdtype: u32) -> Option<OpenFile> {
+    match fdtype {
+        PROX_FDTYPE_VNODE => process_vnode_fd(pid, src),
+        PROX_FDTYPE_SOCKET => process_socket_fd(pid, src),
+        PROX_FDTYPE_PIPE => process_pipe_fd(pid, src),
+        PROX_FDTYPE_KQUEUE => process_kqueue_fd(pid, src),
+        PROX_FDTYPE_PSEM => process_psem_fd(pid, src),
+        PROX_FDTYPE_PSHM => process_pshm_fd(pid, src),
+        PROX_FDTYPE_CHANNEL => process_channel_fd(pid, src),
+        // These carry no per-descriptor info flavor; lsof lists the type with
+        // an empty name.
+        PROX_FDTYPE_FSEVENTS => Some(bare_fd(src, FileType::Fsevents)),
+        PROX_FDTYPE_ATALK => Some(bare_fd(src, FileType::Atalk)),
+        PROX_FDTYPE_NETPOLICY => Some(bare_fd(src, FileType::Npolicy)),
+        PROX_FDTYPE_NEXUS => Some(bare_fd(src, FileType::Nexus)),
+        _ => None,
+    }
+}
+
+/// List the file ports a process holds.
+fn list_fileports(pid: pid_t) -> Vec<ProcFilePortInfo> {
+    unsafe {
+        let buf_size = proc_pidinfo(pid, PROC_PIDLISTFILEPORTS, 0, std::ptr::null_mut(), 0);
+        if buf_size <= 0 {
+            return Vec::new();
+        }
+        let count = buf_size as usize / mem::size_of::<ProcFilePortInfo>() + 16;
+        let alloc = count * mem::size_of::<ProcFilePortInfo>();
+        let mut ports: Vec<ProcFilePortInfo> = vec![mem::zeroed(); count];
+        let actual = proc_pidinfo(
+            pid,
+            PROC_PIDLISTFILEPORTS,
+            0,
+            ports.as_mut_ptr() as *mut c_void,
+            alloc as c_int,
+        );
+        if actual <= 0 {
+            return Vec::new();
+        }
+        ports.truncate(actual as usize / mem::size_of::<ProcFilePortInfo>());
+        ports.retain(|p| p.proc_fileport != 0);
+        ports
+    }
+}
+
+/// Where a descriptor's information comes from.
+///
+/// A process reaches most files through a file descriptor, but Mach also lets
+/// it hold a file by *file port*; both answer the same `proc_pidinfo` flavors
+/// through different entry points, and lsof lists file ports as `fp.` rows.
+#[derive(Copy, Clone)]
+enum FdSource {
+    Fd(i32),
+    FilePort(u32),
+}
+
+impl FdSource {
+    /// Fetch one info flavor for this descriptor.
+    ///
+    /// # Safety
+    /// `buffer` must point to at least `size` writable bytes of the layout the
+    /// flavor returns.
+    unsafe fn info(self, pid: pid_t, flavor: c_int, buffer: *mut c_void, size: c_int) -> c_int {
+        unsafe {
+            match self {
+                Self::Fd(fd) => proc_pidfdinfo(pid, fd, flavor, buffer, size),
+                Self::FilePort(port) => proc_pidfileportinfo(pid, port, flavor, buffer, size),
+            }
+        }
+    }
+
+    /// The FD column entry for this descriptor.
+    fn fd_name(self) -> FdName {
+        match self {
+            Self::Fd(fd) => FdName::Number(fd),
+            Self::FilePort(_) => FdName::FilePort,
+        }
+    }
+
+    /// The Mach file port a file was reached through, if any.
+    fn file_port(self) -> Option<u32> {
+        match self {
+            Self::Fd(_) => None,
+            Self::FilePort(port) => Some(port),
+        }
+    }
+}
+
 /// Process a vnode FD
-fn process_vnode_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
+fn process_vnode_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
     unsafe {
         let mut vnpi: VnodeFdInfoWithPath = mem::zeroed();
-        let ret = proc_pidfdinfo(
+        let ret = src.info(
             pid,
-            fd,
             PROC_PIDFDVNODEPATHINFO,
             &mut vnpi as *mut _ as *mut c_void,
             mem::size_of::<VnodeFdInfoWithPath>() as c_int,
         );
         if (ret as usize) < mem::size_of::<VnodeFdInfoWithPath>() {
+            // A descriptor whose vnode has been revoked (`revoke(2)`, or a tty
+            // torn out from under the process) answers ENOENT. lsof still
+            // lists the fd, named `(revoked)`.
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+                return Some(OpenFile {
+                    fd: src.fd_name(),
+                    file_type: FileType::Unknown(String::new()),
+                    name: "(revoked)".to_string(),
+                    ..Default::default()
+                });
+            }
             return None;
         }
         let mut of = process_vnode_info(&vnpi.pvip, Some(&vnpi.pfi));
-        of.fd = FdName::Number(fd);
+        of.fd = src.fd_name();
         Some(of)
     }
 }
 
 /// Process a socket FD
-fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
+fn process_socket_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
     unsafe {
         let mut si: SocketFdInfo = mem::zeroed();
-        let ret = proc_pidfdinfo(
+        let ret = src.info(
             pid,
-            fd,
             PROC_PIDFDSOCKETINFO,
             &mut si as *mut _ as *mut c_void,
             mem::size_of::<SocketFdInfo>() as c_int,
@@ -713,6 +970,8 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
             AF_INET6 => FileType::IPv6,
             AF_UNIX => FileType::Unix,
             AF_SYSTEM => FileType::Systm,
+            AF_ROUTE => FileType::Rte,
+            AF_NDRV => FileType::Ndrv,
             _ => FileType::Sock,
         };
 
@@ -728,115 +987,51 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
         };
 
         let mut name = String::new();
+        let mut device_label = Some(format!("0x{:x}", { si.psi.soi_pcb }));
 
         match family {
             AF_INET | AF_INET6 => {
-                if si.psi.soi_kind == SOCKINFO_TCP || si.psi.soi_kind == SOCKINFO_IN {
-                    // Read addresses from soi_proto union
+                // `in_sockinfo` sits at offset 0 of the union for both plain
+                // internet sockets and TCP ones (as `tcpsi_ini`), so the
+                // addresses are read the same way; only TCP adds a state and
+                // the protocol control block lsof prints as the device.
+                if si.psi.soi_kind == SOCKINFO_IN || si.psi.soi_kind == SOCKINFO_TCP {
                     let proto_bytes = &si.psi.soi_proto;
+                    let ini: &InSockInfo = &*(proto_bytes.as_ptr() as *const InSockInfo);
 
-                    if si.psi.soi_kind == SOCKINFO_TCP {
-                        // TcpSockInfo -> InSockInfo at offset 0
+                    if protocol == IPPROTO_TCP {
                         let tcp: &TcpSockInfo = &*(proto_bytes.as_ptr() as *const TcpSockInfo);
-                        let ini = &tcp.tcpsi_ini;
-
-                        // Only set tcp_state for actual TCP sockets (kernel may
-                        // report SOCKINFO_TCP kind for UDP sockets in edge cases)
-                        if protocol == IPPROTO_TCP {
-                            sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
-                        }
-
-                        if family == AF_INET {
-                            let la = Ipv4Addr::from(u32::from_be(
-                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
-                            ));
-                            let fa = Ipv4Addr::from(u32::from_be(
-                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
-                            ));
-                            let lp = u16::from_be(ini.insi_lport as u16);
-                            let fp = u16::from_be(ini.insi_fport as u16);
-
-                            sock_info.local = InetAddr {
-                                addr: Some(IpAddr::V4(la)),
-                                port: lp,
-                            };
-                            sock_info.foreign = InetAddr {
-                                addr: Some(IpAddr::V4(fa)),
-                                port: fp,
-                            };
-
-                            name =
-                                format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
-                        } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_6.s6_addr);
-                            let lp = u16::from_be(ini.insi_lport as u16);
-                            let fp = u16::from_be(ini.insi_fport as u16);
-
-                            sock_info.local = InetAddr {
-                                addr: Some(IpAddr::V6(la)),
-                                port: lp,
-                            };
-                            sock_info.foreign = InetAddr {
-                                addr: Some(IpAddr::V6(fa)),
-                                port: fp,
-                            };
-
-                            name =
-                                format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
-                        }
-                    } else {
-                        // For TCP sockets reported as SOCKINFO_IN, still read the state
-                        if protocol == IPPROTO_TCP {
-                            let tcp: &TcpSockInfo = &*(proto_bytes.as_ptr() as *const TcpSockInfo);
-                            sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
-                        }
-                        let ini: &InSockInfo = &*(proto_bytes.as_ptr() as *const InSockInfo);
-
-                        if family == AF_INET {
-                            let la = Ipv4Addr::from(u32::from_be(
-                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
-                            ));
-                            let fa = Ipv4Addr::from(u32::from_be(
-                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
-                            ));
-                            let lp = u16::from_be(ini.insi_lport as u16);
-                            let fp = u16::from_be(ini.insi_fport as u16);
-
-                            sock_info.local = InetAddr {
-                                addr: Some(IpAddr::V4(la)),
-                                port: lp,
-                            };
-                            sock_info.foreign = InetAddr {
-                                addr: Some(IpAddr::V4(fa)),
-                                port: fp,
-                            };
-
-                            name =
-                                format_inet_name(IpAddr::V4(la), lp, IpAddr::V4(fa), fp, proto_str);
-                        } else {
-                            let la = Ipv6Addr::from(ini.insi_laddr.ina_6.s6_addr);
-                            let fa = Ipv6Addr::from(ini.insi_faddr.ina_6.s6_addr);
-                            let lp = u16::from_be(ini.insi_lport as u16);
-                            let fp = u16::from_be(ini.insi_fport as u16);
-
-                            sock_info.local = InetAddr {
-                                addr: Some(IpAddr::V6(la)),
-                                port: lp,
-                            };
-                            sock_info.foreign = InetAddr {
-                                addr: Some(IpAddr::V6(fa)),
-                                port: fp,
-                            };
-
-                            name =
-                                format_inet_name(IpAddr::V6(la), lp, IpAddr::V6(fa), fp, proto_str);
-                        }
+                        sock_info.tcp_state = Some(TcpState::from_raw(tcp.tcpsi_state));
+                        device_label = Some(format!("0x{:x}", { tcp.tcpsi_tp }));
                     }
-                }
 
-                if let Some(ref state) = sock_info.tcp_state {
-                    name.push_str(&format!(" ({})", state));
+                    let lp = u16::from_be(ini.insi_lport as u16);
+                    let fp = u16::from_be(ini.insi_fport as u16);
+                    let (la, fa) = if family == AF_INET {
+                        (
+                            IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                                ini.insi_laddr.ina_46.i46a_addr4.s_addr,
+                            ))),
+                            IpAddr::V4(Ipv4Addr::from(u32::from_be(
+                                ini.insi_faddr.ina_46.i46a_addr4.s_addr,
+                            ))),
+                        )
+                    } else {
+                        (
+                            IpAddr::V6(Ipv6Addr::from(ini.insi_laddr.ina_6.s6_addr)),
+                            IpAddr::V6(Ipv6Addr::from(ini.insi_faddr.ina_6.s6_addr)),
+                        )
+                    };
+
+                    sock_info.local = InetAddr {
+                        addr: Some(la),
+                        port: lp,
+                    };
+                    sock_info.foreign = InetAddr {
+                        addr: Some(fa),
+                        port: fp,
+                    };
+                    name = format_inet_name(la, lp, fa, fp, proto_str);
                 }
             }
             AF_UNIX => {
@@ -849,22 +1044,55 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
                         String::new()
                     };
                     if path.is_empty() {
-                        name = format!("->0x{:x}", { un.unsi_conn_pcb });
+                        name = match un.unsi_conn_pcb {
+                            0 => "->(none)".to_string(),
+                            pcb => format!("->0x{pcb:x}"),
+                        };
                     } else {
                         name = path;
                     }
                 }
             }
             AF_SYSTEM => {
-                name = "systemsocket".to_string();
+                // Kernel control sockets are named by their control, id and
+                // unit, e.g. `[ctl com.apple.net.netagent id 3 unit 7]`.
+                if si.psi.soi_kind == SOCKINFO_KERN_EVENT {
+                    let ke: &KernEventInfo = &*(si.psi.soi_proto.as_ptr() as *const KernEventInfo);
+                    name = format!(
+                        "[event {}:{}:{}]",
+                        { ke.kesi_vendor_code_filter },
+                        { ke.kesi_class_filter },
+                        { ke.kesi_subclass_filter }
+                    );
+                } else if si.psi.soi_kind == SOCKINFO_KERN_CTL {
+                    let kc: &KernCtlInfo = &*(si.psi.soi_proto.as_ptr() as *const KernCtlInfo);
+                    name = format!(
+                        "[ctl {} id {} unit {}]",
+                        cstr_from_bytes(&kc.kcsi_name),
+                        { kc.kcsi_id },
+                        { kc.kcsi_unit }
+                    );
+                }
             }
+            AF_NDRV => {
+                if si.psi.soi_kind == SOCKINFO_NDRV {
+                    let nd: &NdrvInfo = &*(si.psi.soi_proto.as_ptr() as *const NdrvInfo);
+                    // The kernel keeps the interface name and its unit
+                    // number apart: "en" + 6 is what lsof prints as en6.
+                    let ifname = cstr_from_bytes(&nd.ndrvsi_if_name);
+                    if !ifname.is_empty() {
+                        name = format!("-> {ifname}{}", { nd.ndrvsi_if_unit });
+                    }
+                }
+            }
+            AF_ROUTE => {}
             _ => {
                 name = format!("protocol={}", protocol);
             }
         }
 
         Some(OpenFile {
-            fd: FdName::Number(fd),
+            fd: src.fd_name(),
             access,
             lock: ' ',
             file_type,
@@ -879,19 +1107,21 @@ fn process_socket_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
             sel_flags: 0,
             is_nfs: false,
             rdev: None,
+            device_label,
             file_flags: Some(si.pfi.fi_openflags as i64),
+            file_port: None,
+            file_status: Some(si.pfi.fi_status),
             file_struct_addr: None,
         })
     }
 }
 
 /// Process a pipe FD
-fn process_pipe_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
+fn process_pipe_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
     unsafe {
         let mut pi: PipeFdInfo = mem::zeroed();
-        let ret = proc_pidfdinfo(
+        let ret = src.info(
             pid,
-            fd,
             PROC_PIDFDPIPEINFO,
             &mut pi as *mut _ as *mut c_void,
             mem::size_of::<PipeFdInfo>() as c_int,
@@ -899,17 +1129,22 @@ fn process_pipe_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
         if (ret as usize) < mem::size_of::<PipeFdInfo>() {
             return None;
         }
-        let access = access_from_flags(pi.pfi.fi_openflags);
-        let name = format!("->0x{:x}", pi.pipe_info.pipe_peerhandle);
+        // lsof reports neither an access mode nor the open flags for a pipe,
+        // names it only by the peer it is joined to, and gives the buffer size
+        // rather than the byte count currently queued.
+        let name = match pi.pipe_info.pipe_peerhandle {
+            0 => String::new(),
+            peer => format!("->0x{peer:x}"),
+        };
         Some(OpenFile {
-            fd: FdName::Number(fd),
-            access,
+            fd: src.fd_name(),
+            access: Access::None,
             lock: ' ',
             file_type: FileType::Pipe,
             device: None,
-            size: Some(pi.pipe_info.pipe_stat.vst_size as u64),
+            size: Some(pi.pipe_info.pipe_stat.vst_blksize as u64),
             offset: None,
-            inode: Some(pi.pipe_info.pipe_stat.vst_ino),
+            inode: None,
             nlink: None,
             name,
             name_append: None,
@@ -917,19 +1152,149 @@ fn process_pipe_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
             sel_flags: 0,
             is_nfs: false,
             rdev: None,
-            file_flags: Some(pi.pfi.fi_openflags as i64),
+            device_label: Some(format!("0x{:x}", { pi.pipe_info.pipe_handle })),
+            file_flags: None,
+            file_port: None,
+            file_status: None,
             file_struct_addr: None,
         })
     }
 }
 
+/// A descriptor class the kernel exposes by type alone, with no info flavor.
+fn bare_fd(src: FdSource, file_type: FileType) -> OpenFile {
+    OpenFile {
+        fd: src.fd_name(),
+        file_type,
+        name: String::new(),
+        ..Default::default()
+    }
+}
+
+/// Process a POSIX semaphore FD
+fn process_psem_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
+    unsafe {
+        let mut pi: PsemFdInfo = mem::zeroed();
+        let ret = src.info(
+            pid,
+            PROC_PIDFDPSEMINFO,
+            &mut pi as *mut _ as *mut c_void,
+            mem::size_of::<PsemFdInfo>() as c_int,
+        );
+        if (ret as usize) < mem::size_of::<PsemFdInfo>() {
+            return None;
+        }
+        Some(OpenFile {
+            fd: src.fd_name(),
+            access: access_from_flags(pi.pfi.fi_openflags),
+            file_type: FileType::Psem,
+            offset: Some(pi.pfi.fi_offset as u64),
+            name: cstr_from_bytes(&pi.pseminfo.psem_name),
+            file_flags: Some(pi.pfi.fi_openflags as i64),
+            file_port: None,
+            file_status: Some(pi.pfi.fi_status),
+            ..Default::default()
+        })
+    }
+}
+
+/// Process a POSIX shared memory FD
+fn process_pshm_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
+    unsafe {
+        let mut pi: PshmFdInfo = mem::zeroed();
+        let ret = src.info(
+            pid,
+            PROC_PIDFDPSHMINFO,
+            &mut pi as *mut _ as *mut c_void,
+            mem::size_of::<PshmFdInfo>() as c_int,
+        );
+        if (ret as usize) < mem::size_of::<PshmFdInfo>() {
+            return None;
+        }
+        Some(OpenFile {
+            fd: src.fd_name(),
+            access: access_from_flags(pi.pfi.fi_openflags),
+            file_type: FileType::Pshm,
+            size: Some(pi.pshminfo.pshm_stat.vst_size as u64),
+            name: cstr_from_bytes(&pi.pshminfo.pshm_name),
+            file_flags: Some(pi.pfi.fi_openflags as i64),
+            file_port: None,
+            file_status: Some(pi.pfi.fi_status),
+            ..Default::default()
+        })
+    }
+}
+
+/// Process a skywalk channel FD
+fn process_channel_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
+    unsafe {
+        let mut ci: ChannelFdInfo = mem::zeroed();
+        let ret = src.info(
+            pid,
+            PROC_PIDFDCHANNELINFO,
+            &mut ci as *mut _ as *mut c_void,
+            mem::size_of::<ChannelFdInfo>() as c_int,
+        );
+        if (ret as usize) < mem::size_of::<ChannelFdInfo>() {
+            return None;
+        }
+        let (kind, name) = channel_labels(&ci.channelinfo);
+        Some(OpenFile {
+            fd: src.fd_name(),
+            access: access_from_flags(ci.pfi.fi_openflags),
+            file_type: FileType::Channel,
+            device_label: Some(kind),
+            name,
+            file_flags: Some(ci.pfi.fi_openflags as i64),
+            file_port: None,
+            file_status: Some(ci.pfi.fi_status),
+            ..Default::default()
+        })
+    }
+}
+
+/// Split a channel into the kind lsof puts in DEVICE and the
+/// `<instance>[<port>] <flags>` text it puts in NAME.
+fn channel_labels(ci: &ProcChannelInfo) -> (String, String) {
+    let kind = match ci.chi_type {
+        PROC_CHANNEL_TYPE_USER_PIPE => "upipe".to_string(),
+        PROC_CHANNEL_TYPE_KERNEL_PIPE => "kpipe".to_string(),
+        PROC_CHANNEL_TYPE_NET_IF => "netif".to_string(),
+        PROC_CHANNEL_TYPE_FLOW_SWITCH => "flowsw".to_string(),
+        other => format!("type={other}"),
+    };
+
+    // The flag list is space-separated after the instance, and lsof keeps the
+    // separating space even when no flag applies. Only user-packet-pool is
+    // rendered; lsof leaves the remaining channel flags out of the name.
+    let flags = if ci.chi_flags & PROC_CHANNEL_FLAGS_USER_PACKET_POOL != 0 {
+        "user-packet-pool"
+    } else {
+        ""
+    };
+    let name = format!("{}[{}] {flags}", format_uuid(&ci.chi_instance), ci.chi_port);
+    (kind, name)
+}
+
+/// Format a raw UUID the way the system tools print it.
+fn format_uuid(u: &[u8; 16]) -> String {
+    let hex: String = u.iter().map(|b| format!("{b:02X}")).collect();
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
+}
+
 /// Process a kqueue FD
-fn process_kqueue_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
+fn process_kqueue_fd(pid: pid_t, src: FdSource) -> Option<OpenFile> {
     unsafe {
         let mut ki: KqueueFdInfo = mem::zeroed();
-        let ret = proc_pidfdinfo(
+        let ret = src.info(
             pid,
-            fd,
             PROC_PIDFDKQUEUEINFO,
             &mut ki as *mut _ as *mut c_void,
             mem::size_of::<KqueueFdInfo>() as c_int,
@@ -939,7 +1304,7 @@ fn process_kqueue_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
         }
         let access = access_from_flags(ki.pfi.fi_openflags);
         Some(OpenFile {
-            fd: FdName::Number(fd),
+            fd: src.fd_name(),
             access,
             lock: ' ',
             file_type: FileType::Kqueue,
@@ -948,13 +1313,19 @@ fn process_kqueue_fd(pid: pid_t, fd: i32) -> Option<OpenFile> {
             offset: None,
             inode: None,
             nlink: None,
-            name: format!("count={}", ki.kqueue_info.kq_state),
+            name: format!(
+                "count={}, state=0x{:x}",
+                ki.kqueue_info.kq_stat.vst_size, ki.kqueue_info.kq_state
+            ),
             name_append: None,
             socket_info: None,
             sel_flags: 0,
             is_nfs: false,
             rdev: None,
+            device_label: None,
             file_flags: Some(ki.pfi.fi_openflags as i64),
+            file_port: None,
+            file_status: Some(ki.pfi.fi_status),
             file_struct_addr: None,
         })
     }
@@ -1030,38 +1401,17 @@ fn process_pid(pid: pid_t) -> Option<Process> {
     // Get open FDs
     let fds = list_fds(pid);
     for fdi in &fds {
-        let of = match fdi.proc_fdtype {
-            PROX_FDTYPE_VNODE => process_vnode_fd(pid, fdi.proc_fd),
-            PROX_FDTYPE_SOCKET => process_socket_fd(pid, fdi.proc_fd),
-            PROX_FDTYPE_PIPE => process_pipe_fd(pid, fdi.proc_fd),
-            PROX_FDTYPE_KQUEUE => process_kqueue_fd(pid, fdi.proc_fd),
-            PROX_FDTYPE_PSEM => Some(OpenFile {
-                fd: FdName::Number(fdi.proc_fd),
-                file_type: FileType::Psem,
-                name: String::new(),
-                ..Default::default()
-            }),
-            PROX_FDTYPE_PSHM => Some(OpenFile {
-                fd: FdName::Number(fdi.proc_fd),
-                file_type: FileType::Pshm,
-                name: String::new(),
-                ..Default::default()
-            }),
-            PROX_FDTYPE_FSEVENTS => Some(OpenFile {
-                fd: FdName::Number(fdi.proc_fd),
-                file_type: FileType::Fsevents,
-                name: String::new(),
-                ..Default::default()
-            }),
-            PROX_FDTYPE_ATALK => Some(OpenFile {
-                fd: FdName::Number(fdi.proc_fd),
-                file_type: FileType::Atalk,
-                name: String::new(),
-                ..Default::default()
-            }),
-            _ => None,
-        };
+        let of = descriptor(pid, FdSource::Fd(fdi.proc_fd), fdi.proc_fdtype);
         if let Some(f) = of {
+            files.push(f);
+        }
+    }
+
+    // Files held through Mach file ports rather than descriptors.
+    for fp in list_fileports(pid) {
+        let src = FdSource::FilePort(fp.proc_fileport);
+        if let Some(mut f) = descriptor(pid, src, fp.proc_fdtype) {
+            f.file_port = src.file_port();
             files.push(f);
         }
     }
@@ -1223,6 +1573,101 @@ mod tests {
     fn cstr_from_bytes_empty() {
         assert_eq!(cstr_from_bytes(b"\0"), "");
         assert_eq!(cstr_from_bytes(b""), "");
+    }
+
+    /// The kqueue info struct must match the kernel's byte for byte: an extra
+    /// reserved word made `proc_pidfdinfo` come up short and every KQUEUE
+    /// descriptor vanished from the listing.
+    #[test]
+    fn kqueue_struct_matches_the_kernel_layout() {
+        assert_eq!(
+            mem::size_of::<KqueueInfo>(),
+            mem::size_of::<VinfoStat>() + 8
+        );
+        assert_eq!(
+            mem::size_of::<KqueueFdInfo>(),
+            mem::size_of::<ProcFileInfo>() + mem::size_of::<KqueueInfo>()
+        );
+    }
+
+    /// The `PROX_FDTYPE_*` values are a kernel ABI; a wrong one silently drops
+    /// a whole class of descriptor.
+    #[test]
+    fn fd_type_constants_match_the_header() {
+        assert_eq!(PROX_FDTYPE_ATALK, 0);
+        assert_eq!(PROX_FDTYPE_VNODE, 1);
+        assert_eq!(PROX_FDTYPE_SOCKET, 2);
+        assert_eq!(PROX_FDTYPE_PSHM, 3);
+        assert_eq!(PROX_FDTYPE_PSEM, 4);
+        assert_eq!(PROX_FDTYPE_KQUEUE, 5);
+        assert_eq!(PROX_FDTYPE_PIPE, 6);
+        assert_eq!(PROX_FDTYPE_FSEVENTS, 7);
+        assert_eq!(PROX_FDTYPE_NETPOLICY, 9);
+        assert_eq!(PROX_FDTYPE_CHANNEL, 10);
+        assert_eq!(PROX_FDTYPE_NEXUS, 11);
+        // The fd info flavors are a separate numbering from the fd types.
+        assert_eq!(PROC_PIDFDVNODEPATHINFO, 2);
+        assert_eq!(PROC_PIDFDSOCKETINFO, 3);
+        assert_eq!(PROC_PIDFDPSEMINFO, 4);
+        assert_eq!(PROC_PIDFDPSHMINFO, 5);
+        assert_eq!(PROC_PIDFDPIPEINFO, 6);
+        assert_eq!(PROC_PIDFDKQUEUEINFO, 7);
+        assert_eq!(PROC_PIDFDCHANNELINFO, 10);
+        assert_eq!(SOCKINFO_IN, 1);
+        assert_eq!(SOCKINFO_TCP, 2);
+    }
+
+    /// Our own kqueue must come back described, not dropped.
+    #[test]
+    fn kqueue_descriptor_is_listed() {
+        let fd = unsafe { libc::kqueue() };
+        assert!(fd >= 0, "could not create a kqueue");
+        let file = process_kqueue_fd(unsafe { libc::getpid() }, FdSource::Fd(fd));
+        unsafe { libc::close(fd) };
+
+        let file = file.expect("kqueue descriptor was dropped");
+        assert_eq!(file.file_type, FileType::Kqueue);
+        assert!(
+            file.name.starts_with("count=") && file.name.contains(", state=0x"),
+            "unexpected kqueue name: {}",
+            file.name
+        );
+    }
+
+    /// A channel's kind goes in the DEVICE column and the instance in NAME,
+    /// with lsof's separating space before the flag list.
+    #[test]
+    fn channel_labels_split_kind_from_instance() {
+        let ci = ProcChannelInfo {
+            chi_instance: [
+                0xBE, 0x0A, 0x4E, 0xF8, 0xF3, 0x71, 0x48, 0xAC, 0xBF, 0xCC, 0x18, 0xEA, 0x18, 0x83,
+                0x77, 0x44,
+            ],
+            chi_port: 6,
+            chi_type: PROC_CHANNEL_TYPE_FLOW_SWITCH,
+            chi_flags: PROC_CHANNEL_FLAGS_USER_PACKET_POOL,
+            rfu_1: 0,
+        };
+        assert_eq!(
+            channel_labels(&ci),
+            (
+                "flowsw".to_string(),
+                "BE0A4EF8-F371-48AC-BFCC-18EA18837744[6] user-packet-pool".to_string()
+            )
+        );
+
+        let bare = ProcChannelInfo {
+            chi_flags: 0,
+            chi_port: 0,
+            chi_type: PROC_CHANNEL_TYPE_KERNEL_PIPE,
+            ..ci
+        };
+        let (kind, name) = channel_labels(&bare);
+        assert_eq!(kind, "kpipe");
+        assert!(
+            name.ends_with("[0] "),
+            "lsof keeps the trailing space: {name:?}"
+        );
     }
 
     /// `PROC_PIDVNODEPATHINFO` must be flavor 9; it was once 6
@@ -1396,8 +1841,9 @@ mod tests {
     fn gather_processes_file_types_valid() {
         let procs = gather_processes();
         let valid_types = [
-            "REG", "DIR", "CHR", "BLK", "FIFO", "sock", "LINK", "PIPE", "KQUE", "unix", "IPv4",
-            "IPv6", "systm", "PSEM", "PSHM", "ATALK", "FSEV",
+            "REG", "DIR", "CHR", "BLK", "FIFO", "sock", "LINK", "PIPE", "KQUEUE", "unix", "IPv4",
+            "IPv6", "systm", "PSXSEM", "PSXSHM", "ATALK", "FSEVENT", "NPOLICY", "CHAN", "NEXUS",
+            "rte", "ndrv", "",
         ];
         for p in &procs {
             for f in &p.files {

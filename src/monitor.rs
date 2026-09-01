@@ -277,7 +277,7 @@ fn print_monitor_procs(
                 f.device_str(),
                 f.size_or_offset_str(),
                 f.node_str(),
-                f.full_name(),
+                f.display_name(),
                 grn = theme.green(),
                 blu = theme.blue(),
                 dim = theme.dim(),

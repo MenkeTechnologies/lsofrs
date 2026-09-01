@@ -35,7 +35,7 @@ pub fn print_csv(procs: &[Process]) {
                 csv_quote(&f.device_str()),
                 csv_quote(&f.size_or_offset_str()),
                 csv_quote(&f.node_str()),
-                csv_quote(&f.full_name()),
+                csv_quote(&f.display_name()),
             );
         }
     }
