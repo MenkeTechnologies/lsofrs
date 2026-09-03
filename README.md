@@ -421,8 +421,9 @@ Non-TTY (piped) output always does a single-shot print and exits — no TUI, no 
 
 ```
 src/
-├── main.rs      # CLI entry point, dispatch, repeat/leak-detect loops
+├── main.rs      # Binary entry point — a two-line call into `lsofrs::run()`
 ├── lib.rs       # Library crate root — module declarations
+├── run.rs       # CLI dispatch, repeat/leak-detect loops (shared with the `lsof` alias crate)
 ├── cli.rs       # clap argument definitions + custom help display
 ├── types.rs     # Core data structures (Process, OpenFile, SocketInfo, etc.)
 ├── darwin.rs    # macOS libproc FFI — process/FD enumeration (rayon parallel)
@@ -432,6 +433,7 @@ src/
 ├── strutil.rs   # Safe UTF-8 truncation for fixed-width display (no mid-codepoint slices)
 ├── output.rs    # Columnar & field output formatting, ANSI theming
 ├── json.rs      # JSON serialization via serde
+├── resolve.rs   # Cached, parallel host/service name resolution for socket names
 ├── monitor.rs   # Live full-screen mode (crossterm alternate screen)
 ├── follow.rs    # Single-process FD tracking with status transitions
 ├── leak.rs      # Circular-buffer leak detector
