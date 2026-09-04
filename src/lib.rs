@@ -42,9 +42,9 @@ pub mod output;
 pub mod pipe_chain;
 /// `ports` submodule.
 pub mod ports;
-/// `run` submodule — the CLI dispatch shared by every binary name.
 /// `resolve` submodule.
 pub mod resolve;
+/// `run` submodule — the CLI dispatch shared by every binary name.
 pub mod run;
 /// `stale` submodule.
 pub mod stale;

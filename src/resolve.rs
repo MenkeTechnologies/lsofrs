@@ -3,7 +3,7 @@
 //! lsof prints `localhost:https` where the kernel reports `127.0.0.1:443`,
 //! and `-n` / `-P` turn the two lookups back off. Both directions are cached
 //! process-wide: an address or port is resolved once, however many descriptors
-//! mention it, and [`warm`] resolves a whole snapshot in parallel before any
+//! mention it, and [`warm`](crate::resolve::warm) resolves a whole snapshot in parallel before any
 //! of it is printed so the lookups do not serialise behind the output.
 
 use std::collections::HashMap;
