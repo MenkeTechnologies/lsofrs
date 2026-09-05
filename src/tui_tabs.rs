@@ -233,6 +233,20 @@ impl Tab {
         Tab::ALL.iter().position(|&t| t == self).unwrap_or(0)
     }
 
+    /// Rows the tab draws above its first data row, counted from the top of the
+    /// content area. Mouse hit-testing subtracts this to map a screen row to a
+    /// row index, so it must match what the tab's `render_*` actually draws.
+    fn header_rows(self) -> u16 {
+        match self {
+            // info line + blank + column header
+            Tab::Top | Tab::Ports | Tab::Stale | Tab::NetMap | Tab::PipeChain => 3,
+            // column header only
+            Tab::Tree => 1,
+            // no header: row 0 is the first line of the summary body
+            Tab::Summary => 0,
+        }
+    }
+
     fn description(self) -> &'static str {
         match self {
             Tab::Top => "Top N processes sorted by FD count",
@@ -486,6 +500,25 @@ impl TabbedTui {
         self.scroll_offset[self.active.index()] = v;
     }
 
+    /// Data rows the content area can show for the active tab.
+    fn visible_rows(&self) -> usize {
+        self.content_area_h
+            .saturating_sub(self.active.header_rows()) as usize
+    }
+
+    /// Map a screen row inside the content area to an offset into the visible
+    /// data rows. `None` when the row lands on the tab's header block.
+    fn data_row_at(&self, y: u16) -> Option<usize> {
+        if y < self.content_area_y || y >= self.content_area_y + self.content_area_h {
+            return None;
+        }
+        let rel = y - self.content_area_y;
+        if rel < self.active.header_rows() {
+            return None;
+        }
+        Some((rel - self.active.header_rows()) as usize)
+    }
+
     fn select_next(&mut self) {
         let max = self.row_count().saturating_sub(1);
         let sel = match self.selected() {
@@ -493,7 +526,7 @@ impl TabbedTui {
             None => 0,
         };
         self.set_selected(Some(sel));
-        let visible = self.content_area_h.saturating_sub(4) as usize;
+        let visible = self.visible_rows();
         if sel >= self.scroll() + visible {
             self.set_scroll(sel.saturating_sub(visible.saturating_sub(1)));
         }
@@ -518,7 +551,7 @@ impl TabbedTui {
             None => half.min(max),
         };
         self.set_selected(Some(sel));
-        let visible = self.content_area_h.saturating_sub(4) as usize;
+        let visible = self.visible_rows();
         if sel >= self.scroll() + visible {
             self.set_scroll(sel.saturating_sub(visible.saturating_sub(1)));
         }
@@ -544,7 +577,7 @@ impl TabbedTui {
     fn jump_bottom(&mut self) {
         let last = self.row_count().saturating_sub(1);
         self.set_selected(Some(last));
-        let visible = self.content_area_h.saturating_sub(4) as usize;
+        let visible = self.visible_rows();
         self.set_scroll(last.saturating_sub(visible.saturating_sub(1)));
     }
 
@@ -1073,32 +1106,8 @@ impl TabbedTui {
                 return;
             }
         };
-        let result = if cfg!(target_os = "macos") {
-            std::process::Command::new("pbcopy")
-                .stdin(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    use std::io::Write;
-                    if let Some(ref mut stdin) = child.stdin {
-                        stdin.write_all(text.as_bytes())?;
-                    }
-                    child.wait()
-                })
-        } else {
-            std::process::Command::new("xclip")
-                .args(["-selection", "clipboard"])
-                .stdin(std::process::Stdio::piped())
-                .spawn()
-                .and_then(|mut child| {
-                    use std::io::Write;
-                    if let Some(ref mut stdin) = child.stdin {
-                        stdin.write_all(text.as_bytes())?;
-                    }
-                    child.wait()
-                })
-        };
-        match result {
-            Ok(_) => self.set_status(format!("Copied: {}", text)),
+        match copy_to_clipboard(&text) {
+            Ok(via) => self.set_status(format!("Copied ({}): {}", via, text)),
             Err(e) => self.set_status(format!("Copy failed: {}", e)),
         }
     }
@@ -3307,11 +3316,7 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                         };
                         draw_tooltip(frame.buffer_mut(), size, &state.theme, &hover_tt);
                     }
-                } else if hover_row >= tui.content_area_y
-                    && hover_row < tui.content_area_y + tui.content_area_h
-                {
-                    let data_row_offset =
-                        (hover_row - tui.content_area_y).saturating_sub(3) as usize;
+                } else if let Some(data_row_offset) = tui.data_row_at(hover_row) {
                     match tui.active {
                         Tab::Top => {
                             let lines = tui.build_tooltip(data_row_offset);
@@ -3963,12 +3968,11 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                                         | Tab::PipeChain
                                 )
                             {
-                                // +3 for info line + header row + blank row
-                                let data_row_offset =
-                                    (y - tui.content_area_y).saturating_sub(3) as usize;
-                                let idx = tui.scroll() + data_row_offset;
-                                if idx < tui.row_count() {
-                                    tui.set_selected(Some(idx));
+                                if let Some(off) = tui.data_row_at(y) {
+                                    let idx = tui.scroll() + off;
+                                    if idx < tui.row_count() {
+                                        tui.set_selected(Some(idx));
+                                    }
                                 }
                                 break;
                             }
@@ -4017,8 +4021,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             if y >= tui.content_area_y
                                 && y < tui.content_area_y + tui.content_area_h
                             {
-                                let data_row_offset =
-                                    (y - tui.content_area_y).saturating_sub(3) as usize;
+                                let Some(data_row_offset) = tui.data_row_at(y) else {
+                                    break;
+                                };
                                 match tui.active {
                                     Tab::Top => {
                                         // Top tab: row offset maps to sorted entry
@@ -4073,10 +4078,9 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
                             if y >= tui.content_area_y
                                 && y < tui.content_area_y + tui.content_area_h
                                 && matches!(tui.active, Tab::Ports | Tab::Stale | Tab::Tree)
+                                && let Some(off) = tui.data_row_at(y)
                             {
-                                let data_row_offset =
-                                    (y - tui.content_area_y).saturating_sub(3) as usize;
-                                let idx = tui.scroll() + data_row_offset;
+                                let idx = tui.scroll() + off;
                                 if idx < tui.row_count() {
                                     tui.set_selected(Some(idx));
                                     tui.toggle_pin();
@@ -4151,6 +4155,88 @@ pub fn run_tui_tabs(filter: &Filter, interval: u64, theme: &LsofTheme) {
         DisableMouseCapture,
         terminal::LeaveAlternateScreen
     );
+}
+
+/// External clipboard helpers, tried in order; the first one that exists wins.
+/// `pbcopy` is also tried by absolute path so a stripped `PATH` (sudo, launchd)
+/// still copies.
+const CLIPBOARD_CMDS: &[(&str, &[&str])] = &[
+    ("pbcopy", &[]),
+    ("/usr/bin/pbcopy", &[]),
+    ("wl-copy", &[]),
+    ("xclip", &["-selection", "clipboard"]),
+    ("xsel", &["--clipboard", "--input"]),
+    ("clip.exe", &[]),
+    ("termux-clipboard-set", &[]),
+];
+
+/// Copy `text` to the system clipboard, returning the mechanism that took it.
+///
+/// Falls back to the OSC 52 terminal escape when no helper binary is present —
+/// a stripped `PATH`, a headless box without `xclip`, or a remote ssh session.
+fn copy_to_clipboard(text: &str) -> Result<String, String> {
+    let mut last_err = String::new();
+    for (cmd, args) in CLIPBOARD_CMDS {
+        match run_clipboard_cmd(cmd, args, text) {
+            Ok(()) => return Ok((*cmd).to_string()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => last_err = format!("{}: {}", cmd, e),
+        }
+    }
+    match copy_via_osc52(text) {
+        Ok(()) => Ok("osc52".to_string()),
+        Err(e) if last_err.is_empty() => Err(format!("no clipboard helper found; osc52: {}", e)),
+        Err(_) => Err(last_err),
+    }
+}
+
+/// Pipe `text` into a clipboard helper and wait for it to finish.
+fn run_clipboard_cmd(cmd: &str, args: &[&str], text: &str) -> io::Result<()> {
+    use std::io::Write;
+    let mut child = std::process::Command::new(cmd)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    // Take the pipe so it closes before the wait — helpers read until EOF.
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::other("clipboard helper has no stdin"))?;
+    let written = stdin.write_all(text.as_bytes());
+    drop(stdin);
+    let status = child.wait()?;
+    written?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other(format!("exited with {}", status)))
+    }
+}
+
+/// Build the OSC 52 clipboard escape, wrapped in the tmux passthrough sequence
+/// (escapes doubled) when running inside tmux.
+fn osc52_sequence(text: &str, tmux: bool) -> String {
+    let payload = format!(
+        "\x1b]52;c;{}\x07",
+        crate::strutil::base64_encode(text.as_bytes())
+    );
+    if tmux {
+        format!("\x1bPtmux;{}\x1b\\", payload.replace('\x1b', "\x1b\x1b"))
+    } else {
+        payload
+    }
+}
+
+/// Hand the text to the terminal itself via OSC 52 — the only path that works
+/// with no helper binary, including over ssh.
+fn copy_via_osc52(text: &str) -> io::Result<()> {
+    use std::io::Write;
+    let seq = osc52_sequence(text, std::env::var_os("TMUX").is_some());
+    let mut out = io::stdout();
+    out.write_all(seq.as_bytes())?;
+    out.flush()
 }
 
 #[cfg(test)]
@@ -5295,6 +5381,146 @@ mod tests {
         assert_eq!(p2.pinned_pids, vec![100, 200]);
         assert!(p2.sort_frozen);
         assert!(p2.compact_view);
+    }
+
+    /// Read a rendered buffer row as plain text.
+    fn buf_row(buf: &Buffer, y: u16, w: u16) -> String {
+        (0..w).map(|x| buf[(x, y)].symbol()).collect()
+    }
+
+    /// The header offset used for mouse hit-testing must match where each
+    /// renderer actually puts its first data row — a mismatch silently selects
+    /// the wrong row (Tree was off by 2).
+    #[test]
+    fn header_rows_matches_first_rendered_data_row() {
+        let theme = LsofTheme::from_name(ThemeName::NeonSprawl);
+        let area = Rect::new(0, 0, 100, 20);
+
+        let mut buf = Buffer::empty(area);
+        let tree = vec![TreeRow {
+            indent: 0,
+            pid: 4242,
+            ppid: 0,
+            pgid: 4242,
+            user: "root".to_string(),
+            fd_count: 10,
+            reg_count: 5,
+            sock_count: 3,
+            pipe_count: 1,
+            other_count: 1,
+            net_count: 2,
+            command: "init".to_string(),
+            connector: String::new(),
+        }];
+        render_tree(&mut buf, area, &theme, &tree, 0, None, &HashSet::new());
+        assert!(
+            buf_row(&buf, Tab::Tree.header_rows(), area.width).contains("4242"),
+            "tree first data row is not at header_rows()"
+        );
+
+        let mut buf = Buffer::empty(area);
+        let ports = vec![PortRow {
+            proto: "TCP".to_string(),
+            addr: "127.0.0.1".to_string(),
+            port: 8080,
+            pid: 4242,
+            user: "root".to_string(),
+            command: "nginx".to_string(),
+            tcp_state: None,
+        }];
+        render_ports(
+            &mut buf,
+            area,
+            &theme,
+            &ports,
+            0,
+            None,
+            &HashSet::new(),
+            false,
+        );
+        assert!(
+            buf_row(&buf, Tab::Ports.header_rows(), area.width).contains("4242"),
+            "ports first data row is not at header_rows()"
+        );
+
+        let mut buf = Buffer::empty(area);
+        let net = vec![NetMapRow {
+            host: "example.net".to_string(),
+            count: 3,
+            protocols: "TCP".to_string(),
+            ports: "443".to_string(),
+            ports_full: "443".to_string(),
+            processes: "curl".to_string(),
+            state_breakdown: "ESTABLISHED:3".to_string(),
+        }];
+        render_net_map(&mut buf, area, &theme, &net, 0, None, false);
+        assert!(
+            buf_row(&buf, Tab::NetMap.header_rows(), area.width).contains("example.net"),
+            "net-map first data row is not at header_rows()"
+        );
+    }
+
+    /// Screen row → data row index, per tab. Header rows map to `None`.
+    #[test]
+    fn data_row_at_maps_screen_row_to_index() {
+        let mut tui = TabbedTui::new(0, &config::Prefs::default());
+        tui.content_area_y = 2;
+        tui.content_area_h = 20;
+
+        tui.active = Tab::Tree;
+        assert_eq!(tui.data_row_at(2), None, "tree header row");
+        assert_eq!(tui.data_row_at(3), Some(0), "tree first data row");
+        assert_eq!(tui.data_row_at(9), Some(6));
+
+        tui.active = Tab::Ports;
+        assert_eq!(tui.data_row_at(4), None, "ports column header");
+        assert_eq!(tui.data_row_at(5), Some(0), "ports first data row");
+
+        tui.active = Tab::Summary;
+        assert_eq!(tui.data_row_at(2), Some(0), "summary body starts at row 0");
+
+        // Outside the content area.
+        assert_eq!(tui.data_row_at(1), None);
+        assert_eq!(tui.data_row_at(22), None);
+    }
+
+    #[test]
+    fn base64_encode_matches_rfc4648_vectors() {
+        use crate::strutil::base64_encode;
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64_encode(&[0xff, 0xfe, 0xfd]), "//79");
+    }
+
+    /// A missing helper must surface as `NotFound` so the chain can move on to
+    /// the next candidate instead of reporting "Copy failed: os error 2".
+    #[test]
+    fn missing_clipboard_helper_reports_not_found() {
+        let err = run_clipboard_cmd("lsofrs-no-such-clipboard-helper", &[], "x")
+            .expect_err("nonexistent helper must fail");
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+    }
+
+    /// A helper that exits non-zero is a failure, not a silent success — and
+    /// piping into a helper that never reads must not hang the TUI.
+    #[test]
+    fn clipboard_helper_exit_status_is_checked() {
+        assert!(run_clipboard_cmd("false", &[], "payload").is_err());
+        assert!(run_clipboard_cmd("true", &[], "payload").is_ok());
+    }
+
+    #[test]
+    fn osc52_sequence_encodes_and_wraps_for_tmux() {
+        assert_eq!(osc52_sequence("foobar", false), "\x1b]52;c;Zm9vYmFy\x07");
+        assert_eq!(
+            osc52_sequence("foobar", true),
+            "\x1bPtmux;\x1b\x1b]52;c;Zm9vYmFy\x07\x1b\\"
+        );
     }
 
     #[test]

@@ -388,7 +388,7 @@ All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
 | `0` | Clear filter |
 | `j`/`k`/`↑`/`↓` | Navigate rows |
 | `F` | Pin/unpin selected row |
-| `y` | Copy selected row to clipboard |
+| `y` | Copy selected row to clipboard (`pbcopy`/`wl-copy`/`xclip`/`xsel`, falling back to the OSC 52 terminal escape over ssh) |
 | `e` | Export current tab to file |
 | `q`/`Esc`/`Ctrl-C` | Quit |
 

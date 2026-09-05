@@ -11,6 +11,32 @@ pub fn truncate_max_bytes(s: &str, max_bytes: usize) -> &str {
     }
 }
 
+/// Encode `data` as standard base64 (RFC 4648, with `=` padding).
+#[must_use]
+pub fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = chunk.get(1).map_or(0, |b| u32::from(*b));
+        let b2 = chunk.get(2).map_or(0, |b| u32::from(*b));
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(ALPHABET[(n >> 18) as usize & 0x3f] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 0x3f] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 0x3f] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 0x3f] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
