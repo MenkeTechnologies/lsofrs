@@ -5507,11 +5507,17 @@ mod tests {
     }
 
     /// A helper that exits non-zero is a failure, not a silent success — and
-    /// piping into a helper that never reads must not hang the TUI.
+    /// piping into a helper that reads to EOF must not hang the TUI. Both
+    /// probes read stdin: a helper that exits without reading (`true`) races
+    /// the write and fails with EPIPE on a fast runner, which says nothing
+    /// about this code.
     #[test]
     fn clipboard_helper_exit_status_is_checked() {
-        assert!(run_clipboard_cmd("false", &[], "payload").is_err());
-        assert!(run_clipboard_cmd("true", &[], "payload").is_ok());
+        assert!(run_clipboard_cmd("cat", &[], "payload").is_ok());
+        assert!(
+            run_clipboard_cmd("sh", &["-c", "cat >/dev/null; exit 3"], "payload").is_err(),
+            "a helper that exits non-zero must not report success"
+        );
     }
 
     #[test]
