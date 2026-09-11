@@ -4207,11 +4207,17 @@ fn run_clipboard_cmd(cmd: &str, args: &[&str], text: &str) -> io::Result<()> {
     let written = stdin.write_all(text.as_bytes());
     drop(stdin);
     let status = child.wait()?;
-    written?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("exited with {}", status)))
+    if !status.success() {
+        return Err(io::Error::other(format!("exited with {}", status)));
+    }
+    // A helper that exits 0 without draining its stdin leaves the write with
+    // EPIPE, and whether the write or the exit wins the race decides whether it
+    // is seen at all. The exit status is the helper's own answer about whether
+    // it took the text, so a broken pipe from one that succeeded is not an
+    // error to report over it. Every other write failure still is.
+    match written {
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
     }
 }
 
@@ -5518,6 +5524,18 @@ mod tests {
             run_clipboard_cmd("sh", &["-c", "cat >/dev/null; exit 3"], "payload").is_err(),
             "a helper that exits non-zero must not report success"
         );
+    }
+
+    /// A payload no pipe buffer can hold, so a helper that never reads exits
+    /// before the write finishes every time rather than only when the runner
+    /// loses the race: a megabyte is over every platform's pipe capacity
+    /// (Linux 64 KiB, macOS 16 KiB), so `write_all` is guaranteed to reach
+    /// EPIPE — exactly the state the exit status has to be read over.
+    #[test]
+    fn a_helper_that_never_reads_is_judged_by_its_exit_status() {
+        let payload = "x".repeat(1 << 20);
+        assert!(run_clipboard_cmd("true", &[], &payload).is_ok());
+        assert!(run_clipboard_cmd("false", &[], &payload).is_err());
     }
 
     #[test]
