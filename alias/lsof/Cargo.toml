@@ -22,7 +22,7 @@ name = "lsof"
 path = "src/main.rs"
 
 [dependencies]
-lsofrs = "4.10.0"
+lsofrs = "4.11.1"
 
 [profile.release]
 opt-level = 3
