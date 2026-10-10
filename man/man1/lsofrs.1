@@ -35,6 +35,8 @@ Supports prefix matching, exclusion with
 and regular expressions enclosed in
 .BR / .
 Comma-separated for multiple values.
+Long form:
+.BR \-\-command .
 .TP
 .BI \-d " FD"
 Select by file descriptor.
@@ -48,18 +50,37 @@ Select by process group ID.
 Comma-separated;
 .B ^
 to exclude.
+Long form:
+.BR \-\-pgid .
 .TP
 .BI \-p " PID"
 Select by process ID.
 Comma-separated;
 .B ^
 to exclude.
+Long form:
+.BR \-\-pid .
 .TP
 .BI \-u " USER"
 Select by login name or UID.
 Comma-separated;
 .B ^
 to exclude.
+Long form:
+.BR \-\-user .
+.TP
+.BI +d " DIR"
+List open files in
+.I DIR
+(one level).
+Long form:
+.BR \-\-dir .
+.TP
+.BI +D " DIR"
+Recursively list open files under
+.IR DIR .
+Long form:
+.BR \-\-dir\-recurse .
 .SS Network
 .TP
 .BI \-i " [ADDR]"
@@ -162,7 +183,8 @@ Use NUL as the field terminator instead of newline in
 output.
 .TP
 .B \-w
-Suppress warning messages.
+Accepted for lsof compatibility.
+lsofrs emits no warnings, so the option has no effect.
 .TP
 .B \-V
 Report search specifications (\fB\-p\fR, \fB\-c\fR, \fB\-u\fR, named files)
@@ -244,8 +266,26 @@ Trace pipe and socket IPC pairs between processes.
 .B \-\-csv
 Output in CSV format for spreadsheets and pipelines.
 .TP
+.BI \-\-color " MODE"
+Color output:
+.B auto
+(default; color when standard output is a terminal),
+.BR always ,
+or
+.BR never .
+.TP
 .B \-\-net\-map
 Display network connections grouped by remote host.
+.TP
+.B \-\-tui
+Unified full-screen TUI with tabs for the top, summary, ports, tree, net-map,
+pipe-chain, and stale views.
+Requires a terminal.
+.TP
+.BI \-\-theme " NAME"
+Color theme for TUI modes (default:
+.BR neon\-sprawl ).
+When the option is not given, the theme saved in the configuration file is used.
 .SH EXAMPLES
 List files using port 8080:
 .PP
@@ -371,8 +411,10 @@ lsofrs \-\-pipe\-chain
 .B 0
 Successful completion.
 .TP
-.B 1
-An error occurred, or no matching files were found.
+.B 2
+Invalid command-line arguments (reported by the argument parser).
+.PP
+lsofrs exits 0 whether or not any file matched.
 .SH SEE ALSO
 .BR lsof (8),
 .BR fstat (1),

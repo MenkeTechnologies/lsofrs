@@ -43,7 +43,7 @@ page so you can grep with `/`:
 .RB "\(em " "5\(en21x faster than lsof / lsofng"
 .br
 .B 10. ENVIRONMENT
-.RB "\(em " "vars that influence lsofrs"
+.RB "\(em " "environment variables (none are read)"
 .br
 .B 11. FILES
 .RB "\(em " "config, completions, man pages"
@@ -69,7 +69,7 @@ lsofrs, lsf \- list open files (modern Rust implementation of lsof)
 .B lsf
 is the shorter form of
 .BR lsofrs
-\(em same binary, quicker to type.
+\(em same code, quicker to type.
 .SH DESCRIPTION
 .B lsofrs
 maps the invisible topology between processes and the files they hold
@@ -81,11 +81,14 @@ sees it.
 A Rust rewrite of
 .BR lsofng (1)
 with
-.B zero-copy
-.IR repr(C)
-FFI to Darwin / Linux / FreeBSD kernel headers,
+.B libproc
+FFI on Darwin,
+.I /proc
+parsing on Linux,
+.B sysctl
+and procfs on FreeBSD,
 .B rayon
-work-stealing per-PID FD enumeration, and a streaming
+per-PID FD enumeration, and a
 .IR "gather \(-> filter \(-> print"
 pass.  When output goes to a TTY a cyberpunk theme is applied
 (headers rewritten, ANSI color enabled); when piped or redirected,
@@ -146,6 +149,9 @@ Examples:
 .br
 .B "lsf \-c bash,zsh,fish"
 \(em multiple.
+.PP
+Long form:
+.BR \-\-command .
 .RE
 .TP
 .BI \-d " FD"
@@ -163,17 +169,32 @@ are matched textually.
 .BI \-g " PGID"
 Select by process group ID.  Comma-separated;
 .B ^
-to exclude.
+to exclude.  Long form:
+.BR \-\-pgid .
 .TP
 .BI \-p " PID"
 Select by process ID.  Comma-separated;
 .B ^
-to exclude.
+to exclude.  Long form:
+.BR \-\-pid .
 .TP
 .BI \-u " USER"
 Select by login name or UID.  Comma-separated;
 .B ^
-to exclude.
+to exclude.  Long form:
+.BR \-\-user .
+.TP
+.BI +d " DIR"
+List open files in
+.I DIR
+(one level).  Long form:
+.BR \-\-dir .
+.TP
+.BI +D " DIR"
+Recursively list open files under
+.IR DIR .
+Long form:
+.BR \-\-dir\-recurse .
 .SH "3.  NETWORK SELECTION"
 .TP
 .BI \-i " [ADDR]"
@@ -266,6 +287,9 @@ with a single character identifying the field.  Field characters:
 .B l
 \(em lock status
 .br
+.B o
+\(em file offset, as 0t<dec> or 0x<hex>
+.br
 .B k
 \(em link count
 .br
@@ -297,8 +321,10 @@ fields are always produced, whatever the list asks for, and fields are
 written in lsof's own order rather than the order requested.
 .TP
 .BR \-J ", " \-\-json
-Emit each row as a JSON object, one per line (JSONL/NDJSON).
-Compatible with
+Emit a pretty-printed JSON array with one object per process; each
+object carries a
+.B files
+array.  Parseable with
 .BR jq (1).
 .TP
 .BI +L " [n]"
@@ -320,7 +346,7 @@ are never selected by
 .TP
 .B \-\-csv
 Pure CSV output (RFC 4180 quoting) for spreadsheets and pipelines.
-Header row included unless suppressed.
+A header row is always written.
 .TP
 .B \-R
 Show parent PID column (PPID).
@@ -339,7 +365,16 @@ Use NUL byte as the field terminator instead of newline in
 output.  Safe for filenames containing newlines.
 .TP
 .B \-w
-Suppress warning messages on stderr.
+Accepted for lsof compatibility.  lsofrs emits no warnings, so the option has
+no effect.
+.TP
+.BI \-\-color " MODE"
+Color output:
+.B auto
+(default; color when standard output is a terminal),
+.BR always ,
+or
+.BR never .
 .TP
 .B \-l
 Show the numeric user ID instead of resolving it to a login name.
@@ -382,7 +417,7 @@ For drop-in compatibility with scripts written against
 the following options are parsed and silently ignored (their arguments, where
 present, are consumed):
 .BR \-A ", " \-b ", " \-C ", " \-D ", " +|\-E ", " +|\-e ", " +|\-f ", "
-.BR \-K ", " \-k ", " +|\-m ", " +|\-M ", " \-O ", " \-S ", " \-x ", "
+.BR \-K ", " \-k ", " \-L ", " +|\-m ", " +|\-M ", " \-O ", " \-S ", " \-x ", "
 .BR +|\-X ", " \-z ", " \-Z .
 .SH "5.  ADVANCED LIVE MODES"
 .SS 5.1 Unified TUI (\-\-tui)
@@ -588,7 +623,7 @@ share common keybindings.
 tab(|);
 l l.
 .B Key|.B Action
-1\-9|Set refresh interval (seconds)
+1\-9|Set refresh interval in seconds (in \-\-tui, 1\-7 select a tab and 8\-9 set the interval)
 < / >|Fine-adjust refresh interval (\(+-1s)
 p|Pause/resume data collection
 ? / h|Toggle help overlay
@@ -630,8 +665,13 @@ b|Toggle distribution bar column
 d|Toggle delta column
 .TE
 .PP
-Non-TTY (piped) output always does a single-shot print and exits \(em no
-TUI, no key handling.
+When standard output is not a terminal,
+.BR \-\-top
+and
+.B "\-\-summary \-r"
+print a single snapshot and exit; no key handling is done.
+.B \-\-tui
+prints an error and exits.
 .SH "8.  ARCHITECTURE"
 .B lsofrs
 is structured as a streaming
@@ -654,29 +694,30 @@ applies selection criteria;
 format the result.
 .PP
 .B Per-PID FD enumeration is rayon-parallelized,
-fanning out across every CPU core.  Username lookups
-.RB ( "getpwuid_r" )
-are cached behind
-.B OnceCell
-to avoid repeated NSS hits.  Service-name lookups
-.RB ( "getservbyport" )
-are similarly cached.
+fanning out across every CPU core.  Login-name lookups are cached per
+process record behind
+.BR OnceCell .
+Host and service names
+.RB ( resolve.rs )
+are resolved once per distinct address or port, in parallel, before output is
+printed; both caches are process-wide.
 .PP
-.B FFI is zero-copy.
-Kernel structures are described as
+Kernel data is read through libproc on Darwin (into
 .B repr(C)
-Rust structs and read directly from
-.BR libproc (Darwin),
-.BR /proc (Linux),
-.BR sysctl (FreeBSD)
-with no intermediate string copies.
+structs), from
+.I /proc
+on Linux, and through sysctl and procfs on FreeBSD.
 .PP
 .B File layout:
 .PP
 .RS 2
 .nf
-src/main.rs       \(em CLI entry, dispatch, repeat / leak loops
-src/cli.rs        \(em clap argument definitions + custom help
+src/main.rs       \(em binary entry point (calls lsofrs::run)
+src/bin/lsf.rs    \(em lsf binary entry point (calls lsofrs::run)
+src/lib.rs        \(em module declarations, run() export
+src/run.rs        \(em CLI dispatch, repeat / leak / stall loops
+src/cli.rs        \(em clap argument definitions, lsof +/\- option normalization, help
+src/resolve.rs    \(em host and service name resolution caches
 src/types.rs      \(em core data structures
 src/darwin.rs     \(em macOS libproc FFI (rayon parallel)
 src/linux.rs      \(em Linux /proc filesystem (rayon parallel)
@@ -722,27 +763,18 @@ Structured (-J JSON / -F)|29.3 ms|156.1 ms|136.7 ms
 .PP
 .B Speedup:
 5\(en21x faster than traditional lsof implementations.  Rayon-parallel
-per-PID FD enumeration + zero-copy FFI structs + OnceCell-cached
-username lookups account for the bulk of the win.
+per-PID FD enumeration, parallel host and service resolution, and cached
+username lookups.
 .SH "10. ENVIRONMENT"
+lsofrs does not read environment variables to configure itself.
+Color is selected with
+.B \-\-color
+and the configuration file is always
+.IR ~/.lsofrs.conf .
 .TP
-.B LSOFRS_CONF
-Override the config file path (default
-.IR ~/.lsofrs.conf ).
-.TP
-.B NO_COLOR
-When set,
-.B lsofrs
-emits plain headers and no ANSI color even on a TTY.  See
-.UR https://no-color.org/
-NO_COLOR specification
-.UE .
-.TP
-.B TERM
-Used to detect terminal capability for color and TUI modes.  Setting
-to
-.B dumb
-disables color and TUI.
+.B TMUX
+When set, the TUI wraps its clipboard escape sequence (copy-row key) for tmux
+passthrough.
 .SH "11. FILES"
 .TP
 .I ~/.lsofrs.conf
@@ -764,8 +796,10 @@ directory in the source tree).
 .B 0
 Successful completion.
 .TP
-.B 1
-An error occurred, or no matching files were found.
+.B 2
+Invalid command-line arguments (reported by the argument parser).
+.PP
+lsofrs exits 0 whether or not any file matched.
 .SH "13. EXAMPLES"
 .PP
 List all open files (default behavior):
@@ -834,7 +868,7 @@ lsf \-\-json
 JSON for one PID, piped through jq:
 .RS
 .nf
-lsf \-J \-p 1234 | jq '.name'
+lsf \-J \-p 1234 | jq '.[].files[].name'
 .fi
 .RE
 .PP
@@ -922,9 +956,7 @@ lsf \-a \-u root \-i TCP
 .BR netstat (1),
 .BR pstree (1),
 .BR top (1),
-.BR proc (5),
-.BR strykeall (1),
-.BR zshrsall (1)
+.BR proc (5)
 .SH AUTHORS
 .B MenkeTechnologies
 .RI < https://github.com/MenkeTechnologies >
