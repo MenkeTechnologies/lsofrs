@@ -17,7 +17,7 @@
  [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://menketechnologies.github.io/lsofrs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-### `[LIST SYSTEM OPEN FILES // RUST CORE // 5-21× FASTER THAN lsof]`
+### `[LIST SYSTEM OPEN FILES // RUST CORE // FASTER THAN lsof]`
 
 > *"Rewritten in Rust. Faster. Safer. The same cyberpunk soul."*
 
@@ -171,7 +171,7 @@ script compatibility: `-A -b -C -D +|-E +|-e +|-f -K -k +|-m +|-M -O -S -x +|-X 
 
 ### Unified TUI (`--tui`)
 
-Full-screen tabbed dashboard with all modes in one interface. 7 clickable tabs, 31 color themes, mouse support, hover/right-click tooltips, theme chooser + editor, config persistence.
+Full-screen tabbed dashboard with all modes in one interface. Clickable tabs, color themes, mouse support, hover/right-click tooltips, theme chooser + editor, config persistence.
 
 ```bash
 lsf --tui                     # launch TUI (restores last tab/theme)
@@ -185,7 +185,7 @@ sudo lsf --tui                # full visibility (all processes)
 
 **Mouse**: click tabs, scroll rows, right-click for detailed tooltips (PID, FD breakdown, kill hints, copy hints), hover 1s for auto-tooltips.
 
-**Theme chooser** (`c`): browse 31 themes with color swatches, live preview as you scroll, Enter to apply + save.
+**Theme chooser** (`c`): browse themes with color swatches, live preview as you scroll, Enter to apply + save.
 
 **Theme editor** (`C`): create custom 6-color palettes, adjust values 0-255, name and save to `~/.lsofrs.conf`.
 
@@ -389,7 +389,7 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 | `<`/`>` (or `[`/`]`) | Adjust refresh interval (±1s) |
 | `p` | Pause/resume data collection |
 | `?`/`h` | Toggle help overlay |
-| `c` | Open theme chooser (31 themes with swatches) |
+| `c` | Open theme chooser (themes with swatches) |
 | `C` | Open theme editor (custom 6-color palettes) |
 | `T` | Toggle hover tooltips (right-click still works) |
 | `x` | Toggle border |
@@ -453,8 +453,8 @@ src/
 ├── summary.rs   # Aggregate statistics with bar charts
 ├── tree.rs      # Process tree view with FD inheritance
 ├── tui_app.rs   # Shared TUI framework (TuiMode trait, ratatui)
-├── tui_tabs.rs  # Unified tabbed TUI (--tui) with 7 tabs, mouse, tooltips
-├── theme.rs     # 31 color themes + custom theme support
+├── tui_tabs.rs  # Unified tabbed TUI (--tui) with mouse, tooltips
+├── theme.rs     # Color themes + custom theme support
 ├── config.rs    # TOML config persistence (~/.lsofrs.conf)
 ├── top.rs       # Live top-N FD dashboard (TuiMode)
 ├── watch.rs     # File watch — monitor opens/closes over time
@@ -534,7 +534,7 @@ Benchmarked on macOS with `hyperfine` (10 runs, 3 warmup, ~470 processes / ~5000
 | lsofng `-J` | 136.7 ms | 120.8–152.6 ms | **5x** slower |
 | lsof `-F pcfn` | 156.1 ms | 150.3–162.4 ms | **5x** slower |
 
-The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI structs and OnceCell-cached username lookups gives lsofrs a **5–21x** advantage over traditional lsof implementations.
+The rayon-parallelized per-PID FD enumeration combined with zero-copy FFI structs and OnceCell-cached username lookups gives lsofrs a substantial speed advantage over traditional lsof implementations.
 
 ---
 
