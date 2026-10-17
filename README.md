@@ -200,7 +200,7 @@ lsf --top -r 5                # refresh every 5 seconds
 lsf --top -u root             # top FD consumers for root
 ```
 
-**Top-specific keys**: `s` cycle sort, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#0x05-interactive-controls) for common keys.
+**Top-specific keys**: `s` cycle sort, `S` cycle sort and reverse, `r` reverse, `+`/`-` show more/fewer, `b` toggle bar, `d` toggle delta. See [Interactive Controls](#0x05-interactive-controls) for common keys.
 
 ### File Watch (`--watch FILE`)
 
@@ -368,14 +368,25 @@ When piped or redirected, plain headers and no colors are used — safe for scri
 
 ## [0x05] INTERACTIVE CONTROLS
 
-All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
-
-**Common keys**:
+`--top` and `--summary -r` (shared `TuiMode` framework) support:
 
 | Key | Action |
 |-----|--------|
 | `1`-`9` | Set refresh interval (seconds) |
-| `<`/`>` | Fine-adjust refresh interval (±1s) |
+| `<`/`>` (or `[`/`]`) | Adjust refresh interval (±1s) |
+| `p` | Pause/resume data collection |
+| `?`/`h` | Toggle help overlay |
+| `c` | Cycle to the next theme |
+| `q`/`Esc`/`Ctrl-C` | Quit |
+
+**`--tui` keys**:
+
+| Key | Action |
+|-----|--------|
+| `1`-`7` | Jump to tab by number |
+| `8`/`9` | Set refresh interval (seconds) |
+| `f` | Cycle refresh rate (1, 2, 5, 10 s) |
+| `<`/`>` (or `[`/`]`) | Adjust refresh interval (±1s) |
 | `p` | Pause/resume data collection |
 | `?`/`h` | Toggle help overlay |
 | `c` | Open theme chooser (31 themes with swatches) |
@@ -392,22 +403,22 @@ All live TUI modes (`--tui`, `--top`, `--summary -r`) share common keybindings.
 | `e` | Export current tab to file |
 | `q`/`Esc`/`Ctrl-C` | Quit |
 
-**`--tui` additional keys**:
+**`--tui` tab and mouse**:
 
 | Key | Action |
 |-----|--------|
 | `Tab`/`→` | Next tab |
 | `BackTab`/`←` | Previous tab |
-| `1`-`7` | Jump to tab by number |
 | Click tab | Switch to clicked tab |
 | Right-click row | Verbose tooltip (PID, FDs, kill hints) |
 | Hover 1s | Auto-tooltip (disappears on mouse move) |
 
-**`--top` additional keys**:
+**`--top` keys** (also active in the `--tui` TOP tab):
 
 | Key | Action |
 |-----|--------|
 | `s` | Cycle sort column (FDs→PID→USER→REG→SOCK→PIPE→OTHER→DELTA→CMD) |
+| `S` | Cycle sort column and reverse order |
 | `r` | Reverse sort order |
 | `+`/`-` | Show more/fewer processes (±5) |
 | `b` | Toggle distribution bar column |
