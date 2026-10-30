@@ -345,4 +345,68 @@ mod tests {
         assert_eq!(inet_name(&si), "[::1]:443");
         configure(true, true);
     }
+
+    /// The first entry for a (port, proto) is the primary name, the protocol
+    /// key is case-folded, and out-of-range or malformed ports are skipped.
+    #[test]
+    fn parse_services_primary_name_and_malformed_ports() {
+        let table = parse_services(
+            "http\t80/TCP\twww\n\
+             www-alt\t80/tcp\n\
+             #disabled\t81/tcp\n\
+             big\t65536/tcp\n\
+             neg\t-1/tcp\n\
+             noslash\t82\n\
+             lonely\n\
+             tight\t83/udp#comment\n\
+             \n",
+        );
+        let get = |p: u16, proto: &str| table.get(&(p, proto.to_string())).map(String::as_str);
+        assert_eq!(get(80, "tcp"), Some("http"));
+        assert_eq!(get(81, "tcp"), None);
+        assert_eq!(get(83, "udp"), Some("tight"));
+        assert_eq!(table.len(), 2);
+    }
+
+    /// Missing address or port renders as the `*` wildcard, and a foreign end
+    /// with a port but an unspecified address still counts as connected.
+    #[test]
+    fn endpoint_wildcards_and_half_open_foreign() {
+        let _guard = exclusive();
+        configure(false, false);
+        assert_eq!(
+            endpoint(
+                &InetAddr {
+                    addr: None,
+                    port: 0
+                },
+                "TCP"
+            ),
+            "*:*"
+        );
+        assert_eq!(
+            endpoint(
+                &InetAddr {
+                    addr: Some(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
+                    port: 53
+                },
+                "UDP"
+            ),
+            "*:53"
+        );
+        let si = SocketInfo {
+            protocol: "UDP".to_string(),
+            local: InetAddr {
+                addr: Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+                port: 5353,
+            },
+            foreign: InetAddr {
+                addr: Some(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+                port: 9,
+            },
+            ..Default::default()
+        };
+        assert_eq!(inet_name(&si), "127.0.0.1:5353->*:9");
+        configure(true, true);
+    }
 }

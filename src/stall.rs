@@ -416,4 +416,251 @@ mod tests {
         ];
         assert_eq!(classify(&linux_rx), Verdict::RxStarved);
     }
+
+    /// A process with one TCP socket on `fd` reporting the given occupancies.
+    fn sock_proc(
+        pid: i32,
+        cmd: &str,
+        fd: i32,
+        send_q: u64,
+        recv_q: u64,
+        bufs: Option<u64>,
+    ) -> Process {
+        Process::new(
+            pid,
+            1,
+            1,
+            501,
+            cmd.to_string(),
+            vec![OpenFile {
+                fd: FdName::Number(fd),
+                file_type: FileType::IPv4,
+                name: "10.0.0.1:5000->10.0.0.2:80".to_string(),
+                socket_info: Some(SocketInfo {
+                    protocol: "TCP".to_string(),
+                    send_queue: Some(send_q),
+                    recv_queue: Some(recv_q),
+                    send_buf_size: bufs,
+                    recv_buf_size: bufs,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        )
+    }
+
+    fn verdict_of(d: &StallDetector, pid: i32, fd: i32) -> Option<Verdict> {
+        d.table.get(&(pid, fd)).map(|e| e.verdict)
+    }
+
+    #[test]
+    fn verdict_labels_match_report_column() {
+        assert_eq!(Verdict::Healthy.as_str(), "HEALTHY");
+        assert_eq!(Verdict::TxStalled.as_str(), "TX-STALLED");
+        assert_eq!(Verdict::RxStarved.as_str(), "RX-STARVED");
+        assert!(!Verdict::Healthy.is_stalled());
+        assert!(Verdict::TxStalled.is_stalled());
+        assert!(Verdict::RxStarved.is_stalled());
+    }
+
+    #[test]
+    fn classifier_only_looks_at_trailing_window() {
+        // An early drain followed by three pinned samples is a stall now.
+        let h = vec![
+            sample(10, 0, 100, 100),
+            sample(5, 0, 100, 100),
+            sample(90, 0, 100, 100),
+            sample(91, 0, 100, 100),
+            sample(92, 0, 100, 100),
+        ];
+        assert_eq!(classify(&h), Verdict::TxStalled);
+
+        // A stall that has since drained is healthy, regardless of history.
+        let h = vec![
+            sample(95, 0, 100, 100),
+            sample(96, 0, 100, 100),
+            sample(97, 0, 100, 100),
+            sample(97, 0, 100, 100),
+            sample(40, 0, 100, 100),
+        ];
+        assert_eq!(classify(&h), Verdict::Healthy);
+    }
+
+    #[test]
+    fn classifier_ratio_rule_boundaries() {
+        // Exactly the high-water mark counts as near capacity.
+        let at_mark = vec![sample(80, 0, 100, 100); 3];
+        assert_eq!(classify(&at_mark), Verdict::TxStalled);
+
+        // One sample just under the mark breaks the stall.
+        let dip = vec![
+            sample(90, 0, 100, 100),
+            sample(79, 0, 100, 100),
+            sample(90, 0, 100, 100),
+        ];
+        assert_eq!(classify(&dip), Verdict::Healthy);
+
+        // Above the mark but trending down is draining, not stalled.
+        let easing = vec![
+            sample(99, 0, 100, 100),
+            sample(95, 0, 100, 100),
+            sample(90, 0, 100, 100),
+        ];
+        assert_eq!(classify(&easing), Verdict::Healthy);
+
+        // A recv buffer pinned flat at capacity is starved (no growth needed
+        // when the limit is known).
+        let rx_flat = vec![sample(0, 100, 100, 100); 3];
+        assert_eq!(classify(&rx_flat), Verdict::RxStarved);
+    }
+
+    #[test]
+    fn classifier_both_directions_higher_severity_wins() {
+        // Send pinned at >=95%, recv at >=85%: TX is the worse direction.
+        let tx_worse = vec![
+            sample(95, 85, 100, 100),
+            sample(96, 86, 100, 100),
+            sample(97, 87, 100, 100),
+        ];
+        assert_eq!(classify(&tx_worse), Verdict::TxStalled);
+
+        let rx_worse = vec![
+            sample(85, 95, 100, 100),
+            sample(86, 96, 100, 100),
+            sample(87, 97, 100, 100),
+        ];
+        assert_eq!(classify(&rx_worse), Verdict::RxStarved);
+
+        // A tie goes to TX.
+        let tie = vec![sample(90, 90, 100, 100); 3];
+        assert_eq!(classify(&tie), Verdict::TxStalled);
+    }
+
+    #[test]
+    fn classifier_trend_fallback_without_buffer_limits() {
+        // Linux /proc/net/tcp: no buffer sizes. A send queue that never drains
+        // is TX-STALLED even when flat.
+        let tx_flat = vec![sample(4096, 0, 0, 0); 3];
+        assert_eq!(classify(&tx_flat), Verdict::TxStalled);
+
+        // A recv queue must actually grow; flat non-zero is not starvation.
+        let rx_flat = vec![sample(0, 4096, 0, 0); 3];
+        assert_eq!(classify(&rx_flat), Verdict::Healthy);
+
+        // Any zero in the window means the queue drained at some point.
+        let tx_gap = vec![
+            sample(100, 0, 0, 0),
+            sample(0, 0, 0, 0),
+            sample(200, 0, 0, 0),
+        ];
+        assert_eq!(classify(&tx_gap), Verdict::Healthy);
+
+        // Shrinking queues are draining.
+        let rx_shrink = vec![
+            sample(0, 900, 0, 0),
+            sample(0, 950, 0, 0),
+            sample(0, 100, 0, 0),
+        ];
+        assert_eq!(classify(&rx_shrink), Verdict::Healthy);
+
+        // One sample with an unknown limit forces the whole window onto the
+        // trend rule: the ratios here would say stalled, the trend says drain.
+        let mixed = vec![
+            sample(99, 0, 100, 100),
+            sample(98, 0, 0, 0),
+            sample(97, 0, 100, 100),
+        ];
+        assert_eq!(classify(&mixed), Verdict::Healthy);
+    }
+
+    #[test]
+    fn detector_skips_non_numeric_fds_and_queueless_sockets() {
+        let mut p = sock_proc(10, "srv", 3, 90, 0, Some(100));
+        p.files.push(OpenFile {
+            fd: FdName::Cwd,
+            socket_info: Some(SocketInfo {
+                send_queue: Some(90),
+                recv_queue: Some(0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        p.files.push(OpenFile {
+            fd: FdName::Number(4),
+            socket_info: Some(SocketInfo {
+                send_queue: Some(90),
+                recv_queue: None,
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        p.files.push(OpenFile {
+            fd: FdName::Number(5),
+            ..Default::default()
+        });
+
+        let mut d = StallDetector::new();
+        d.update(std::slice::from_ref(&p));
+        assert_eq!(d.table.len(), 1);
+        assert!(d.table.contains_key(&(10, 3)));
+        assert_eq!(d.iteration, 1);
+    }
+
+    #[test]
+    fn detector_reaches_verdict_after_min_samples_and_caps_history() {
+        let mut d = StallDetector::new();
+        let p = sock_proc(20, "writer", 7, 95, 0, Some(100));
+        for i in 1..=HISTORY_SIZE + 4 {
+            d.update(std::slice::from_ref(&p));
+            let expected = if i < MIN_SAMPLES {
+                Verdict::Healthy
+            } else {
+                Verdict::TxStalled
+            };
+            assert_eq!(verdict_of(&d, 20, 7), Some(expected), "after {i} samples");
+        }
+        assert_eq!(d.table[&(20, 7)].history.len(), HISTORY_SIZE);
+    }
+
+    #[test]
+    fn detector_pid_reuse_resets_history() {
+        let mut d = StallDetector::new();
+        let old = sock_proc(30, "old", 4, 95, 0, Some(100));
+        for _ in 0..MIN_SAMPLES {
+            d.update(std::slice::from_ref(&old));
+        }
+        assert_eq!(verdict_of(&d, 30, 4), Some(Verdict::TxStalled));
+
+        // Same (pid, fd), different command: the old history must not carry
+        // over, so one fresh sample cannot be a verdict yet.
+        let new = sock_proc(30, "new", 4, 95, 0, Some(100));
+        d.update(std::slice::from_ref(&new));
+        let e = &d.table[&(30, 4)];
+        assert_eq!(e.command, "new");
+        assert_eq!(e.history.len(), 1);
+        assert_eq!(e.verdict, Verdict::Healthy);
+    }
+
+    #[test]
+    fn detector_drops_vanished_healthy_fds() {
+        let mut d = StallDetector::new();
+        let stalled = sock_proc(40, "stuck", 3, 95, 0, Some(100));
+        let idle = sock_proc(41, "idle", 3, 1, 1, Some(100));
+        let both = [stalled, idle];
+        for _ in 0..MIN_SAMPLES {
+            d.update(&both);
+        }
+        assert_eq!(verdict_of(&d, 40, 3), Some(Verdict::TxStalled));
+        assert_eq!(verdict_of(&d, 41, 3), Some(Verdict::Healthy));
+
+        d.update(&[]);
+        assert!(
+            !d.table.contains_key(&(41, 3)),
+            "healthy vanished fd dropped"
+        );
+        assert!(
+            d.table.get(&(40, 3)).is_none_or(|e| !e.seen),
+            "a vanished fd is never reported as seen"
+        );
+    }
 }
