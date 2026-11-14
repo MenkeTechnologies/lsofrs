@@ -1744,6 +1744,38 @@ mod tests {
         assert!(!me.files.is_empty(), "our process should have open files");
     }
 
+    /// A file this process holds open shows up under its own pid with the
+    /// right descriptor, resolved path, type, access mode and size.
+    #[test]
+    fn gather_processes_lists_our_open_tempfile() {
+        use std::io::Write;
+        use std::os::unix::io::AsRawFd;
+
+        let dir = std::env::temp_dir().join(format!("lsofrs-selfopen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("held.txt");
+        let mut held = std::fs::File::create(&path).unwrap();
+        held.write_all(b"0123456789").unwrap();
+        let canon = std::fs::canonicalize(&path).unwrap();
+
+        let my_pid = std::process::id() as i32;
+        let procs = gather_processes();
+        let found = procs.iter().find(|p| p.pid == my_pid).and_then(|me| {
+            me.files
+                .iter()
+                .find(|f| f.fd == FdName::Number(held.as_raw_fd()))
+                .cloned()
+        });
+        drop(held);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let file = found.expect("held descriptor missing from our own process");
+        assert_eq!(std::path::Path::new(&file.name), canon.as_path());
+        assert_eq!(file.file_type, FileType::Reg);
+        assert_eq!(file.access, Access::Write);
+        assert_eq!(file.size, Some(10));
+    }
+
     #[test]
     fn gather_processes_have_commands() {
         let procs = gather_processes();

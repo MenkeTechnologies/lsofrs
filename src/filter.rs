@@ -3034,4 +3034,79 @@ mod tests {
         let f = Filter::from_args(&args);
         assert_eq!(f.link_count_max, None);
     }
+
+    /// `-u ^name` rejects processes owned by that login, keeps everyone else,
+    /// and a process rejected by name stays rejected even when it also
+    /// matches an inclusion (`-p`).
+    #[test]
+    fn exclude_username_rejects_owner_and_overrides_pid_inclusion() {
+        let args = Args::parse_from(["lsofrs", "-u", "^root", "-p", "1"]);
+        let f = Filter::from_args(&args);
+        // uid 0 is `root` on every Unix this builds for.
+        let root_proc = make_proc(1, 0, 1, "init");
+        assert_eq!(root_proc.username(), "root");
+        assert!(!f.matches_process(&root_proc));
+
+        let only_exclusion = Filter::from_args(&Args::parse_from(["lsofrs", "-u", "^root"]));
+        assert!(!only_exclusion.matches_process(&make_proc(5, 0, 5, "x")));
+        // A uid with no passwd entry renders as its number, never "root".
+        assert!(only_exclusion.matches_process(&make_proc(5, 3_999_999, 5, "x")));
+    }
+
+    /// Numeric `-d` ranges only ever match numbered descriptors: `0-2` does
+    /// not select `cwd`, and `^0-2` keeps it.
+    #[test]
+    fn fd_range_never_matches_named_descriptors() {
+        let include = Filter::from_args(&Args::parse_from(["lsofrs", "-d", "0-2"]));
+        assert!(include.matches_file(&make_file(1, FileType::Chr, "/dev/tty")));
+        assert!(!include.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+        assert!(!include.matches_file(&make_cwd_file("/")));
+
+        let exclude = Filter::from_args(&Args::parse_from(["lsofrs", "-d", "^0-2"]));
+        assert!(!exclude.matches_file(&make_file(0, FileType::Chr, "/dev/tty")));
+        assert!(!exclude.matches_file(&make_file(2, FileType::Chr, "/dev/tty")));
+        assert!(exclude.matches_file(&make_file(3, FileType::Reg, "/tmp/x")));
+        assert!(exclude.matches_file(&make_cwd_file("/")));
+    }
+
+    /// A numeric `-d` token given as a name still matches the descriptor
+    /// with that number, and a name never matches a different number.
+    #[test]
+    fn fd_name_filter_matches_number_by_value() {
+        let mut f = empty_filter();
+        f.fd_filters = vec![FdFilter::Name("7".to_string())];
+        assert!(f.matches_file(&make_file(7, FileType::Reg, "/a")));
+        assert!(!f.matches_file(&make_file(70, FileType::Reg, "/a")));
+        assert!(!f.matches_file(&make_cwd_file("/")));
+    }
+
+    /// An internet-typed file whose socket details are unknown cannot satisfy
+    /// a port or host selection — it must not slip through as a match.
+    #[test]
+    fn port_and_host_filters_reject_socket_without_details() {
+        let bare = make_file(3, FileType::IPv4, "10.0.0.1:443");
+        assert!(bare.socket_info.is_none());
+
+        let by_port = Filter::from_args(&Args::parse_from(["lsofrs", "-i", ":443"]));
+        assert!(!by_port.matches_file(&bare));
+        assert!(by_port.matches_file(&make_tcp_file(3, "TCP", 443, 0)));
+
+        let by_host = Filter::from_args(&Args::parse_from(["lsofrs", "-i", "@10.0.0.1"]));
+        assert!(!by_host.matches_file(&bare));
+    }
+
+    /// `-s TCP:LISTEN` needs a known state; a TCP socket whose state was not
+    /// reported is rejected, while a protocol-only spec still admits it.
+    #[test]
+    fn state_filter_with_states_rejects_socket_without_state() {
+        let mut stateless = make_tcp_file(3, "TCP", 8080, 0);
+        stateless.socket_info.as_mut().unwrap().tcp_state = None;
+
+        let with_state = Filter::from_args(&Args::parse_from(["lsofrs", "-sTCP:LISTEN"]));
+        assert!(!with_state.matches_file(&stateless));
+
+        let any_state = Filter::from_args(&Args::parse_from(["lsofrs", "-sTCP:"]));
+        assert!(any_state.state_filters[0].states.is_empty());
+        assert!(any_state.matches_file(&stateless));
+    }
 }

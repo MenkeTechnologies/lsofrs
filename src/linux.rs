@@ -1028,7 +1028,306 @@ mod tests {
         assert!(matches!(ft, FileType::Unknown(_)));
     }
 
+    // ── /proc/net fixtures ──────────────────────────────────────────
+
+    /// A scratch directory unique to this test, removed on drop.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("lsofrs-{tag}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+
+        fn write(&self, rel: &str, body: &str) -> String {
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, body).unwrap();
+            path.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The kernel writes each 32-bit word of an IPv6 address in host
+    /// (little-endian) order; the words themselves stay in network order.
+    #[test]
+    fn parse_ipv6_hex_reorders_each_word() {
+        let v6 = |hex| parse_ipv6_hex(hex);
+        assert_eq!(
+            v6("00000000000000000000000001000000"),
+            Some(IpAddr::V6(Ipv6Addr::LOCALHOST))
+        );
+        assert_eq!(
+            v6("B80D0120000000000000000001000000"),
+            Some(IpAddr::V6("2001:db8::1".parse().unwrap()))
+        );
+        // v4-mapped ::ffff:127.0.0.1
+        assert_eq!(
+            v6("0000000000000000FFFF00000100007F"),
+            Some(IpAddr::V6("::ffff:127.0.0.1".parse().unwrap()))
+        );
+        assert_eq!(v6("0000000000000000000000000100000"), None, "31 digits");
+        assert_eq!(v6("ZZ000000000000000000000001000000"), None, "non-hex");
+    }
+
+    #[test]
+    fn parse_hex_endpoint_ipv6_address_and_port() {
+        let ep = parse_hex_endpoint("B80D0120000000000000000001000000:01BB", &FileType::IPv6);
+        assert_eq!(ep.port, 443);
+        assert_eq!(ep.addr, Some(IpAddr::V6("2001:db8::1".parse().unwrap())));
+    }
+
+    /// `tx_queue:rx_queue` — send first, receive second, both hex.
+    #[test]
+    fn parse_hex_queues_send_then_receive() {
+        assert_eq!(parse_hex_queues("00000000:00000000"), (Some(0), Some(0)));
+        assert_eq!(parse_hex_queues("0000000A:00000100"), (Some(10), Some(256)));
+        assert_eq!(parse_hex_queues("zz:00000001"), (None, Some(1)));
+        assert_eq!(parse_hex_queues("00000002"), (Some(2), None));
+    }
+
+    /// Rows from a real `/proc/net/tcp`: the header is skipped, inode-0 and
+    /// truncated rows are dropped, and state, queues and both endpoints are
+    /// decoded into the entry keyed by inode.
+    #[test]
+    fn parse_inet_sockets_reads_proc_net_tcp() {
+        let scratch = Scratch::new("tcp");
+        let path = scratch.write(
+            "tcp",
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+             \x20  0: 0100007F:1F90 00000000:0000 0A 00000000:00000003 00:00000000 00000000  1000        0 41234 1 0000000000000000 100 0 0 10 0\n\
+             \x20  1: 0100007F:C350 0100007F:1F90 01 00000010:00000020 00:00000000 00000000  1000        0 41235 1 0000000000000000 20 4 30 10 -1\n\
+             \x20  2: 0100007F:C351 0100007F:1F90 06 00000000:00000000 03:00000000 00000000     0        0 0 3 0000000000000000\n\
+             \x20  3: truncated row\n",
+        );
+        let mut map = HashMap::new();
+        parse_inet_sockets(&path, "TCP", FileType::IPv4, &mut map);
+        assert_eq!(
+            map.len(),
+            2,
+            "TIME_WAIT row has inode 0 and must be dropped"
+        );
+
+        let listen = &map[&41234];
+        assert_eq!(listen.protocol, "TCP");
+        assert_eq!(listen.state, Some(TcpState::Listen));
+        assert_eq!(listen.local.port, 8080);
+        assert_eq!(listen.local.addr, Some(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+        assert_eq!((listen.send_queue, listen.recv_queue), (Some(0), Some(3)));
+
+        let est = &map[&41235];
+        assert_eq!(est.state, Some(TcpState::Established));
+        assert_eq!((est.local.port, est.foreign.port), (50000, 8080));
+        assert_eq!((est.send_queue, est.recv_queue), (Some(16), Some(32)));
+    }
+
+    /// UDP has no connection state even though the column holds `07`.
+    #[test]
+    fn parse_inet_sockets_udp_has_no_state() {
+        let scratch = Scratch::new("udp");
+        let path = scratch.write(
+            "udp",
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops\n\
+             \x20 1: 00000000:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 777 2 0000000000000000 0\n",
+        );
+        let mut map = HashMap::new();
+        parse_inet_sockets(&path, "UDP", FileType::IPv4, &mut map);
+        let entry = &map[&777];
+        assert_eq!(entry.protocol, "UDP");
+        assert_eq!(entry.state, None);
+        assert_eq!(entry.local.port, 53);
+    }
+
+    #[test]
+    fn parse_inet_sockets_missing_file_leaves_map_untouched() {
+        let mut map = HashMap::new();
+        parse_inet_sockets("/nonexistent/lsofrs/tcp", "TCP", FileType::IPv4, &mut map);
+        assert!(map.is_empty());
+    }
+
+    /// `/proc/net/unix`: inode is the seventh column, the path the optional
+    /// eighth. Unnamed sockets have no path.
+    #[test]
+    fn parse_unix_sockets_reads_path_and_inode() {
+        let scratch = Scratch::new("unix");
+        let path = scratch.write(
+            "unix",
+            "Num       RefCount Protocol Flags    Type St Inode Path\n\
+             0000000000000000: 00000002 00000000 00010000 0001 01 3001 /run/dbus/system_bus_socket\n\
+             0000000000000000: 00000003 00000000 00000000 0001 03 3002\n\
+             0000000000000000: 00000002 00000000 00000000 0002 01 0 /dead\n",
+        );
+        let mut map = HashMap::new();
+        parse_unix_sockets(&path, &mut map);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map[&3001].file_type, FileType::Unix);
+        assert_eq!(
+            map[&3001].unix_path.as_deref(),
+            Some("/run/dbus/system_bus_socket")
+        );
+        assert_eq!(map[&3002].unix_path, None);
+    }
+
+    /// A socket inode found in the map takes its type, name and TCP details
+    /// from the entry; an unnamed unix socket and an unknown inode both
+    /// render as `socket:[inode]`.
+    #[test]
+    fn process_socket_resolves_through_map() {
+        let mut map = HashMap::new();
+        map.insert(
+            10,
+            SocketEntry {
+                protocol: "TCP".into(),
+                file_type: FileType::IPv4,
+                local: InetAddr {
+                    addr: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                    port: 5000,
+                },
+                foreign: InetAddr {
+                    addr: Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2))),
+                    port: 443,
+                },
+                state: Some(TcpState::Established),
+                unix_path: None,
+                send_queue: Some(1),
+                recv_queue: Some(2),
+            },
+        );
+        map.insert(
+            11,
+            SocketEntry {
+                protocol: String::new(),
+                file_type: FileType::Unix,
+                local: InetAddr::default(),
+                foreign: InetAddr::default(),
+                state: None,
+                unix_path: None,
+                send_queue: None,
+                recv_queue: None,
+            },
+        );
+
+        let tcp = process_socket(4, 10, Access::ReadWrite, &map);
+        assert_eq!(tcp.fd, FdName::Number(4));
+        assert_eq!(tcp.file_type, FileType::IPv4);
+        assert_eq!(tcp.name, "127.0.0.1:5000->10.0.0.2:443");
+        let si = tcp.socket_info.unwrap();
+        assert_eq!(si.tcp_state, Some(TcpState::Established));
+        assert_eq!((si.send_queue, si.recv_queue), (Some(1), Some(2)));
+
+        let unix = process_socket(5, 11, Access::ReadWrite, &map);
+        assert_eq!(unix.file_type, FileType::Unix);
+        assert_eq!(unix.name, "socket:[11]");
+
+        let unknown = process_socket(6, 99, Access::Read, &map);
+        assert_eq!(unknown.file_type, FileType::Sock);
+        assert_eq!(unknown.name, "socket:[99]");
+        assert!(unknown.socket_info.is_none());
+    }
+
+    // ── /proc/<pid>/fdinfo fixtures ─────────────────────────────────
+
+    /// `flags:` is octal; the low two bits are the access mode.
+    #[test]
+    fn fdinfo_flags_offset_and_access() {
+        let scratch = Scratch::new("fdinfo");
+        scratch.write(
+            "fdinfo/0",
+            "pos:\t0\nflags:\t0100000\nmnt_id:\t25\nino:\t5\n",
+        );
+        scratch.write("fdinfo/1", "pos:\t12345\nflags:\t02101\nmnt_id:\t25\n");
+        scratch.write("fdinfo/2", "pos:\t7\nflags:\t0100002\n");
+        scratch.write("fdinfo/3", "pos:\tbogus\nflags:\t0100003\n");
+        let dir = scratch.0.as_path();
+
+        assert_eq!(read_fd_flags(dir, 1), Some(0o2101));
+        assert_eq!(read_fd_offset(dir, 1), Some(12345));
+        assert_eq!(read_fd_access(dir, 0), Access::Read);
+        assert_eq!(read_fd_access(dir, 1), Access::Write);
+        assert_eq!(read_fd_access(dir, 2), Access::ReadWrite);
+        // O_ACCMODE 3 is not a valid access mode.
+        assert_eq!(read_fd_access(dir, 3), Access::None);
+        assert_eq!(read_fd_offset(dir, 3), None);
+        // No fdinfo entry at all.
+        assert_eq!(read_fd_access(dir, 9), Access::None);
+        assert_eq!(read_fd_offset(dir, 9), None);
+    }
+
+    /// The real uid is the first of the four `Uid:` columns, even when the
+    /// effective uid differs (setuid programs).
+    #[test]
+    fn parse_uid_takes_real_uid_not_effective() {
+        let status = "Name:\tsudo\nUmask:\t0022\nState:\tS (sleeping)\nUid:\t1000\t0\t0\t0\nGid:\t1000\t1000\t1000\t1000\n";
+        assert_eq!(parse_uid(status), Some(1000));
+    }
+
+    /// Fields after the command are counted from the last `)`, so a command
+    /// that itself ends in `) ` cannot shift ppid/pgid.
+    #[test]
+    fn parse_stat_command_with_close_paren_and_space() {
+        let stat = "42 (evil) S 7 8) Z 9 10 11 0 -1";
+        let (cmd, ppid, pgid) = parse_stat(stat).unwrap();
+        assert_eq!(cmd, "evil) S 7 8");
+        assert_eq!((ppid, pgid), (9, 10));
+    }
+
     // ── Functional (requires /proc) ─────────────────────────────────
+
+    /// A file this process holds open shows up under its own pid with the
+    /// right descriptor, path, type and access mode.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn gather_processes_lists_our_open_tempfile() {
+        use std::io::Write;
+        use std::os::unix::io::AsRawFd;
+
+        let scratch = Scratch::new("selfopen");
+        let path = scratch.0.join("held.txt");
+        let mut held = fs::File::create(&path).unwrap();
+        held.write_all(b"0123456789").unwrap();
+        let canon = fs::canonicalize(&path).unwrap();
+
+        let my_pid = std::process::id() as i32;
+        let procs = gather_processes();
+        let me = procs
+            .iter()
+            .find(|p| p.pid == my_pid)
+            .expect("self missing");
+        let file = me
+            .files
+            .iter()
+            .find(|f| f.fd == FdName::Number(held.as_raw_fd()))
+            .expect("held descriptor missing");
+        assert_eq!(Path::new(&file.name), canon.as_path());
+        assert_eq!(file.file_type, FileType::Reg);
+        assert_eq!(file.access, Access::Write);
+        assert_eq!(file.size, Some(10));
+        assert_eq!(file.offset, Some(10));
+
+        // Unlinked while still open: the kernel's ` (deleted)` suffix moves
+        // out of the name, and the link count drops to zero (what +L1 keys on).
+        fs::remove_file(&path).unwrap();
+        let procs = gather_processes();
+        let me = procs
+            .iter()
+            .find(|p| p.pid == my_pid)
+            .expect("self missing");
+        let file = me
+            .files
+            .iter()
+            .find(|f| f.fd == FdName::Number(held.as_raw_fd()))
+            .expect("held descriptor missing after unlink");
+        assert_eq!(Path::new(&file.name), canon.as_path());
+        assert_eq!(file.name_append.as_deref(), Some("(deleted)"));
+        assert_eq!(file.nlink, Some(0));
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
