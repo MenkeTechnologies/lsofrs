@@ -558,7 +558,7 @@ pub fn write_field_output<W: io::Write>(
 const PROCESS_FIELD_ORDER: &str = "gRcuL";
 
 /// File-level fields, in the order lsof writes them.
-const FILE_FIELD_ORDER: &str = "altGDdsoikPnT";
+const FILE_FIELD_ORDER: &str = "altGDdrsoikPnT";
 
 /// Every field identifier `-F` can select, in the order lsof lists them.
 pub const ALL_FIELDS: &str = "acCdDfGgiklLnNoPrRsStTu";
@@ -1140,6 +1140,202 @@ mod tests {
         let out = capture_field_output(&[p], "nT", '\n');
         assert!(out.contains("n1.2.3.4:80\n"), "{out:?}");
         assert!(out.contains("TST=LISTEN\n"), "{out:?}");
+    }
+
+    /// A regular file with every per-file attribute set. Fields come out in
+    /// lsof's fixed order (`altGDdrsoikPnT`) however the list was spelled, so
+    /// the whole record is checked byte for byte.
+    #[test]
+    fn field_output_full_regular_file_record_in_lsof_order() {
+        let f = OpenFile {
+            fd: FdName::Number(5),
+            access: Access::Read,
+            lock: 'W',
+            file_type: FileType::Reg,
+            device: Some((1, 13)),
+            size: Some(4096),
+            offset: Some(10),
+            inode: Some(77),
+            nlink: Some(2),
+            name: "/tmp/a".to_string(),
+            file_flags: Some(0x8002),
+            file_status: Some(0x1),
+            ..Default::default()
+        };
+        let p = Process::new(42, 1, 1, 501, "cmd".into(), vec![f]);
+        let out = capture_field_output(&[p], "nkiosDGtla", '\n');
+        let dev = crate::types::make_dev(1, 13);
+        let expected = format!(
+            "p42\nf5\nar\nlW\ntREG\nG0x8002;0x1\nD0x{dev:x}\ns4096\no0t10\ni77\nk2\nn/tmp/a\n"
+        );
+        assert_eq!(out, expected);
+    }
+
+    /// Process-level fields follow `p` in lsof's `gRcuL` order, not the
+    /// order the user typed them; unselected ones are absent.
+    #[test]
+    fn field_output_process_fields_in_lsof_order() {
+        let p = Process::new(42, 7, 9, 501, "cmd".into(), vec![]);
+        let out = capture_field_output(std::slice::from_ref(&p), "Lucg", '\n');
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[..4], ["p42", "g9", "ccmd", "u501"]);
+        assert_eq!(lines[4], format!("L{}", p.username()));
+        assert_eq!(lines.len(), 5, "R was not asked for: {out:?}");
+    }
+
+    /// An empty field list selects every field — including the process-level
+    /// ones a narrower list leaves out.
+    #[test]
+    fn field_output_empty_list_selects_every_field() {
+        let f = OpenFile {
+            fd: FdName::Number(3),
+            access: Access::Write,
+            file_type: FileType::Reg,
+            size: Some(1),
+            inode: Some(2),
+            name: "/x".to_string(),
+            ..Default::default()
+        };
+        let p = Process::new(42, 7, 9, 501, "cmd".into(), vec![f]);
+        let out = capture_field_output(&[p], "", '\n');
+        for want in ["p42\n", "g9\n", "R7\n", "ccmd\n", "u501\n", "f3\n", "aw\n"] {
+            assert!(out.contains(want), "{want:?} missing from {out:?}");
+        }
+        for want in ["tREG\n", "s1\n", "i2\n", "n/x\n"] {
+            assert!(out.contains(want), "{want:?} missing from {out:?}");
+        }
+    }
+
+    /// `D` and `d` are mutually exclusive: a file with a major/minor pair
+    /// reports `D` even if it also carries a label; a pipe known only by a
+    /// kernel handle reports `d` and no `D`.
+    #[test]
+    fn field_output_device_label_only_without_major_minor() {
+        let with_dev = OpenFile {
+            fd: FdName::Number(3),
+            device: Some((1, 2)),
+            device_label: Some("0xabc".into()),
+            ..Default::default()
+        };
+        let label_only = OpenFile {
+            fd: FdName::Number(4),
+            file_type: FileType::Pipe,
+            device_label: Some("0xdef".into()),
+            ..Default::default()
+        };
+        let p = Process::new(1, 0, 1, 0, "c".into(), vec![with_dev, label_only]);
+        let out = capture_field_output(&[p], "Dd", '\n');
+        let dev = crate::types::make_dev(1, 2);
+        assert_eq!(out, format!("p1\nf3\nD0x{dev:x}\nf4\nd0xdef\n"));
+    }
+
+    /// `r` is the raw dev_t of the device the file *is*, distinct from `D`,
+    /// the device it lives on; neither appears when unknown.
+    #[test]
+    fn field_output_rdev_is_separate_from_device() {
+        let chr = OpenFile {
+            fd: FdName::Number(0),
+            file_type: FileType::Chr,
+            device: Some((0, 5)),
+            rdev: Some((3, 2)),
+            ..Default::default()
+        };
+        let bare = OpenFile {
+            fd: FdName::Number(1),
+            ..Default::default()
+        };
+        let p = Process::new(1, 0, 1, 0, "c".into(), vec![chr, bare]);
+        let out = capture_field_output(&[p], "Dr", '\n');
+        let (dev, rdev) = (crate::types::make_dev(0, 5), crate::types::make_dev(3, 2));
+        assert_ne!(dev, rdev);
+        assert_eq!(out, format!("p1\nf0\nD0x{dev:x}\nr0x{rdev:x}\nf1\n"));
+    }
+
+    /// `G` needs the open flags; a missing status half prints as `0x0`
+    /// rather than dropping the pair.
+    #[test]
+    fn field_output_flags_pair_defaults_missing_status_to_zero() {
+        let flags_only = OpenFile {
+            fd: FdName::Number(3),
+            file_flags: Some(0x2),
+            ..Default::default()
+        };
+        let neither = OpenFile {
+            fd: FdName::Number(4),
+            file_status: Some(0x5),
+            ..Default::default()
+        };
+        let p = Process::new(1, 0, 1, 0, "c".into(), vec![flags_only, neither]);
+        let out = capture_field_output(&[p], "G", '\n');
+        assert_eq!(out, "p1\nf3\nG0x2;0x0\nf4\n");
+    }
+
+    /// TCP info: state first, then receive and send queue. Queue sizes are
+    /// not reported for a socket with no TCP state, and an empty protocol
+    /// omits `P`.
+    #[test]
+    fn field_output_tcp_info_and_protocol() {
+        let tcp = OpenFile {
+            fd: FdName::Number(3),
+            file_type: FileType::IPv4,
+            socket_info: Some(crate::types::SocketInfo {
+                protocol: "TCP".into(),
+                tcp_state: Some(TcpState::Established),
+                recv_queue: Some(11),
+                send_queue: Some(22),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let stateless = OpenFile {
+            fd: FdName::Number(4),
+            file_type: FileType::Unix,
+            socket_info: Some(crate::types::SocketInfo {
+                recv_queue: Some(1),
+                send_queue: Some(2),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let p = Process::new(1, 0, 1, 0, "c".into(), vec![tcp, stateless]);
+        let out = capture_field_output(&[p], "PT", '\n');
+        assert_eq!(out, "p1\nf3\nPTCP\nTST=ESTABLISHED\nTQR=11\nTQS=22\nf4\n");
+    }
+
+    /// With `-F0` every field ends in NUL and each process record is closed
+    /// by a newline, so `xargs -0`-style consumers see one record per line.
+    #[test]
+    fn field_output_nul_terminator_closes_each_process_with_newline() {
+        let file = |fd| OpenFile {
+            fd: FdName::Number(fd),
+            name: format!("/f{fd}"),
+            ..Default::default()
+        };
+        let procs = vec![
+            Process::new(1, 0, 1, 0, "a".into(), vec![file(3)]),
+            Process::new(2, 0, 2, 0, "b".into(), vec![file(4), file(5)]),
+        ];
+        let out = capture_field_output(&procs, "n", '\0');
+        assert_eq!(out, "p1\0f3\0n/f3\0\np2\0f4\0n/f4\0f5\0n/f5\0\n");
+    }
+
+    /// Non-numeric descriptors print by name, and an empty type is omitted
+    /// rather than written as a bare `t`.
+    #[test]
+    fn field_output_named_fd_and_empty_type() {
+        let cwd = OpenFile {
+            fd: FdName::Cwd,
+            file_type: FileType::Dir,
+            name: "/".into(),
+            ..Default::default()
+        };
+        let untyped = OpenFile {
+            fd: FdName::Number(9),
+            ..Default::default()
+        };
+        let p = Process::new(1, 0, 1, 0, "c".into(), vec![cwd, untyped]);
+        let out = capture_field_output(&[p], "t", '\n');
+        assert_eq!(out, "p1\nfcwd\ntDIR\nf9\n");
     }
 
     #[test]
