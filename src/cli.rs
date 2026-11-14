@@ -518,8 +518,11 @@ fn expand_dash_cluster(body: &str, next: Option<&str>) -> (Vec<std::ffi::OsStrin
 /// Expand a single `+`-prefixed lsof token into clap tokens.
 fn expand_plus_token(s: &str, next: Option<&str>) -> (Vec<std::ffi::OsString>, bool) {
     let mut out: Vec<std::ffi::OsString> = Vec::new();
-    let rest = &s[2..]; // characters after `+X`
-    match &s[1..2] {
+    // The option letter may be any character the user typed; slice on its
+    // UTF-8 boundary so `+é` falls through to clap instead of panicking.
+    let opt_end = 1 + s[1..].chars().next().map_or(0, char::len_utf8);
+    let rest = &s[opt_end..]; // characters after `+X`
+    match &s[1..opt_end] {
         "L" => {
             if rest.is_empty() {
                 out.push("--list-nlink".into());
@@ -1911,5 +1914,34 @@ mod tests {
         // A lone "-" (stdin convention) and argv[0] pass through untouched.
         assert_eq!(norm(&["lsofrs", "-"]), vec!["lsofrs", "-"]);
         assert_eq!(norm(&["lsofrs"]), vec!["lsofrs"]);
+    }
+
+    /// A `+` option letter outside ASCII used to be sliced mid-character and
+    /// panic; it must reach clap untouched like any other unknown `+` token.
+    #[test]
+    fn normalize_plus_multibyte_option_passes_through() {
+        assert_eq!(norm(&["lsofrs", "+é"]), vec!["lsofrs", "+é"]);
+        assert_eq!(norm(&["lsofrs", "+é1", "-n"]), vec!["lsofrs", "+é1", "-n"]);
+        assert_eq!(norm(&["lsofrs", "+Q"]), vec!["lsofrs", "+Q"]);
+    }
+
+    /// `-s` followed by letters that are not a `proto:state` spec is the bare
+    /// size flag, and the rest of the cluster is still parsed as flags.
+    #[test]
+    fn normalize_size_flag_continues_cluster_without_colon() {
+        assert_eq!(
+            norm(&["lsofrs", "-sn"]),
+            vec!["lsofrs", "--size-always", "-n"]
+        );
+        assert_eq!(
+            norm(&["lsofrs", "-nsP"]),
+            vec!["lsofrs", "-n", "--size-always", "-P"]
+        );
+    }
+
+    /// `+d` with an attached directory keeps it as the value.
+    #[test]
+    fn normalize_plus_d_attached_value() {
+        assert_eq!(norm(&["lsofrs", "+d/tmp"]), vec!["lsofrs", "--dir", "/tmp"]);
     }
 }
